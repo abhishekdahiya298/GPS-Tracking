@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+<properties>
+
+    <!-- Traccar's own database. RIO never reads/writes this database directly;
+         all integration happens through the REST API (admin lookups) and the
+         outgoing webhook below (live position path).
+         database.user / database.password are NOT set here — Traccar reads any
+         config key as an environment variable override (dots -> underscores,
+         upper-cased), so DATABASE_USER / DATABASE_PASSWORD are supplied by
+         docker-compose.yml from .env instead of being hardcoded in this file. -->
+    <entry key='database.driver'>org.postgresql.Driver</entry>
+    <entry key='database.url'>jdbc:postgresql://postgres:5432/traccar</entry>
+
+    <!-- Teltonika protocol (FMM230) device port. -->
+    <entry key='teltonika.port'>5027</entry>
+
+    <!-- Forward every position update to RIO's webhook ingest endpoint.
+         forward.header carries the shared secret and is supplied via the
+         FORWARD_HEADER environment variable (docker-compose.yml), not hardcoded here. -->
+    <entry key='forward.url'>http://web:3000/api/webhooks/traccar</entry>
+
+    <entry key='web.port'>8082</entry>
+
+</properties>

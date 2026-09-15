@@ -1,0 +1,130 @@
+name: rio-gps
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      # Two databases are provisioned by init script below: rio and traccar.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set in .env}
+    env_file:
+      - ../.env # init-databases.sh reads RIO_DB_PASSWORD / TRACCAR_DB_PASSWORD from here
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    ports:
+      # Bound to loopback only — Postgres must never be reachable from the
+      # public internet (see docs/DEPLOYMENT.md). Host port is configurable
+      # because some dev machines already run a native Postgres on 5432
+      # (set POSTGRES_HOST_PORT=55432 in that case); a fresh VPS should use
+      # the default.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      # Loopback only — Redis must never be reachable from the public internet.
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  traccar:
+    image: traccar/traccar:5.12-ubuntu
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Traccar maps any config key to an env var override (dots -> underscores,
+      # upper-cased), so credentials never need to sit in traccar.xml.
+      DATABASE_USER: traccar
+      DATABASE_PASSWORD: ${TRACCAR_DB_PASSWORD:?set in .env}
+      FORWARD_HEADER: "Authorization: Bearer ${TRACCAR_WEBHOOK_SECRET:?set in .env}"
+    volumes:
+      - ./traccar/traccar.xml:/opt/traccar/conf/traccar.xml:ro
+      - traccar-logs:/opt/traccar/logs
+    ports:
+      # Admin UI/REST API: loopback only — reach it via SSH tunnel, not
+      # directly from the internet (RIO reaches it over the internal docker
+      # network at http://traccar:8082 regardless of this mapping).
+      - "127.0.0.1:8082:8082"
+      # Teltonika device port: MUST be reachable from the public internet —
+      # this is the one port a real FMM230 actually connects to. Do not put
+      # a generic HTTP(S) reverse proxy or Cloudflare's proxy in front of it.
+      - "5027:5027"
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/docker/web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      # .env's RIO_DATABASE_URL/REDIS_URL/TRACCAR_API_URL point at localhost
+      # for host-run tooling (pnpm dev:web, migrations); inside the compose
+      # network the container must reach these by service name instead.
+      RIO_DATABASE_URL: postgres://rio:${RIO_DB_PASSWORD:?set in .env}@postgres:5432/rio
+      REDIS_URL: redis://redis:6379
+      TRACCAR_API_URL: http://traccar:8082
+    ports:
+      # Loopback only — the reverse-proxy service is the public entry point
+      # (see reverse-proxy below); this mapping exists for host-side debugging.
+      - "127.0.0.1:3000:3000"
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/docker/worker.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      RIO_DATABASE_URL: postgres://rio:${RIO_DB_PASSWORD:?set in .env}@postgres:5432/rio
+      REDIS_URL: redis://redis:6379
+      TRACCAR_API_URL: http://traccar:8082
+    # No `ports:` — the worker has no HTTP surface and must not be reachable
+    # from outside the compose network at all.
+
+  reverse-proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    env_file:
+      - ../.env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      # The only two ports on this host that should be reachable from the
+      # public internet besides Traccar's 5027.
+      - "80:80"
+      - "443:443"
+
+volumes:
+  postgres-data:
+  traccar-logs:
+  caddy-data:
+  caddy-config:

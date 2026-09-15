@@ -1,0 +1,28 @@
+{
+  "name": "@rio-gps/worker",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "echo \"no tests in @rio-gps/worker yet\""
+  },
+  "dependencies": {
+    "@rio-gps/core": "workspace:*",
+    "@rio-gps/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@rio-gps/config": "workspace:*",
+    "@types/node": "^22.9.3",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "eslint": "^8.57.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

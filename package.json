@@ -1,0 +1,22 @@
+{
+  "name": "rio-gps",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* build && pnpm -r --filter=./apps/* build",
+    "dev:web": "pnpm --filter @rio-gps/web dev",
+    "dev:worker": "pnpm --filter @rio-gps/worker dev",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "pnpm -r run lint",
+    "test": "pnpm -r run test",
+    "db:generate": "pnpm --filter @rio-gps/db generate",
+    "db:migrate": "pnpm --filter @rio-gps/db migrate"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
