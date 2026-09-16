@@ -39,19 +39,22 @@ services:
       retries: 10
 
   traccar:
-    image: traccar/traccar:5.12-ubuntu
+    image: traccar/traccar:6.15.3-ubuntu
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      # Traccar maps any config key to an env var override (dots -> underscores,
-      # upper-cased), so credentials never need to sit in traccar.xml.
-      DATABASE_USER: traccar
-      DATABASE_PASSWORD: ${TRACCAR_DB_PASSWORD:?set in .env}
-      FORWARD_HEADER: "Authorization: Bearer ${TRACCAR_WEBHOOK_SECRET:?set in .env}"
+    # Traccar's documented "any config key can be overridden by an env var"
+    # mechanism does NOT actually work for database.password/forward.header —
+    # verified empirically (Hikari logs "no password was provided" even with
+    # DATABASE_PASSWORD set). entrypoint.sh substitutes the real secrets into
+    # traccar.xml.template at container startup instead.
+    entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
+    env_file:
+      - ../.env # entrypoint.sh reads TRACCAR_DB_PASSWORD / TRACCAR_WEBHOOK_SECRET from here
     volumes:
-      - ./traccar/traccar.xml:/opt/traccar/conf/traccar.xml:ro
+      - ./traccar/traccar.xml.template:/opt/traccar/conf/traccar.xml.template:ro
+      - ./traccar/entrypoint.sh:/docker-entrypoint.sh:ro
       - traccar-logs:/opt/traccar/logs
     ports:
       # Admin UI/REST API: loopback only — reach it via SSH tunnel, not

@@ -1,0 +1,31 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+<properties>
+
+    <!-- Traccar's own database. RIO never reads/writes this database directly;
+         all integration happens through the REST API (admin lookups) and the
+         outgoing webhook below (live position path).
+
+         database.password and forward.header's secret are substituted at
+         container startup by entrypoint.sh — Traccar's documented "any config
+         key can be overridden by an env var" mechanism does NOT actually work
+         for these keys (verified empirically against traccar/traccar:6.15.3-ubuntu:
+         Hikari logs "no password was provided" / "password is an empty string"
+         even with DATABASE_PASSWORD set). Templating at startup is the
+         workaround; database.user is not a secret (fixed role name created by
+         infra/postgres/init-databases.sh) so it's written here directly. -->
+    <entry key='database.driver'>org.postgresql.Driver</entry>
+    <entry key='database.url'>jdbc:postgresql://postgres:5432/traccar</entry>
+    <entry key='database.user'>traccar</entry>
+    <entry key='database.password'>__TRACCAR_DB_PASSWORD__</entry>
+
+    <!-- Teltonika protocol (FMM230) device port. -->
+    <entry key='teltonika.port'>5027</entry>
+
+    <!-- Forward every position update to RIO's webhook ingest endpoint. -->
+    <entry key='forward.url'>http://web:3000/api/webhooks/traccar</entry>
+    <entry key='forward.header'>Authorization: Bearer __TRACCAR_WEBHOOK_SECRET__</entry>
+
+    <entry key='web.port'>8082</entry>
+
+</properties>
