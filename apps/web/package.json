@@ -9,13 +9,16 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
-    "test": "vitest run"
+    "test": "vitest run",
+    "admin:create-user": "tsx scripts/create-user.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@rio-gps/core": "workspace:*",
     "@rio-gps/db": "workspace:*",
     "@rio-gps/traccar-client": "workspace:*",
-    "drizzle-orm": "^0.36.4",
+    "better-auth": "1.7.6",
+    "drizzle-orm": "^0.45.3",
     "ioredis": "^5.4.1",
     "next": "^15.0.3",
     "react": "^18.3.1",
@@ -31,6 +34,8 @@
     "@typescript-eslint/parser": "^8.15.0",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.0.3",
+    "postgres": "^3.4.9",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.5"
   }

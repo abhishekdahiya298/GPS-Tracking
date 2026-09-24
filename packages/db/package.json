@@ -13,15 +13,16 @@
     "migrate": "tsx src/migrate.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.36.4",
-    "postgres": "^3.4.5"
+    "drizzle-orm": "^0.45.3",
+    "kysely": "^0.29.6",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@rio-gps/config": "workspace:*",
     "@types/node": "^22.9.3",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
-    "drizzle-kit": "^0.28.1",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^8.57.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"

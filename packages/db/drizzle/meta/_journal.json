@@ -8,6 +8,13 @@
       "when": 1788584175460,
       "tag": "0000_plain_slyde",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790268167844,
+      "tag": "0001_auth_and_rbac",
+      "breakpoints": true
     }
   ]
 }
