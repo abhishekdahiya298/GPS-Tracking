@@ -1,4 +1,4 @@
-import { normalizePosition, TraccarWebhookPositionSchema, type NormalizedPosition } from "@rio-gps/core";
+import { normalizePosition, TraccarForwardPayloadSchema, type NormalizedPosition } from "@rio-gps/core";
 
 export class TraccarWebhookAuthError extends Error {}
 export class TraccarWebhookPayloadError extends Error {}
@@ -15,9 +15,12 @@ export function verifyWebhookSecret(authorizationHeader: string | null, expected
   }
 }
 
-/** Parses and normalizes a raw webhook request body into RIO's internal position shape. */
+/**
+ * Parses and normalizes a Traccar `forward.type=json` body
+ * (`{ position, device }`) into RIO's internal position shape.
+ */
 export function parseWebhookPosition(body: unknown): NormalizedPosition {
-  const result = TraccarWebhookPositionSchema.safeParse(body);
+  const result = TraccarForwardPayloadSchema.safeParse(body);
   if (!result.success) {
     throw new TraccarWebhookPayloadError(result.error.message);
   }

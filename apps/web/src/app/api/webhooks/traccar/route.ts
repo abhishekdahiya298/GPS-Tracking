@@ -1,7 +1,7 @@
-import { locationChannel } from "@rio-gps/core";
+import { isUsableFix, locationChannel } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
 import { TraccarWebhookAuthError, TraccarWebhookPayloadError, parseWebhookPosition, verifyWebhookSecret } from "@rio-gps/traccar-client";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { getRedisPublisher } from "@/lib/redis";
 
@@ -36,6 +36,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  if (!isUsableFix(position)) {
+    // No GNSS fix (or the 0,0 placeholder): acknowledge so Traccar doesn't retry,
+    // but never overwrite a device's last good location with it.
+    return NextResponse.json({ status: "ignored", reason: "no valid fix" }, { status: 202 });
+  }
+
   const db = getDb();
   const [device] = await db
     .select({ id: schema.gpsDevices.id, organizationId: schema.gpsDevices.organizationId })
@@ -49,7 +55,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: "ignored", reason: "unknown device" }, { status: 202 });
   }
 
-  await db
+  // Devices upload stored backlog oldest-first, and Traccar may redeliver, so a
+  // record only replaces the current location if it is strictly newer
+  // (exact duplicates are a no-op).
+  const updated = await db
     .insert(schema.currentLocations)
     .values({
       deviceId: device.id,
@@ -73,8 +82,14 @@ export async function POST(request: Request) {
         recordedAt: position.recordedAt,
         receivedAt: new Date(),
         rawPayload: position
-      }
-    });
+      },
+      setWhere: sql`${schema.currentLocations.recordedAt} < excluded.recorded_at`
+    })
+    .returning({ deviceId: schema.currentLocations.deviceId });
+
+  if (updated.length === 0) {
+    return NextResponse.json({ status: "ignored", reason: "not newer than current location" }, { status: 202 });
+  }
 
   await getRedisPublisher().publish(
     locationChannel(device.organizationId),

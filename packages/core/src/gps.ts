@@ -1,24 +1,43 @@
 import { z } from "zod";
 
 /**
- * Shape of a single position report as forwarded by Traccar's webhook.
- * Field names follow Traccar's `forward.url` template variables, not RIO's
- * internal naming — normalization happens in `normalizePosition`.
+ * Shape of the body Traccar POSTs to `forward.url` when `forward.type=json`
+ * (Traccar 6.x `PositionForwarderJson`, which serializes `PositionData`):
+ *
+ *   { "position": { ...org.traccar.model.Position }, "device": { ...org.traccar.model.Device } }
+ *
+ * Dates are ISO-8601 strings (Traccar's ObjectMapper disables timestamp output).
+ * Only the fields RIO uses are validated; everything else passes through untouched.
+ * Traccar's numeric ids (`position.id`, `position.deviceId`, `device.id`) are
+ * provider-internal and never leave this module's normalization step.
  */
-export const TraccarWebhookPositionSchema = z.object({
-  deviceId: z.coerce.number().int(),
-  imei: z.string().min(5).optional(),
-  uniqueId: z.string().min(1),
-  latitude: z.coerce.number().min(-90).max(90),
-  longitude: z.coerce.number().min(-180).max(180),
-  speed: z.coerce.number().min(0).optional(),
-  course: z.coerce.number().min(0).max(360).optional(),
-  altitude: z.coerce.number().optional(),
-  fixTime: z.coerce.date(),
-  attributes: z.record(z.unknown()).optional()
+export const TraccarForwardPositionSchema = z
+  .object({
+    deviceId: z.number().int(),
+    fixTime: z.coerce.date(),
+    valid: z.boolean().optional(),
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    altitude: z.number().optional(),
+    speed: z.number().min(0).optional(),
+    course: z.number().min(0).max(360).optional(),
+    attributes: z.record(z.unknown()).optional()
+  })
+  .passthrough();
+
+export const TraccarForwardDeviceSchema = z
+  .object({
+    id: z.number().int(),
+    uniqueId: z.string().min(1)
+  })
+  .passthrough();
+
+export const TraccarForwardPayloadSchema = z.object({
+  position: TraccarForwardPositionSchema,
+  device: TraccarForwardDeviceSchema
 });
 
-export type TraccarWebhookPosition = z.infer<typeof TraccarWebhookPositionSchema>;
+export type TraccarForwardPayload = z.infer<typeof TraccarForwardPayloadSchema>;
 
 /** RIO's internal, provider-agnostic representation of a device position. */
 export interface NormalizedPosition {
@@ -29,21 +48,42 @@ export interface NormalizedPosition {
   speedKph: number | null;
   headingDeg: number | null;
   altitudeM: number | null;
+  /** GNSS fix time reported by the device (UTC). */
   recordedAt: Date;
+  /** false when the device had no GNSS fix for this record. */
+  valid: boolean;
+  ignition: boolean | null;
+  motion: boolean | null;
 }
 
-/** Converts a raw Traccar webhook payload into RIO's normalized position shape. */
-export function normalizePosition(raw: TraccarWebhookPosition): NormalizedPosition {
+const IMEI_PATTERN = /^\d{15}$/;
+
+/** Converts a Traccar JSON forward payload into RIO's normalized position shape. */
+export function normalizePosition(raw: TraccarForwardPayload): NormalizedPosition {
+  const { position, device } = raw;
+  const attributes = position.attributes ?? {};
   return {
-    externalDeviceId: raw.uniqueId,
-    imei: raw.imei ?? null,
-    latitude: raw.latitude,
-    longitude: raw.longitude,
-    speedKph: raw.speed !== undefined ? knotsToKph(raw.speed) : null,
-    headingDeg: raw.course ?? null,
-    altitudeM: raw.altitude ?? null,
-    recordedAt: raw.fixTime
+    externalDeviceId: device.uniqueId,
+    // Teltonika (and most trackers) identify by IMEI, which Traccar stores as uniqueId.
+    imei: IMEI_PATTERN.test(device.uniqueId) ? device.uniqueId : null,
+    latitude: position.latitude,
+    longitude: position.longitude,
+    speedKph: position.speed !== undefined ? knotsToKph(position.speed) : null,
+    headingDeg: position.course ?? null,
+    altitudeM: position.altitude ?? null,
+    recordedAt: position.fixTime,
+    valid: position.valid ?? true,
+    ignition: typeof attributes.ignition === "boolean" ? attributes.ignition : null,
+    motion: typeof attributes.motion === "boolean" ? attributes.motion : null
   };
+}
+
+/**
+ * A record is only usable as a location if the device had a GNSS fix and the
+ * coordinates are not the 0,0 placeholder trackers emit before first fix.
+ */
+export function isUsableFix(position: NormalizedPosition): boolean {
+  return position.valid && !(position.latitude === 0 && position.longitude === 0);
 }
 
 /** Traccar reports speed in knots; RIO stores everything in km/h. */

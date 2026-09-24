@@ -19,10 +19,14 @@
     <entry key='database.user'>traccar</entry>
     <entry key='database.password'>__TRACCAR_DB_PASSWORD__</entry>
 
-    <!-- Teltonika protocol (FMM230) device port. -->
+    <!-- Teltonika protocol device port (FTM880, FMM230). -->
     <entry key='teltonika.port'>5027</entry>
 
-    <!-- Forward every position update to RIO's webhook ingest endpoint. -->
+    <!-- Forward every position update to RIO's webhook ingest endpoint.
+         forward.type=json makes Traccar POST {position, device} as JSON
+         (PositionForwarderJson). Without it Traccar 6.x defaults to "url",
+         which sends a bodiless GET and the POST-only route answers 405. -->
+    <entry key='forward.type'>json</entry>
     <entry key='forward.url'>http://web:3000/api/webhooks/traccar</entry>
     <entry key='forward.header'>Authorization: Bearer __TRACCAR_WEBHOOK_SECRET__</entry>
 

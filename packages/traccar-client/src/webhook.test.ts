@@ -16,15 +16,26 @@ describe("verifyWebhookSecret", () => {
 });
 
 describe("parseWebhookPosition", () => {
-  it("normalizes a valid payload", () => {
+  it("normalizes a Traccar forward.type=json payload", () => {
     const result = parseWebhookPosition({
-      deviceId: 1,
-      uniqueId: "352625690123456",
-      latitude: 1,
-      longitude: 2,
-      fixTime: "2026-01-01T00:00:00.000Z"
+      position: {
+        deviceId: 1,
+        valid: true,
+        latitude: 43.69504,
+        longitude: -79.86341,
+        course: 40,
+        fixTime: "2026-09-24T11:19:33.000+00:00"
+      },
+      device: { id: 1, uniqueId: "864361078566115" }
     });
-    expect(result.externalDeviceId).toBe("352625690123456");
+    expect(result.externalDeviceId).toBe("864361078566115");
+    expect(result.recordedAt.toISOString()).toBe("2026-09-24T11:19:33.000Z");
+  });
+
+  it("throws TraccarWebhookPayloadError on the old flat payload", () => {
+    expect(() =>
+      parseWebhookPosition({ deviceId: 1, uniqueId: "864361078566115", latitude: 1, longitude: 2, fixTime: "2026-01-01T00:00:00Z" })
+    ).toThrow(TraccarWebhookPayloadError);
   });
 
   it("throws TraccarWebhookPayloadError on invalid payload", () => {
