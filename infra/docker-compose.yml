@@ -17,8 +17,11 @@ services:
       # Two databases are provisioned by init script below: rio and traccar.
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set in .env}
-    env_file:
-      - ../.env # init-databases.sh reads RIO_DB_PASSWORD / TRACCAR_DB_PASSWORD from here
+      # Only what init-databases.sh needs (first start only). No env_file: the
+      # database container must not receive unrelated secrets, and editing an
+      # unrelated .env value must not recreate (restart) Postgres.
+      RIO_DB_PASSWORD: ${RIO_DB_PASSWORD:?set in .env}
+      TRACCAR_DB_PASSWORD: ${TRACCAR_DB_PASSWORD:?set in .env}
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro

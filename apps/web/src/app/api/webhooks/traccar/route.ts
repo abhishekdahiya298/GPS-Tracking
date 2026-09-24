@@ -2,6 +2,7 @@ import { locationChannel } from "@rio-gps/core";
 import { TraccarWebhookAuthError, TraccarWebhookPayloadError, parseWebhookPosition, verifyWebhookSecret } from "@rio-gps/traccar-client";
 import { NextResponse } from "next/server";
 import { ingestPosition } from "@/lib/ingest";
+import { countIngest } from "@/lib/ingest-stats";
 import { toLiveEvent } from "@/lib/locations";
 import { logger } from "@/lib/logger";
 import { getReadyRedisPublisher } from "@/lib/redis";
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
     verifyWebhookSecret(request.headers.get("authorization"), webhookSecret);
   } catch (err) {
     if (err instanceof TraccarWebhookAuthError) {
+      countIngest("rejected_auth");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     throw err;
@@ -32,8 +34,10 @@ export async function POST(request: Request) {
     position = parseWebhookPosition(body);
   } catch (err) {
     if (err instanceof TraccarWebhookPayloadError) {
+      countIngest("rejected_payload");
       return NextResponse.json({ error: "Invalid payload", detail: err.message }, { status: 400 });
     }
+    countIngest("rejected_payload");
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
@@ -42,9 +46,12 @@ export async function POST(request: Request) {
     outcome = await ingestPosition(position);
   } catch (err) {
     // Nothing was committed; a 5xx lets Traccar retry the delivery.
+    countIngest("store_failed");
     logger.error("ingest.store_failed", { externalDeviceId: position.externalDeviceId }, err);
     return NextResponse.json({ error: "Temporarily unavailable" }, { status: 503 });
   }
+  if (outcome.status === "stored") countIngest(outcome.currentUpdated ? "stored" : "stored_late");
+  else countIngest(outcome.status);
   switch (outcome.status) {
     case "unknown_device":
       // Accept (so Traccar doesn't retry forever) but store nothing.
@@ -71,6 +78,7 @@ export async function POST(request: Request) {
       JSON.stringify(toLiveEvent(device.id, position))
     );
   } catch (err) {
+    countIngest("publish_failed");
     logger.error("ingest.redis_publish_failed", { deviceId: device.id, organizationId: device.organizationId }, err);
   }
 

@@ -77,6 +77,11 @@ export function LiveMap({ orgName }: { orgName: string }) {
     if (!mapDiv.current || map.current) return;
     const m = new maplibregl.Map({ container: mapDiv.current, style: STYLE_URL, center: [-118.24, 34.05], zoom: 9, attributionControl: { compact: true } });
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
+    // The OpenFreeMap style references a few icons its sprite doesn't ship; supply a
+    // transparent placeholder instead of logging a warning per missing icon.
+    m.on("styleimagemissing", (e) => {
+      if (!m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+    });
     m.on("error", (e) => {
       // Tile/style load failures are surfaced, not swallowed.
       console.error("map error", e.error);
@@ -307,6 +312,7 @@ export function LiveMap({ orgName }: { orgName: string }) {
           <span className={css.conn} role="status">
             <span className={css.dot} style={{ background: connColor }} /> {conn}
           </span>
+          <a href="/vehicles">Vehicles</a>
           <a href="/dashboard">Dashboard</a>
         </div>
         <div className={css.list}>

@@ -197,6 +197,8 @@ docker compose -f infra/docker-compose.yml up -d
 
 ## 15. FMM230 connectivity requirements
 
+The full step-by-step runbook is `docs/FMM230_ONBOARDING.md`. Day-to-day deploys, rollback and observability are in `docs/OPERATIONS.md`.
+
 Before connecting a physical device, confirm:
 
 - Traccar is `Up` (not restarting) and its logs show a clean startup.
