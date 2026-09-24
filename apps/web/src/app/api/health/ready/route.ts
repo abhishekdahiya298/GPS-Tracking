@@ -2,7 +2,7 @@ import { getDb } from "@rio-gps/db";
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
-import { getRedisPublisher } from "@/lib/redis";
+import { getReadyRedisPublisher } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,7 @@ export async function GET() {
         checks.postgres = "fail";
         logger.warn("health.ready.postgres_failed", {}, err);
       }),
-    withTimeout(getRedisPublisher().ping(), 2_000)
+    withTimeout(getReadyRedisPublisher().then((r) => r.ping()), 3_000)
       .then(() => {
         checks.redis = "ok";
       })

@@ -4,7 +4,7 @@ import { TraccarWebhookAuthError, TraccarWebhookPayloadError, parseWebhookPositi
 import { eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { logger } from "@/lib/logger";
-import { getRedisPublisher } from "@/lib/redis";
+import { getReadyRedisPublisher } from "@/lib/redis";
 
 /**
  * Ingest endpoint Traccar's `forward.url` posts to on every position update.
@@ -96,7 +96,7 @@ export async function POST(request: Request) {
   // outage must not make Traccar retry (the data is already stored) — log it
   // loudly instead; live clients resync from the REST API on reconnect.
   try {
-    await getRedisPublisher().publish(
+    await (await getReadyRedisPublisher()).publish(
       locationChannel(device.organizationId),
       JSON.stringify({ deviceId: device.id, ...position })
     );

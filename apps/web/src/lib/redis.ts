@@ -2,6 +2,8 @@ import Redis from "ioredis";
 
 let publisher: Redis | null = null;
 
+const READY_TIMEOUT_MS = 2_000;
+
 /**
  * Shared Redis connection used to publish location updates for SSE fan-out.
  * Commands fail fast (instead of queueing forever) while Redis is down so
@@ -23,4 +25,34 @@ export function getRedisPublisher(): Redis {
     });
   }
   return publisher;
+}
+
+/**
+ * Returns the publisher once it is connected, waiting at most READY_TIMEOUT_MS.
+ * With the offline queue disabled, a command issued while the (lazily created)
+ * connection is still being established would fail immediately — e.g. the
+ * first location publish after every web restart. Waiting briefly avoids that
+ * without allowing unbounded queueing when Redis is genuinely down.
+ */
+export async function getReadyRedisPublisher(timeoutMs = READY_TIMEOUT_MS): Promise<Redis> {
+  const client = getRedisPublisher();
+  if (client.status === "ready") {
+    return client;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error(`Redis not ready within ${timeoutMs}ms (status: ${client.status})`));
+    }, timeoutMs);
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+    const cleanup = () => {
+      clearTimeout(timer);
+      client.off("ready", onReady);
+    };
+    client.on("ready", onReady);
+  });
+  return client;
 }
