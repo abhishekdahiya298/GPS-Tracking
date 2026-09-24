@@ -13,6 +13,16 @@ describe("verifyWebhookSecret", () => {
   it("throws TraccarWebhookAuthError when mismatched", () => {
     expect(() => verifyWebhookSecret("Bearer wrong", "s3cret")).toThrow(TraccarWebhookAuthError);
   });
+
+  it("rejects a non-Bearer scheme and a prefix of the secret", () => {
+    expect(() => verifyWebhookSecret("Basic s3cret", "s3cret")).toThrow(TraccarWebhookAuthError);
+    expect(() => verifyWebhookSecret("Bearer s3cre", "s3cret")).toThrow(TraccarWebhookAuthError);
+    expect(() => verifyWebhookSecret("Bearer ", "s3cret")).toThrow(TraccarWebhookAuthError);
+  });
+
+  it("fails closed when no secret is configured", () => {
+    expect(() => verifyWebhookSecret("Bearer ", "")).toThrow(TraccarWebhookAuthError);
+  });
 });
 
 describe("parseWebhookPosition", () => {

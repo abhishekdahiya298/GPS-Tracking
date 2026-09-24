@@ -3,6 +3,7 @@ import { getDb, schema } from "@rio-gps/db";
 import { TraccarWebhookAuthError, TraccarWebhookPayloadError, parseWebhookPosition, verifyWebhookSecret } from "@rio-gps/traccar-client";
 import { eq, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 import { getRedisPublisher } from "@/lib/redis";
 
 /**
@@ -91,10 +92,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: "ignored", reason: "not newer than current location" }, { status: 202 });
   }
 
-  await getRedisPublisher().publish(
-    locationChannel(device.organizationId),
-    JSON.stringify({ deviceId: device.id, ...position })
-  );
+  // PostgreSQL is the source of truth and the write above has committed. A Redis
+  // outage must not make Traccar retry (the data is already stored) — log it
+  // loudly instead; live clients resync from the REST API on reconnect.
+  try {
+    await getRedisPublisher().publish(
+      locationChannel(device.organizationId),
+      JSON.stringify({ deviceId: device.id, ...position })
+    );
+  } catch (err) {
+    logger.error("ingest.redis_publish_failed", { deviceId: device.id, organizationId: device.organizationId }, err);
+  }
 
   return NextResponse.json({ status: "ok" });
 }

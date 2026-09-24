@@ -1,9 +1,18 @@
 name: rio-gps
 
+# Bounded container logs for every service: without this Docker's json-file
+# driver grows without limit and can eventually fill the disk.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *default-logging
     environment:
       # Two databases are provisioned by init script below: rio and traccar.
       POSTGRES_USER: postgres
@@ -29,6 +38,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    logging: *default-logging
     ports:
       # Loopback only — Redis must never be reachable from the public internet.
       - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
@@ -41,6 +51,7 @@ services:
   traccar:
     image: traccar/traccar:6.15.3-ubuntu
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,6 +61,13 @@ services:
     # DATABASE_PASSWORD set). entrypoint.sh substitutes the real secrets into
     # traccar.xml.template at container startup instead.
     entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
+    healthcheck:
+      # Both the device listener and the admin/API port must accept connections.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/5027 && exec 4<>/dev/tcp/127.0.0.1/8082"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     env_file:
       - ../.env # entrypoint.sh reads TRACCAR_DB_PASSWORD / TRACCAR_WEBHOOK_SECRET from here
     volumes:
@@ -71,6 +89,7 @@ services:
       context: ..
       dockerfile: infra/docker/web.Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,12 +108,20 @@ services:
       # Loopback only — the reverse-proxy service is the public entry point
       # (see reverse-proxy below); this mapping exists for host-side debugging.
       - "127.0.0.1:3000:3000"
+    healthcheck:
+      # Liveness only (no DB/Redis dependency) so a dependency blip doesn't restart web.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   worker:
     build:
       context: ..
       dockerfile: infra/docker/worker.Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,8 +139,14 @@ services:
   reverse-proxy:
     image: caddy:2-alpine
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       - web
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     env_file:
       - ../.env
     volumes:

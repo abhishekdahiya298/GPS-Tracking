@@ -1,9 +1,35 @@
 # Production reverse proxy in front of the web app only.
 # Traccar's device port (5027) is never proxied here — it takes raw TCP from
-# cellular devices and is exposed directly on the VPS, not through Caddy/Cloudflare.
+# cellular devices and is published directly by Docker, not through Caddy/Cloudflare.
 {$RIO_DOMAIN} {
+	# Compress normal responses, but never the SSE stream (compression buffers events).
+	@compressible not path /api/locations/stream
+	encode @compressible zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), camera=(), microphone=()"
+		-Server
+	}
+
+	# Machine-to-machine ingest is internal only: Traccar reaches it directly at
+	# http://web:3000 on the compose network. Never expose it publicly.
+	@internalOnly path /api/webhooks/*
+	respond @internalOnly 404
+
+	# Server-Sent Events: stream immediately, no response buffering.
+	@sse path /api/locations/stream
+	reverse_proxy @sse web:3000 {
+		flush_interval -1
+		transport http {
+			read_timeout 0
+		}
+	}
+
 	reverse_proxy web:3000
 }
 
-# Traccar's own web UI, kept off the public domain — access via SSH tunnel or VPN
-# instead of exposing an admin panel to the internet.
+# Traccar's own web UI stays off the public domain — access via SSH tunnel only.

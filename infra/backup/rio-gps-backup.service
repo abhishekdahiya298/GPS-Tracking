@@ -1,0 +1,11 @@
+[Unit]
+Description=RIO GPS PostgreSQL backup (rio + traccar)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/rio-gps/infra/backup/pg-backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
