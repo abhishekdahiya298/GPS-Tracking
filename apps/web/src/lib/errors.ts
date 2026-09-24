@@ -60,3 +60,9 @@ export function errorResponse(err: unknown, fields: Record<string, unknown> = {}
     { status: 500 }
   );
 }
+
+export class TooManyRequestsError extends AppError {
+  constructor(message = "Too many requests") {
+    super("TOO_MANY_REQUESTS", 429, message);
+  }
+}

@@ -26,9 +26,37 @@ Every read API derives the organization from the session. None accepts one from 
 |---|---|---|
 | `GET /api/locations/current` | `locations.read` | Every device in the org: vehicle (active assignment), `connectivity` (`online`/`offline`/`never_seen`, threshold `GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS`, default 3900 s), `lastSeenAt`, and the latest `location` |
 | `GET /api/locations/history?deviceId=&from=&to=&limit=&cursor=` | `history.read` | Time-ordered points in `[from, to)`. Defaults to the last 24 h. The window is capped by `MAX_HISTORY_RANGE_DAYS` (31). `limit` is 1–5000 (default 2000). Keyset pagination uses `nextCursor`. A device from another org returns the same 404 as a missing one |
-| `GET /api/locations/stream` | `locations.read` | SSE. `event: location`, whose data has the same point shape plus `deviceId` and `receivedAt` |
+| `GET /api/locations/stream` | `locations.read` | SSE, described below |
 
 Provider identities (IMEI, Traccar IDs) are not included in API responses.
+
+## Live stream (SSE)
+
+Events, in order:
+
+1. `snapshot`: `{ generatedAt, devices }`, the same shape as `/current`. It is sent first on every connect and reconnect, so a client never misses the current state.
+2. `location`: one event per accepted newer fix. The data is the point shape plus `deviceId` and `receivedAt`. Clients should ignore an event older than the location they already hold.
+3. `end`: `{ reason }`, sent just before the server closes the stream. Reasons:
+   - `session_ended` (sign-out, expired session, or membership removed): go to `/login`.
+   - `organization_changed`, `max_lifetime` or `unavailable`: reconnect.
+
+A keep-alive comment is sent every `SSE_HEARTBEAT_SECONDS`.
+
+Limits and checks, per web process:
+
+- **Shared subscription:** one Redis subscriber per organization channel, shared by all of that organization's streams.
+- **Session re-check:** every `SSE_SESSION_RECHECK_SECONDS` (default 60).
+- **Maximum lifetime:** `SSE_MAX_LIFETIME_SECONDS` (default 3600).
+- **Per-user cap:** `SSE_MAX_STREAMS_PER_USER` (default 10) concurrent streams. Over the cap, the request gets 429.
+
+## Live map
+
+`/map` needs a session and uses MapLibre GL with OpenFreeMap tiles; no API key.
+
+- **Device list:** each device's status and last fix. The list is filled from the SSE snapshot and then updated live.
+- **History:** pick a device and a time range, then play back the track (up to 20,000 points per load).
+
+The map itself never receives organization IDs or credentials. All data comes from the session-authenticated APIs.
 
 ## Backfill from Traccar
 

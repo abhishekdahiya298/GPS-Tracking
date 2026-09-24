@@ -46,7 +46,10 @@ export default async function DashboardPage() {
             {user.email} · {ctx.role ?? "SUPER_ADMIN"}
           </small>
         </div>
-        <SignOutButton />
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <a href="/map">Live map</a>
+          <SignOutButton />
+        </div>
       </header>
       <h2 style={{ fontSize: 18 }}>Devices ({devices.length})</h2>
       <ul>
@@ -63,7 +66,6 @@ export default async function DashboardPage() {
           </li>
         ))}
       </ul>
-      <p style={{ color: "#666" }}>The live map arrives in a later phase.</p>
     </main>
   );
 }

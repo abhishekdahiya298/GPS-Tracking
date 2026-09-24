@@ -21,7 +21,13 @@ const ServerEnvSchema = z.object({
   /** Upper bound on a single location-history query window. */
   MAX_HISTORY_RANGE_DAYS: z.coerce.number().int().min(1).max(366).default(31),
   /** Interval between SSE keep-alive comments. */
-  SSE_HEARTBEAT_SECONDS: z.coerce.number().int().min(5).max(120).default(15)
+  SSE_HEARTBEAT_SECONDS: z.coerce.number().int().min(5).max(120).default(15),
+  /** How often an open stream re-validates its session (revoked sessions are cut off). */
+  SSE_SESSION_RECHECK_SECONDS: z.coerce.number().int().min(2).max(3_600).default(60),
+  /** Streams are closed after this long; EventSource reconnects and re-authenticates. */
+  SSE_MAX_LIFETIME_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3_600),
+  /** Concurrent streams per user per web instance. */
+  SSE_MAX_STREAMS_PER_USER: z.coerce.number().int().min(1).max(100).default(10)
 });
 
 export type ServerEnv = z.infer<typeof ServerEnvSchema>;
