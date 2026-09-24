@@ -52,6 +52,16 @@ $C up -d --no-deps web
 - `postgres` receives only the 3 variables its init script needs, not the whole `.env`. Editing unrelated `.env` values and recreating web or worker therefore no longer restarts the database.
 - Only ports 22, 80, 443 and 5027 are public. Postgres, Redis and Traccar 8082 are on loopback or the internal network only.
 
+## Content-Security-Policy
+
+Every HTML page gets a per-request, nonce-based CSP from `apps/web/src/middleware.ts`; the policy itself is built in `lib/csp.ts`:
+
+- Only Next's own scripts can run: they carry the nonce, and `'strict-dynamic'` lets them load their chunks. There is no inline or third-party script.
+- The map may fetch from `https://tiles.openfreemap.org` only, and runs its renderer in a `blob:` worker.
+- `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'` and `form-action 'self'` are set.
+
+To allow another tile or asset host, add it in `lib/csp.ts`. If the map goes blank, look for "Refused to" CSP messages in the browser console.
+
 ## Admin CLIs (inside the web container)
 
 | Command | Purpose |
