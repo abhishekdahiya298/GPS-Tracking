@@ -11,7 +11,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest run",
     "admin:create-user": "tsx scripts/create-user.ts",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "admin:backfill-history": "tsx scripts/backfill-history.ts"
   },
   "dependencies": {
     "@rio-gps/core": "workspace:*",

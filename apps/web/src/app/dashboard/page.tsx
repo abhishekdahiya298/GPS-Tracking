@@ -3,7 +3,9 @@ import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib/authz";
+import { getServerEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
+import { listCurrentLocations } from "@/lib/locations";
 import { SignOutButton } from "./sign-out-button";
 
 export const dynamic = "force-dynamic";
@@ -33,10 +35,7 @@ export default async function DashboardPage() {
     .select({ name: schema.organizations.name })
     .from(schema.organizations)
     .where(eq(schema.organizations.id, ctx.organizationId));
-  const devices = await db
-    .select({ id: schema.gpsDevices.id, model: schema.gpsDevices.model, status: schema.gpsDevices.status })
-    .from(schema.gpsDevices)
-    .where(eq(schema.gpsDevices.organizationId, ctx.organizationId));
+  const devices = await listCurrentLocations(ctx.organizationId, new Date(), getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS);
 
   return (
     <main style={{ fontFamily: "system-ui", padding: 24, maxWidth: 900 }}>
@@ -52,8 +51,15 @@ export default async function DashboardPage() {
       <h2 style={{ fontSize: 18 }}>Devices ({devices.length})</h2>
       <ul>
         {devices.map((d) => (
-          <li key={d.id}>
-            {d.model ?? "Device"} — {d.status}
+          <li key={d.deviceId}>
+            <strong>{d.vehicle?.name ?? d.model ?? "Device"}</strong> — {d.connectivity.replace("_", " ")}
+            {d.location && (
+              <>
+                {" "}
+                · last fix {new Date(d.location.recordedAt).toUTCString()} ({d.location.latitude.toFixed(5)},{" "}
+                {d.location.longitude.toFixed(5)}){d.location.ignition === true ? " · ignition on" : d.location.ignition === false ? " · ignition off" : ""}
+              </>
+            )}
           </li>
         ))}
       </ul>

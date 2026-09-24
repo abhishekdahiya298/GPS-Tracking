@@ -1,4 +1,4 @@
-import { doublePrecision, jsonb, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, doublePrecision, jsonb, pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
 import { gpsDevices } from "./gpsDevices";
 import { organizations } from "./organizations";
 
@@ -19,6 +19,8 @@ export const currentLocations = pgTable("current_locations", {
   speedKph: doublePrecision("speed_kph"),
   headingDeg: doublePrecision("heading_deg"),
   altitudeM: doublePrecision("altitude_m"),
+  ignition: boolean("ignition"),
+  motion: boolean("motion"),
   recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
   rawPayload: jsonb("raw_payload")

@@ -1,4 +1,5 @@
-import { pgTable, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { gpsDevices } from "./gpsDevices";
 import { organizations } from "./organizations";
 import { vehicles } from "./vehicles";
@@ -21,4 +22,9 @@ export const deviceAssignments = pgTable("device_assignments", {
     .references(() => vehicles.id, { onDelete: "cascade" }),
   assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
   unassignedAt: timestamp("unassigned_at", { withTimezone: true })
-});
+}, (table) => [
+  // At most one active assignment per device.
+  uniqueIndex("device_assignments_one_active_per_device")
+    .on(table.deviceId)
+    .where(sql`${table.unassignedAt} is null`)
+]);

@@ -24,6 +24,8 @@ export const gpsDevices = pgTable(
     imei: text("imei").notNull(),
     model: text("model"),
     status: gpsDeviceStatusEnum("status").notNull().default("active"),
+    /** Last time RIO received any record from this device (fix or not). Drives online/offline. */
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
