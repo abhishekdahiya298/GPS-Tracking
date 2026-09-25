@@ -103,6 +103,16 @@ function buildAuth() {
     },
     hooks: {
       after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path === "/change-password" && !(ctx.context.returned instanceof APIError) && ctx.context.session) {
+          await writeAudit({
+            action: "auth.password_changed",
+            actorUserId: ctx.context.session.user.id,
+            targetType: "user",
+            targetId: ctx.context.session.user.id,
+            ipAddress: ctx.request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+            userAgent: ctx.request?.headers.get("user-agent") ?? null
+          });
+        }
         if (ctx.path === "/sign-in/email" && ctx.context.returned instanceof APIError) {
           const email = typeof ctx.body?.email === "string" ? ctx.body.email.toLowerCase().slice(0, 254) : null;
           await writeAudit({

@@ -70,6 +70,7 @@ export function VehiclesManager({ initialVehicles, initialDevices, can }: { init
         <h1 style={{ fontSize: 22, margin: "8px 0" }}>Vehicles & devices</h1>
         <nav style={{ display: "flex", gap: 12 }}>
           <a href="/map">Live map</a>
+          <a href="/settings/team">Team</a>
           <a href="/dashboard">Dashboard</a>
         </nav>
       </header>

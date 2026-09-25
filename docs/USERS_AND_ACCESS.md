@@ -35,9 +35,27 @@ docker compose --env-file .env -f infra/docker-compose.yml exec -it web \
 
 The script prompts for the password twice with the input hidden. It is never passed as a flag. The minimum length is 12 characters.
 
-## Password reset
+## Managing the team (web UI)
 
-Until Resend is configured, reset passwords by admin action: delete the user's credential account and recreate the user. A self-service reset email flow arrives with Resend.
+**Settings → Team** (`/settings/team`):
+
+- **Who can use it:** Org Admin and Fleet Manager can view it; only Org Admin can make changes.
+- **Add member:**
+  - A brand-new account gets a random 20-character temporary password. It is shown **once**, never stored in plain text and never logged.
+  - An email that already has an account, for example from another organization, just gets access. Its name and password are left untouched.
+- **Change role / Remove:** the organization always keeps at least one Org Admin. Removing someone signs them out everywhere immediately.
+- **Reset password:**
+  - Issues a new one-time temporary password and signs the person out everywhere.
+  - It is refused for accounts that also belong to another organization, and for platform super admins, unless a super admin does it. This stops an admin of one customer from taking over an account that also has access to another customer.
+
+**My account** (`/settings/account`): anyone can change their own password. The current password is required, and other devices are signed out.
+
+Every action is audited:
+
+- `member.added`, `member.role_changed`, `member.removed`, `member.password_reset`
+- `auth.password_changed`
+
+Self-service "forgot password" emails arrive once Resend is configured.
 
 ## Integration tests
 
