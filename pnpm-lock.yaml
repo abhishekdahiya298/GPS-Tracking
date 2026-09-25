@@ -51,6 +51,9 @@ importers:
       '@rio-gps/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@types/geojson':
+        specifier: ^7946.0.16
+        version: 7946.0.16
       '@types/node':
         specifier: ^22.9.3
         version: 22.20.1

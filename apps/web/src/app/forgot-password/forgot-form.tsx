@@ -20,7 +20,7 @@ export function ForgotForm() {
     return <p role="status">If an account exists for that email, a reset link is on its way. It expires in 30 minutes.</p>;
   }
   return (
-    <form onSubmit={onSubmit}>
+    <form method="post" onSubmit={onSubmit}>
       <label>
         Email
         <input name="email" type="email" autoComplete="username" required style={input} />

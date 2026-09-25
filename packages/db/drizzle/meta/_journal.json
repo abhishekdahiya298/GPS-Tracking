@@ -22,6 +22,13 @@
       "when": 1790269783800,
       "tag": "0002_location_history",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790312608332,
+      "tag": "0003_geofences_alerts",
+      "breakpoints": true
     }
   ]
 }

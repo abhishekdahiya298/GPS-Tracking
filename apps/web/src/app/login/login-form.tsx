@@ -26,7 +26,7 @@ export function LoginForm({ next }: { next: string }) {
 
   const input = { display: "block", width: "100%", padding: 10, margin: "4px 0 14px", fontSize: 16, boxSizing: "border-box" } as const;
   return (
-    <form onSubmit={onSubmit} noValidate>
+    <form method="post" onSubmit={onSubmit} noValidate>
       <label>
         Email
         <input name="email" type="email" autoComplete="username" required style={input} />

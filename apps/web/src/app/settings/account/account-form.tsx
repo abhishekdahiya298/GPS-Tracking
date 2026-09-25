@@ -44,7 +44,7 @@ export function AccountForm({ name, email }: { name: string; email: string }) {
         {name} · {email}
       </p>
       <h2 style={{ fontSize: 17 }}>Change password</h2>
-      <form onSubmit={onSubmit}>
+      <form method="post" onSubmit={onSubmit}>
         <label>
           Current password
           <input name="currentPassword" type="password" autoComplete="current-password" required style={input} />

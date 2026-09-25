@@ -114,3 +114,37 @@ export function accessGrantedEmail(to: string, name: string, orgName: string, lo
     text: `Hi ${name || "there"},\n\nYou've been added to ${orgName} on RIO GPS. Sign in with your existing account: ${loginUrl}`
   };
 }
+
+const ALERT_LABEL: Record<string, string> = {
+  geofence_enter: "entered a zone",
+  geofence_exit: "left a zone",
+  speeding: "is speeding",
+  ignition_on: "ignition turned on",
+  ignition_off: "ignition turned off",
+  device_offline: "device went offline"
+};
+
+export function alertEmail(
+  to: string,
+  name: string,
+  ev: { type: string; ruleName: string; vehicleName: string | null; occurredAt: string; latitude: number | null; longitude: number | null; details: Record<string, unknown> | null },
+  alertsUrl: string
+): EmailMessage {
+  const who = ev.vehicleName ?? "A device";
+  const what = ALERT_LABEL[ev.type] ?? ev.type;
+  const extra: string[] = [];
+  if (ev.details?.geofence) extra.push(`Zone: ${String(ev.details.geofence)}`);
+  if (typeof ev.details?.speedKph === "number") extra.push(`Speed: ${ev.details.speedKph} km/h (limit ${String(ev.details.limitKph)})`);
+  const when = new Date(ev.occurredAt).toUTCString();
+  const map = ev.latitude !== null && ev.longitude !== null ? `https://www.openstreetmap.org/?mlat=${ev.latitude}&mlon=${ev.longitude}#map=16/${ev.latitude}/${ev.longitude}` : null;
+  return {
+    to,
+    template: `alert_${ev.type}`,
+    subject: `RIO GPS alert: ${who} ${what}`,
+    html: layout(
+      `${who} ${what}`,
+      `<p>Hi ${esc(name || "there")},</p><p>Rule <strong>${esc(ev.ruleName)}</strong> fired at ${esc(when)}.</p>${extra.map((e) => `<p>${esc(e)}</p>`).join("")}${map ? `<p><a href="${esc(map)}">View location</a></p>` : ""}${button(alertsUrl, "Open alerts")}`
+    ),
+    text: `${who} ${what}\nRule: ${ev.ruleName}\nTime: ${when}\n${extra.join("\n")}${map ? `\nLocation: ${map}` : ""}\n\n${alertsUrl}`
+  };
+}

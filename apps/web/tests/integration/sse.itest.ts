@@ -112,7 +112,7 @@ describe("SSE", () => {
     await s1.ready;
     await s2.ready;
     await until(() => s1.events.length > 0 && s2.events.length > 0);
-    expect(getLiveHub().stats().channels).toBe(1);
+    expect(getLiveHub().stats().channels).toBe(2); // locations + alerts
     s1.abort();
     s2.abort();
     expect(await until(() => getLiveHub().stats().listeners === 0)).toBe(true);

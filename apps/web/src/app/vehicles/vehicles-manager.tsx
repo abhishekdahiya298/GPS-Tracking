@@ -119,7 +119,7 @@ export function VehiclesManager({ initialVehicles, initialDevices, can }: { init
         <h2 style={{ fontSize: 17, marginTop: 0 }}>Vehicles ({vehicles.length})</h2>
         {vehicles.map((v) =>
           editing === v.id ? (
-            <form key={v.id} onSubmit={(e) => onSave(e, v.id)} style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: "1px solid #f0f2f4" }}>
+            <form key={v.id} method="post" onSubmit={(e) => onSave(e, v.id)} style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "8px 0", borderTop: "1px solid #f0f2f4" }}>
               <input name="name" defaultValue={v.name} required maxLength={120} style={{ ...input, flex: 2 }} aria-label="Name" />
               <input name="licensePlate" defaultValue={v.licensePlate ?? ""} maxLength={32} placeholder="Plate" style={{ ...input, flex: 1 }} aria-label="License plate" />
               <select name="status" defaultValue={v.status} style={input} aria-label="Status">
@@ -160,7 +160,7 @@ export function VehiclesManager({ initialVehicles, initialDevices, can }: { init
           )
         )}
         {can.create && (
-          <form onSubmit={onCreate} style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+          <form method="post" onSubmit={onCreate} style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
             <input name="name" required maxLength={120} placeholder="Vehicle name (e.g. Range Rover)" style={{ ...input, flex: 2, minWidth: 180 }} aria-label="New vehicle name" />
             <input name="licensePlate" maxLength={32} placeholder="Plate (optional)" style={{ ...input, flex: 1, minWidth: 120 }} aria-label="New vehicle plate" />
             <button type="submit" disabled={busy}>

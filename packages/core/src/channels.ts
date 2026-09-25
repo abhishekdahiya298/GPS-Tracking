@@ -2,3 +2,7 @@
 export function locationChannel(organizationId: string): string {
   return `rio:org:${organizationId}:locations`;
 }
+
+export function alertChannel(organizationId: string): string {
+  return `rio:org:${organizationId}:alerts`;
+}

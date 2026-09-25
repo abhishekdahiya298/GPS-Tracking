@@ -1,18 +1,12 @@
 /**
- * Next.js startup hook: validate configuration before serving any request.
- * A production server with missing/weak secrets must not start half-configured.
+ * Next.js startup hook: validate configuration before serving any request
+ * (a production server with missing/weak secrets must not start half-configured)
+ * and start the alert scheduler. Node-only code lives in instrumentation-node.ts;
+ * the NEXT_RUNTIME check lets the bundler drop it from the edge build.
  */
 export async function register() {
-  if (process.env.NEXT_RUNTIME !== "nodejs") {
-    return;
-  }
-  const { getServerEnv } = await import("./lib/env");
-  const { logger } = await import("./lib/logger");
-  try {
-    const env = getServerEnv();
-    logger.info("startup.config_valid", { nodeEnv: env.NODE_ENV });
-  } catch (err) {
-    logger.error("startup.config_invalid", {}, err);
-    process.exit(1);
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { startNode } = await import("./instrumentation-node");
+    startNode();
   }
 }

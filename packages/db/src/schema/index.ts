@@ -9,3 +9,4 @@ export * from "./gpsDevices";
 export * from "./deviceAssignments";
 export * from "./currentLocations";
 export * from "./locationHistory";
+export * from "./alerts";

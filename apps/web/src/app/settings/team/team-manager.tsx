@@ -169,7 +169,7 @@ export function TeamManager({ initialMembers, you, canManage }: { initialMembers
       {canManage && (
         <section style={box}>
           <h2 style={{ fontSize: 17, marginTop: 0 }}>Add a member</h2>
-          <form onSubmit={onAdd} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <form method="post" onSubmit={onAdd} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <input name="name" required maxLength={200} placeholder="Full name" aria-label="Full name" style={{ ...input, flex: 1, minWidth: 160 }} />
             <input name="email" type="email" required maxLength={254} placeholder="Email" aria-label="Email" style={{ ...input, flex: 1, minWidth: 200 }} />
             <select name="role" defaultValue="VIEWER" aria-label="Role" style={input}>

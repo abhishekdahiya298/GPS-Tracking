@@ -49,6 +49,8 @@ export default async function DashboardPage() {
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <a href="/map">Live map</a>
           <a href="/vehicles">Vehicles</a>
+          <a href="/geofences">Zones</a>
+          <a href="/alerts">Alerts</a>
           <a href="/settings/team">Team</a>
           <a href="/settings/account">My account</a>
           <SignOutButton />

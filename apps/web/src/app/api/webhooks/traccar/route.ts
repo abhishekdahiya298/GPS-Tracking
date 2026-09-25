@@ -1,6 +1,7 @@
 import { locationChannel } from "@rio-gps/core";
 import { TraccarWebhookAuthError, TraccarWebhookPayloadError, parseWebhookPosition, verifyWebhookSecret } from "@rio-gps/traccar-client";
 import { NextResponse } from "next/server";
+import { evaluateAlertsForPosition } from "@/lib/alerts";
 import { ingestPosition } from "@/lib/ingest";
 import { countIngest } from "@/lib/ingest-stats";
 import { toLiveEvent } from "@/lib/locations";
@@ -81,6 +82,15 @@ export async function POST(request: Request) {
     countIngest("publish_failed");
     logger.error("ingest.redis_publish_failed", { deviceId: device.id, organizationId: device.organizationId }, err);
   }
+
+  // Alerts run after the position is committed and never fail the ingest.
+  await evaluateAlertsForPosition(device, {
+    latitude: position.latitude,
+    longitude: position.longitude,
+    speedKph: position.speedKph,
+    ignition: position.ignition,
+    recordedAt: position.recordedAt
+  });
 
   return NextResponse.json({ status: "ok" });
 }

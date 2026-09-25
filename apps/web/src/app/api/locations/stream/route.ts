@@ -1,4 +1,4 @@
-import { locationChannel } from "@rio-gps/core";
+import { alertChannel, contextHasPermission, locationChannel } from "@rio-gps/core";
 import { requireAuthenticatedUserFromHeaders, requirePermission, requireTenantContext, resolveTenantContext } from "@/lib/authz";
 import { getServerEnv } from "@/lib/env";
 import { AppError, errorResponse, TooManyRequestsError } from "@/lib/errors";
@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
  * Protocol:
  *   event: snapshot  → { generatedAt, devices: CurrentDeviceLocation[] }   (first, on every (re)connect)
  *   event: location  → LiveLocationEvent                                   (each accepted newer fix)
+ *   event: alert     → AlertEventDto (only with alerts.read)
  *   event: end       → { reason }                                          (server is closing; client should reconnect or re-login)
  *   : keep-alive comments every SSE_HEARTBEAT_SECONDS
  *
@@ -36,10 +37,12 @@ export async function GET(request: Request) {
   }
 
   const { organizationId, userId } = ctx;
+  const canSeeAlerts = contextHasPermission(ctx, "alerts.read");
   const channel = locationChannel(organizationId);
   const encoder = new TextEncoder();
   const timers: NodeJS.Timeout[] = [];
   let unsubscribe: (() => void) | null = null;
+  let unsubscribeAlerts: (() => void) | null = null;
   let closed = false;
   let controllerRef: ReadableStreamDefaultController<Uint8Array> | null = null;
 
@@ -48,6 +51,7 @@ export async function GET(request: Request) {
     closed = true;
     timers.forEach((t) => clearInterval(t));
     unsubscribe?.();
+    unsubscribeAlerts?.();
     release?.();
     try {
       controllerRef?.close();
@@ -77,6 +81,9 @@ export async function GET(request: Request) {
       try {
         // Subscribe before taking the snapshot so no update falls in between.
         unsubscribe = await getLiveHub().subscribe(channel, (message) => send(`event: location\ndata: ${message}\n\n`));
+        if (canSeeAlerts) {
+          unsubscribeAlerts = await getLiveHub().subscribe(alertChannel(organizationId), (message) => send(`event: alert\ndata: ${message}\n\n`));
+        }
         send("retry: 5000\n\n");
         const now = new Date();
         const devices = await listCurrentLocations(organizationId, now, env.GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS);

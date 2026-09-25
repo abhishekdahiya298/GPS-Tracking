@@ -36,7 +36,7 @@ export function ResetForm({ token }: { token: string }) {
     );
   }
   return (
-    <form onSubmit={onSubmit}>
+    <form method="post" onSubmit={onSubmit}>
       <label>
         New password (min. 12 characters)
         <input name="newPassword" type="password" autoComplete="new-password" required minLength={12} maxLength={128} style={input} />

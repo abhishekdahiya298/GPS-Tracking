@@ -2,6 +2,8 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl, { type GeoJSONSource, type Map as MlMap, type Marker } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { shapeRing } from "@rio-gps/core";
+import type { AlertEventDto, GeofenceDto } from "@/lib/alerts";
 import type { CurrentDeviceLocation, LiveLocationEvent, LocationPoint } from "@/lib/locations";
 import css from "./map.module.css";
 
@@ -57,6 +59,8 @@ export function LiveMap({ orgName }: { orgName: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [mapError, setMapError] = useState<string | null>(null);
+  const [unack, setUnack] = useState<number | null>(null);
+  const [toasts, setToasts] = useState<AlertEventDto[]>([]);
 
   // History state
   const [from, setFrom] = useState(() => localInput(new Date(Date.now() - 24 * 3600_000)));
@@ -70,6 +74,13 @@ export function LiveMap({ orgName }: { orgName: string }) {
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/alerts?limit=1&unacknowledged=1", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => b && setUnack(b.unacknowledged))
+      .catch(() => undefined);
   }, []);
 
   // Map init
@@ -91,6 +102,22 @@ export function LiveMap({ orgName }: { orgName: string }) {
       setMapError(null);
       m.addSource("track", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       m.addLayer({ id: "track-line", type: "line", source: "track", paint: { "line-color": "#3056d3", "line-width": 4, "line-opacity": 0.85 }, layout: { "line-join": "round", "line-cap": "round" } });
+      // Zones overlay (skipped silently if the role can't read zones).
+      fetch("/api/geofences", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((b: { geofences: GeofenceDto[] } | null) => {
+          if (!b || !map.current) return;
+          m.addSource("fences", {
+            type: "geojson",
+            data: {
+              type: "FeatureCollection",
+              features: b.geofences.map((f) => ({ type: "Feature", properties: { name: f.name, color: f.color }, geometry: { type: "Polygon", coordinates: [shapeRing(f.shape)] } }))
+            }
+          });
+          m.addLayer({ id: "fences-fill", type: "fill", source: "fences", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.12 } }, "track-line");
+          m.addLayer({ id: "fences-line", type: "line", source: "fences", paint: { "line-color": ["get", "color"], "line-width": 1.5 } }, "track-line");
+        })
+        .catch((err) => console.error("zones failed to load", err));
     });
     map.current = m;
     return () => {
@@ -143,6 +170,12 @@ export function LiveMap({ orgName }: { orgName: string }) {
           };
           return { ...prev, [e.deviceId]: { ...d, location: loc, connectivity: "online", lastSeenAt: e.receivedAt } };
         });
+      });
+      es.addEventListener("alert", (ev) => {
+        const a = JSON.parse((ev as MessageEvent).data) as AlertEventDto;
+        setUnack((n) => (n ?? 0) + 1);
+        setToasts((t) => [a, ...t].slice(0, 3));
+        setTimeout(() => setToasts((t) => t.filter((x) => x.id !== a.id)), 12_000);
       });
       es.addEventListener("end", (ev) => {
         const { reason } = JSON.parse((ev as MessageEvent).data) as { reason: string };
@@ -312,6 +345,12 @@ export function LiveMap({ orgName }: { orgName: string }) {
           <span className={css.conn} role="status">
             <span className={css.dot} style={{ background: connColor }} /> {conn}
           </span>
+          {unack !== null && (
+            <a href="/alerts" style={{ fontWeight: unack > 0 ? 700 : 400, color: unack > 0 ? "#c0392b" : undefined }}>
+              Alerts{unack > 0 ? ` (${unack})` : ""}
+            </a>
+          )}
+          <a href="/geofences">Zones</a>
           <a href="/vehicles">Vehicles</a>
           <a href="/dashboard">Dashboard</a>
         </div>
@@ -384,6 +423,16 @@ export function LiveMap({ orgName }: { orgName: string }) {
       </aside>
       <div className={css.map}>
         <div ref={mapDiv} className={css.mapInner} />
+        {toasts.length > 0 && (
+          <div role="status" aria-live="polite" style={{ position: "absolute", top: 10, left: 10, right: 60, display: "grid", gap: 6, zIndex: 2 }}>
+            {toasts.map((t) => (
+              <a key={t.id} href="/alerts" style={{ background: "#fff", borderLeft: "4px solid #c0392b", boxShadow: "0 2px 8px rgba(0,0,0,.2)", padding: "8px 12px", borderRadius: 6, fontSize: 13, color: "#1b1f24", textDecoration: "none" }}>
+                <strong>{t.vehicleName ?? "Device"}</strong> · {t.ruleName}
+                <div style={{ color: "#5b6470" }}>{new Date(t.occurredAt).toLocaleTimeString()}</div>
+              </a>
+            ))}
+          </div>
+        )}
         {mapError && (
           <div role="alert" style={{ position: "absolute", top: 10, left: 10, right: 60, background: "#fff4e0", padding: "8px 12px", borderRadius: 6, fontSize: 13 }}>
             {mapError}
