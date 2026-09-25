@@ -117,8 +117,8 @@ export default async function DashboardPage() {
         </Link>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+        <Card className="min-w-0 lg:col-span-3">
           <CardHeader>
             <CardTitle>Fleet status</CardTitle>
             <Link href="/vehicles" className="text-sm text-primary no-underline hover:underline">
@@ -150,7 +150,7 @@ export default async function DashboardPage() {
           {devices.length > 8 && <p className="m-0 border-t border-border px-5 py-2.5 text-xs text-muted-foreground">Showing 8 of {devices.length}. Moving and idle vehicles first.</p>}
         </Card>
 
-        <div className="grid content-start gap-5 lg:col-span-2">
+        <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-2">
           {can("alerts.read") && (
             <Card>
               <CardHeader>

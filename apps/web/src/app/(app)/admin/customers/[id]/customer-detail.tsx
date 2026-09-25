@@ -44,7 +44,7 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
           </>
         }
       />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Card>
           <CardHeader>
             <CardTitle>Devices ({c.devices.length})</CardTitle>

@@ -18,7 +18,8 @@ commit. Nothing is pushed or deployed without the owner's go-ahead.
 | G | `cab1e02` | Reports: filter card with quick ranges, URL-shareable state, summary cards, by-day and sortable/paged trips tables, phone cards, CSV button, skeleton/empty/error states, organization units (was always km). Email schedules: cards with status, action menu, create dialog, confirm-before-delete, toasts |
 | H | `725a045` | Alerts (server-paged history + filters, severity, detail sheet, rules tab), Zones, Maintenance, map `?focus=` |
 | I | `f7f6cd2` | Team (server-paged table, role/status, action menu, dialogs) and Customers (paged table, 3-step create wizard, customer detail page with device registration and view-as) |
-| J | (this commit) | Global search / command palette (Cmd/Ctrl+K), server-side and permission-checked |
+| J | `81ab5bd` | Global search / command palette (Cmd/Ctrl+K), server-side and permission-checked |
+| K–N | (this commit) | Responsive + accessibility + performance pass, final QA, `docs/UI-UX-ARCHITECTURE.md` |
 
 ## Phase F: map performance and UX
 
@@ -97,11 +98,57 @@ SSE (snapshot / location / alert / end)
 - Palette in the top bar (button + Cmd/Ctrl+K): "Go to" pages from the permission-filtered menu, then Vehicles, Devices, Alerts, Zones, Team, Customers. Accessible combobox/listbox (aria-activedescendant, arrow keys, Enter, Esc, focus trapped by the dialog), 200 ms debounce, stale requests aborted, error state. Results link into the existing pages' URL filters (e.g. `/vehicles?search=`).
 - Tests: `search.itest.ts` (5-per-group cap, tenant isolation, permission gating incl. IMEI digits, customers only for super admins, short/wildcard queries).
 
-## Remaining phases
- Alerts + Zones + Maintenance · I Team + Customers · J Global search ·
-K–N Responsive, accessibility, performance, final QA + `docs/UI-UX-ARCHITECTURE.md`.
+## Phases K–N: responsive, accessibility, performance, final QA
 
-## New dependencies so far
+### Automated QA sweep
+Every main route (dashboard, map, vehicles, devices, zones, alerts, reports, report emails,
+maintenance, team, my account, organization settings, customers) at **375, 390, 768, 1024, 1280,
+1440 and 1920 px** (91 combinations), with a 501-vehicle local test fleet:
+- horizontal overflow and elements sticking out of the viewport;
+- console errors and CSP violations;
+- axe-core (WCAG 2 A/AA + best practice) at 390 and 1440 px.
+
+| Finding | Fix | After |
+|---|---|---|
+| Dashboard wider than the screen at 375 px (+13 px) and 1024 px (+6 px) | grid items couldn't shrink below content (implicit `auto` column); explicit `grid-cols-1` + `min-w-0`; same latent issue fixed on customer detail and trip reports | 0 overflow on all 91 |
+| "My account" still old (own `<main>`, inline styles) → 3 landmark violations | rebuilt on the design system inside the shell | 0 |
+| Phone table cards: tappable card wrapped the row's action menu (nested interactive) | stretched-button pattern in `DataTable` | 0 |
+| Nonce-less script preload (Phase I) | lazy components mount only when opened | 0 CSP errors |
+| **Final** | | **0 overflow, 0 console errors, 0 axe violations** |
+
+### Performance (production build, gzip)
+| Route | Baseline first-load JS | Now | Note |
+|---|---|---|---|
+| Shared by all | 102 kB | 102 kB | unchanged |
+| /dashboard | 114 kB | **108 kB** | server-rendered, one round trip |
+| /vehicles, /devices, /alerts, /team, /customers | 104–105 kB | 178–187 kB | shared component library (Radix menus/dialogs, TanStack Table, Sonner, icons), cached across pages |
+| /reports | 105 kB | 125 kB | |
+| /map | 393 kB | 412 kB | MapLibre ≈ 285 kB; history panel loaded on demand |
+| /geofences | 391 kB | 437 kB | |
+
+What the extra script buys is bounded data: the old Vehicles page loaded **every** vehicle and
+device (with 501 vehicles: 27 kB + 29 kB gzip JSON, growing linearly with the fleet); a page is now
+≈ 2.5 kB whatever the fleet size. Map main-thread work ≈ 5× lower (Phase F). Dialogs and drawers
+load on first use; the global search runs server-side with ≤ 5 rows per group.
+
+### Testing performed (final)
+- `pnpm typecheck`, `pnpm lint`: clean.
+- Unit: core 47, traccar-client 11, web 37 (incl. map model, nav config, CSP).
+- Integration: **139 tests / 17 files**, including tenant isolation, RBAC, super-admin
+  restrictions, view-as, SSE stream + reconnect, ingest, vehicles CRUD, device assignment,
+  alerts (+ paged list), reports, customer onboarding, team, search.
+- Playwright smoke per phase at desktop and phone widths; SSE reconnect verified by killing
+  the server with the map open; map benchmark before/after.
+
+## Not done / follow-ups
+- Zone enable/disable: needs an `active` column (schema change); not added.
+- Dark mode: tokens are ready for it, but no dark theme was designed.
+- Real-device check: the benchmark ran without a GPU; verify the map on a real laptop/phone
+  after deploy (expected to be smoother than measured here).
+- Deploy: 12 commits on the laptop, not pushed. The units commit includes migration 0006
+  (additive column); run it with the usual backup.
+
+## New dependencies
 tailwindcss 4 + @tailwindcss/postcss, class-variance-authority, clsx, tailwind-merge,
 @radix-ui (dialog, dropdown-menu, slot, tabs, tooltip), lucide-react, sonner,
 @tanstack/react-table, react-hook-form + @hookform/resolvers. No map library change

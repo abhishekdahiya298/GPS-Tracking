@@ -168,23 +168,11 @@ export function DataTable<T>({
               {data.map((row) => (
                 <li key={getRowId(row)}>
                   {onRowClick ? (
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      aria-label={rowLabel?.(row)}
-                      onClick={(e) => {
-                        if ((e.target as HTMLElement).closest("button, a")) return;
-                        onRowClick(row);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
-                          e.preventDefault();
-                          onRowClick(row);
-                        }
-                      }}
-                      className="cursor-pointer px-4 py-3 hover:bg-canvas"
-                    >
-                      {mobileRow(row)}
+                    // Stretched button: the whole card is one real <button>, and the card's own
+                    // actions (menus, links) sit beside it rather than inside it (no nested controls).
+                    <div className="relative px-4 py-3 hover:bg-canvas">
+                      <button type="button" aria-label={rowLabel?.(row) ?? "Open"} onClick={() => onRowClick(row)} className="absolute inset-0 z-0 cursor-pointer border-0 bg-transparent p-0" />
+                      <div className="pointer-events-none relative z-10 [&_a]:pointer-events-auto [&_button]:pointer-events-auto">{mobileRow(row)}</div>
                     </div>
                   ) : (
                     <div className="px-4 py-3">{mobileRow(row)}</div>

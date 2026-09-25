@@ -298,7 +298,7 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
               <EmptyState icon={CalendarRange} title="No trips in this period" description={`${vehicleLabel} didn't drive between ${fromDay} and ${toDay}. Try a longer range.`} />
             </Card>
           ) : (
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
               <Card className="h-fit">
                 <CardHeader>
                   <CardTitle>By day</CardTitle>
