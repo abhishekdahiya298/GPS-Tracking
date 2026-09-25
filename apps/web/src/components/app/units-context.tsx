@@ -1,5 +1,5 @@
 "use client";
-import { units, type UnitSystem, type Units } from "@rio-gps/core";
+import { units, type UnitSystem, type Units } from "@rio-gps/core/units";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
 const Ctx = createContext<Units>(units("imperial"));

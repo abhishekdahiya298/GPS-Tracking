@@ -1,4 +1,8 @@
+import { contextHasPermission } from "@rio-gps/core";
 import { NextResponse } from "next/server";
+import { listEvents } from "@/lib/alerts";
+import { getServerEnv } from "@/lib/env";
+import { getVehicleDetail } from "@/lib/fleet-list";
 import { z } from "zod";
 import { requirePermission, requireTenantContext } from "@/lib/authz";
 import { assertSameOrigin } from "@/lib/csrf";
@@ -13,6 +17,24 @@ async function vehicleId(params: Params["params"]) {
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success) throw new NotFoundError("Vehicle not found");
   return id;
+}
+
+/** Vehicle detail: current device + position; recent alerts when allowed. */
+export async function GET(request: Request, { params }: Params) {
+  try {
+    const ctx = await requireTenantContext(request);
+    requirePermission(ctx, "vehicles.read");
+    const id = await vehicleId(params);
+    const detail = await getVehicleDetail(ctx.organizationId, id, new Date(), getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS, {
+      includeImeiLast4: contextHasPermission(ctx, "devices.manage")
+    });
+    if (!detail) throw new NotFoundError("Vehicle not found");
+    if (!contextHasPermission(ctx, "locations.read")) detail.location = null;
+    const alerts = contextHasPermission(ctx, "alerts.read") ? await listEvents(ctx.organizationId, { limit: 5, unacknowledgedOnly: false, vehicleId: id }) : [];
+    return NextResponse.json({ ...detail, alerts }, { headers: { "Cache-Control": "no-store" } });
+  } catch (err) {
+    return errorResponse(err, { route: "vehicles.get" });
+  }
 }
 
 export async function PATCH(request: Request, { params }: Params) {

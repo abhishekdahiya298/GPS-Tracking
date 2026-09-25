@@ -1,33 +1,28 @@
 import { contextHasPermission } from "@rio-gps/core";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib/authz";
-import { AppError } from "@/lib/errors";
-import { listDevices, listVehicles } from "@/lib/vehicles";
-import { VehiclesManager } from "./vehicles-manager";
+import { getServerEnv } from "@/lib/env";
+import { listVehiclesPage, parseListQuery, VehicleListQuery } from "@/lib/fleet-list";
+import { getRequestContext } from "@/lib/request-context";
+import { VehiclesView } from "./vehicles-view";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Vehicles · RIO GPS" };
 
-export default async function VehiclesPage() {
-  let ctx;
-  try {
-    ctx = await resolveTenantContext(await requireAuthenticatedUserFromHeaders(await headers()));
-  } catch (err) {
-    if (err instanceof AppError && err.status === 401) redirect("/login?next=/vehicles");
-    if (err instanceof AppError && err.status === 403) redirect("/dashboard");
-    throw err;
-  }
+export default async function VehiclesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const rc = await getRequestContext();
+  if (rc.status !== "ok") redirect("/login?next=/vehicles");
+  const { ctx } = rc;
   if (!contextHasPermission(ctx, "vehicles.read")) redirect("/dashboard");
-  const [vehicles, devices] = await Promise.all([listVehicles(ctx.organizationId), listDevices(ctx.organizationId, { includeImeiLast4: contextHasPermission(ctx, "devices.manage") })]);
-  // Permissions are passed only to shape the UI; every API call re-checks them server-side.
+  const q = parseListQuery(VehicleListQuery, await searchParams);
+  const data = await listVehiclesPage(ctx.organizationId, q, new Date(), getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS);
+  // Permissions only shape the UI; every API call re-checks them on the server.
   const can = {
     create: contextHasPermission(ctx, "vehicles.create"),
     update: contextHasPermission(ctx, "vehicles.update"),
     remove: contextHasPermission(ctx, "vehicles.delete"),
     assign: contextHasPermission(ctx, "devices.assign"),
     unassign: contextHasPermission(ctx, "devices.unassign"),
-    manage: contextHasPermission(ctx, "devices.manage")
+    map: contextHasPermission(ctx, "locations.read")
   };
-  return <VehiclesManager initialVehicles={vehicles} initialDevices={devices} can={can} />;
+  return <VehiclesView data={data} query={q} can={can} />;
 }

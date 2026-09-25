@@ -1,6 +1,6 @@
 "use client";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { shapeRing, type LonLat } from "@rio-gps/core";
+import { shapeRing, type LonLat } from "@rio-gps/core/geo";
 import maplibregl, { type GeoJSONSource, type Map as MlMap } from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Feature, FeatureCollection } from "geojson";

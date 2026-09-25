@@ -2,7 +2,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl, { type GeoJSONSource, type Map as MlMap, type Marker } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { shapeRing } from "@rio-gps/core";
+import { shapeRing } from "@rio-gps/core/geo";
 import type { AlertEventDto, GeofenceDto } from "@/lib/alerts";
 import type { CurrentDeviceLocation, LiveLocationEvent, LocationPoint } from "@/lib/locations";
 import css from "./map.module.css";

@@ -20,5 +20,10 @@
     "eslint": "^8.57.1",
     "typescript": "^5.6.3",
     "vitest": "^2.1.5"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./units": "./src/units.ts",
+    "./geo": "./src/geo.ts"
   }
 }

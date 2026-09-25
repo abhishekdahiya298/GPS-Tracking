@@ -11,18 +11,8 @@ import { ConflictError, NotFoundError, ValidationError } from "./errors";
  * foreign id behaves exactly like a missing one (404).
  */
 
-export const VehicleInputSchema = z.object({
-  name: z.string().trim().min(1, "name is required").max(120),
-  licensePlate: z
-    .string()
-    .trim()
-    .max(32)
-    .optional()
-    .nullable()
-    .transform((v) => (v ? v : null)),
-  status: z.enum(["active", "inactive", "maintenance"]).optional()
-});
-export const VehiclePatchSchema = VehicleInputSchema.partial().refine((v) => Object.keys(v).length > 0, "Nothing to update");
+import { DevicePatchSchema, VehicleInputSchema, VehiclePatchSchema } from "./schemas/vehicle";
+export { DevicePatchSchema, VehicleInputSchema, VehiclePatchSchema };
 
 export function parseOrThrow<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, body: unknown): T {
   const r = schema.safeParse(body);
@@ -254,12 +244,6 @@ export async function unassignDevice(ctx: TenantContext, deviceId: string, meta:
   });
 }
 
-export const DevicePatchSchema = z
-  .object({
-    name: z.string().trim().max(80).nullable().optional(),
-    active: z.boolean().optional()
-  })
-  .refine((v) => v.name !== undefined || v.active !== undefined, "Nothing to update");
 
 /**
  * Customer-side device management (devices.manage). Deactivating keeps the device

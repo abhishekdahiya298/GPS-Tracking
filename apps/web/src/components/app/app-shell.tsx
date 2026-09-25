@@ -20,7 +20,6 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { authClient } from "@/lib/client/auth-client";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
 import { Button } from "../ui/button";
@@ -231,6 +230,8 @@ function UserMenu({ user, orgName, viewingAs }: { user: ShellUser; orgName: stri
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={async () => {
+            // Loaded on demand: keeps the auth client out of every page's initial bundle.
+            const { authClient } = await import("@/lib/client/auth-client");
             await authClient.signOut();
             window.location.assign("/login");
           }}

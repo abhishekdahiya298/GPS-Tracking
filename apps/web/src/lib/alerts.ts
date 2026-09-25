@@ -221,11 +221,12 @@ export interface AlertEventDto {
   acknowledgedAt: string | null;
 }
 
-export async function listEvents(organizationId: string, opts: { limit: number; unacknowledgedOnly: boolean; beforeId?: number }): Promise<AlertEventDto[]> {
+export async function listEvents(organizationId: string, opts: { limit: number; unacknowledgedOnly: boolean; beforeId?: number; vehicleId?: string }): Promise<AlertEventDto[]> {
   const e = schema.alertEvents;
   const conds = [eq(e.organizationId, organizationId)];
   if (opts.unacknowledgedOnly) conds.push(isNull(e.acknowledgedAt));
   if (opts.beforeId) conds.push(lt(e.id, opts.beforeId));
+  if (opts.vehicleId) conds.push(eq(e.vehicleId, opts.vehicleId));
   const rows = await getDb()
     .select({ ev: e, vehicleName: schema.vehicles.name })
     .from(e)
