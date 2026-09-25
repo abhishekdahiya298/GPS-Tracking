@@ -14,6 +14,8 @@ export interface EmailMessage {
   text: string;
   /** Template name for logs/metrics only. */
   template: string;
+  /** Small text attachments (e.g. CSV); content is plain text, base64-encoded on send. */
+  attachments?: { filename: string; content: string }[];
 }
 
 type Transport = (msg: EmailMessage) => Promise<void>;
@@ -41,7 +43,16 @@ export async function sendEmail(msg: EmailMessage): Promise<void> {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: env.EMAIL_FROM, to: [msg.to], subject: msg.subject, html: msg.html, text: msg.text }),
+      body: JSON.stringify({
+        from: env.EMAIL_FROM,
+        to: [msg.to],
+        subject: msg.subject,
+        html: msg.html,
+        text: msg.text,
+        ...(msg.attachments?.length
+          ? { attachments: msg.attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content, "utf8").toString("base64") })) }
+          : {})
+      }),
       signal: ac.signal
     });
     if (!res.ok) {
@@ -146,5 +157,48 @@ export function alertEmail(
       `<p>Hi ${esc(name || "there")},</p><p>Rule <strong>${esc(ev.ruleName)}</strong> fired at ${esc(when)}.</p>${extra.map((e) => `<p>${esc(e)}</p>`).join("")}${map ? `<p><a href="${esc(map)}">View location</a></p>` : ""}${button(alertsUrl, "Open alerts")}`
     ),
     text: `${who} ${what}\nRule: ${ev.ruleName}\nTime: ${when}\n${extra.join("\n")}${map ? `\nLocation: ${map}` : ""}\n\n${alertsUrl}`
+  };
+}
+
+export interface ReportEmailRow {
+  vehicle: string;
+  trips: number;
+  distanceKm: number;
+  drivingMin: number;
+  maxSpeedKph: number;
+}
+
+const hm = (min: number) => `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m`;
+
+export function tripSummaryEmail(
+  to: string,
+  name: string,
+  r: { orgName: string; scheduleName: string; periodLabel: string; timeZone: string; rows: ReportEmailRow[]; reportsUrl: string; csv: string | null; csvName: string }
+): EmailMessage {
+  const tot = r.rows.reduce(
+    (a, x) => ({ trips: a.trips + x.trips, km: a.km + x.distanceKm, min: a.min + x.drivingMin, max: Math.max(a.max, x.maxSpeedKph) }),
+    { trips: 0, km: 0, min: 0, max: 0 }
+  );
+  const km = Math.round(tot.km * 10) / 10;
+  const td = 'style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right"';
+  const tdl = 'style="padding:6px 8px;border-bottom:1px solid #eee;text-align:left"';
+  const table = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;border-collapse:collapse">
+<tr style="color:#6b7280"><th ${tdl}>Vehicle</th><th ${td}>Trips</th><th ${td}>Distance</th><th ${td}>Driving</th><th ${td}>Top speed</th></tr>
+${r.rows.map((x) => `<tr><td ${tdl}>${esc(x.vehicle)}</td><td ${td}>${x.trips}</td><td ${td}>${x.distanceKm} km</td><td ${td}>${hm(x.drivingMin)}</td><td ${td}>${x.maxSpeedKph} km/h</td></tr>`).join("\n")}
+<tr style="font-weight:600"><td ${tdl}>Total</td><td ${td}>${tot.trips}</td><td ${td}>${km} km</td><td ${td}>${hm(tot.min)}</td><td ${td}>${tot.max} km/h</td></tr></table>`;
+  const title = `${r.scheduleName}: ${r.periodLabel}`;
+  return {
+    to,
+    template: "trip_summary",
+    subject: `RIO GPS report · ${r.orgName} · ${r.periodLabel}`,
+    html: layout(
+      title,
+      `<p>Hi ${esc(name || "there")},</p><p>Trip summary for <strong>${esc(r.orgName)}</strong>, ${esc(r.periodLabel)} (${esc(r.timeZone)}).</p>${table}${r.csv ? "<p style=\"font-size:13px;color:#6b7280\">Every trip is in the attached CSV.</p>" : ""}${button(r.reportsUrl, "Open reports")}`
+    ),
+    text:
+      `${title}\n${r.orgName} (${r.timeZone})\n\n` +
+      r.rows.map((x) => `${x.vehicle}: ${x.trips} ${x.trips === 1 ? "trip" : "trips"}, ${x.distanceKm} km, ${hm(x.drivingMin)} driving, top ${x.maxSpeedKph} km/h`).join("\n") +
+      `\nTotal: ${tot.trips} ${tot.trips === 1 ? "trip" : "trips"}, ${km} km\n\n${r.reportsUrl}`,
+    ...(r.csv ? { attachments: [{ filename: r.csvName, content: r.csv }] } : {})
   };
 }

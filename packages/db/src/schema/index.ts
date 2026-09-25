@@ -10,3 +10,4 @@ export * from "./deviceAssignments";
 export * from "./currentLocations";
 export * from "./locationHistory";
 export * from "./alerts";
+export * from "./reportSchedules";

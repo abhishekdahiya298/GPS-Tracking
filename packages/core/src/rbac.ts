@@ -23,6 +23,7 @@ export const PERMISSIONS = [
   "geofences.write",
   "alerts.read",
   "alerts.write",
+  "reports.manage",
   "users.read",
   "users.manage",
   "billing.read",
@@ -51,6 +52,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<OrgRole, ReadonlySet<Permission>>
     "devices.unassign",
     "geofences.write",
     "alerts.write",
+    "reports.manage",
     "users.read"
   ]),
   DISPATCHER: new Set<Permission>([...READ_ONLY, "alerts.write"]),

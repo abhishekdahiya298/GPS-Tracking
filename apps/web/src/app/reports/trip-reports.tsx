@@ -11,7 +11,7 @@ const hm = (m: number) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "
 const cell = { padding: "6px 8px", borderTop: "1px solid #f0f2f4", whiteSpace: "nowrap" } as const;
 const inp = { padding: 8, fontSize: 15, minWidth: 0, boxSizing: "border-box" } as const;
 
-export function TripReports({ devices }: { devices: Dev[] }) {
+export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; canSchedule?: boolean }) {
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", []);
   const [deviceId, setDeviceId] = useState(devices[0]?.id ?? "");
   const [fromDay, setFromDay] = useState(() => localInput(new Date(Date.now() - 6 * 86_400_000)));
@@ -63,6 +63,7 @@ export function TripReports({ devices }: { devices: Dev[] }) {
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
         <h1 style={{ fontSize: 22, margin: "8px 0" }}>Trip reports</h1>
         <nav style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {canSchedule && <a href="/reports/schedules">Email schedules</a>}
           <a href="/map">Live map</a>
           <a href="/alerts">Alerts</a>
           <a href="/dashboard">Dashboard</a>

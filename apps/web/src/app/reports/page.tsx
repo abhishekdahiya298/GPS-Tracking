@@ -20,5 +20,5 @@ export default async function ReportsPage() {
   }
   if (!contextHasPermission(ctx, "history.read")) redirect("/dashboard");
   const devices = (await listDevices(ctx.organizationId)).map((d) => ({ id: d.id, label: d.vehicle ? `${d.vehicle.name} (${d.model ?? "device"})` : (d.model ?? "Device") }));
-  return <TripReports devices={devices} />;
+  return <TripReports devices={devices} canSchedule={contextHasPermission(ctx, "reports.manage")} />;
 }

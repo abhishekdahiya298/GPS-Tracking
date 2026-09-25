@@ -29,6 +29,13 @@
       "when": 1790312608332,
       "tag": "0003_geofences_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790326737898,
+      "tag": "0004_report_schedules",
+      "breakpoints": true
     }
   ]
 }
