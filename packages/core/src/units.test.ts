@@ -10,6 +10,8 @@ describe("units", () => {
     expect(us.fmtDist(688.1)).toBe("427.6 mi");
     expect(ca.fmtDist(688.1)).toBe("688.1 km");
     expect(us.fmtDist(null)).toBe("—");
+    expect(us.fmtDist(0.05)).toBe("< 0.1 mi");
+    expect(ca.fmtDist(0)).toBe("0 km");
     expect(us.fmtSpeed(undefined)).toBe("—");
   });
   it("round-trips user input back to metric", () => {

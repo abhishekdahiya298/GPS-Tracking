@@ -80,12 +80,12 @@ export function AppShell({
   const fullBleed = FULL_BLEED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   return (
-    <div className="flex h-dvh min-h-0 bg-canvas">
+    <div className="flex min-h-dvh bg-canvas">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:shadow-pop">
         Skip to content
       </a>
 
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-background lg:flex" aria-label="Main navigation">
+      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-border bg-background lg:flex" aria-label="Main navigation">
         <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} />
       </aside>
 
@@ -123,7 +123,7 @@ export function AppShell({
 
         {viewingAs && <ViewAsBanner orgName={orgName} />}
 
-        <main id="main" className={cn("min-h-0 flex-1", fullBleed ? "relative overflow-hidden" : "overflow-y-auto")}>
+        <main id="main" className={cn("flex-1", fullBleed && "relative h-[calc(100dvh-3.5rem)] overflow-hidden")}>
           <UnitsProvider system={unitSystem}>{fullBleed ? children : <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-6">{children}</div>}</UnitsProvider>
         </main>
       </div>

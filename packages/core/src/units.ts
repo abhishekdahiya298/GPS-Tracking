@@ -42,7 +42,13 @@ export function units(system: UnitSystem): Units {
     speed_,
     toKm: (v) => (imperial ? v * KM_PER_MILE : v),
     toKph: (v) => (imperial ? v * KM_PER_MILE : v),
-    fmtDist: (km, digits = 1) => (km === null || km === undefined ? "—" : `${round(dist(km), digits).toLocaleString("en-US")} ${imperial ? "mi" : "km"}`),
+    fmtDist: (km, digits = 1) => {
+      if (km === null || km === undefined) return "—";
+      const v = round(dist(km), digits);
+      const unit = imperial ? "mi" : "km";
+      if (v === 0 && km > 0) return `< ${(1 / 10 ** digits).toString()} ${unit}`;
+      return `${v.toLocaleString("en-US")} ${unit}`;
+    },
     fmtSpeed: (kph) => (kph === null || kph === undefined ? "—" : `${Math.round(speed_(kph))} ${imperial ? "mph" : "km/h"}`)
   };
 }
