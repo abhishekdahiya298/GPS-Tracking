@@ -1,4 +1,7 @@
 import type { ReactNode } from "react";
+import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export const metadata = {
   title: "RIO GPS Tracking",
@@ -13,7 +16,10 @@ export const dynamic = "force-dynamic";
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="bg-canvas text-foreground antialiased">
+        <TooltipProvider>{children}</TooltipProvider>
+        <Toaster />
+      </body>
     </html>
   );
 }
