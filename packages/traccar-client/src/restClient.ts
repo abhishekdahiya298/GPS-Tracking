@@ -61,4 +61,20 @@ export class TraccarRestClient {
     if (!Array.isArray(body)) throw new Error("Traccar API returned a non-array positions body");
     return body;
   }
+
+  /**
+   * Registers a device (Traccar requires uniqueId to be unique). Returns the
+   * existing device if one with this uniqueId is already registered.
+   */
+  async ensureDevice(name: string, uniqueId: string): Promise<{ device: TraccarDeviceSummary; created: boolean }> {
+    const existing = await this.findDeviceByUniqueId(uniqueId);
+    if (existing) return { device: existing, created: false };
+    const response = await fetch(`${this.config.baseUrl}/api/devices`, {
+      method: "POST",
+      headers: { Authorization: this.authHeader(), "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ name, uniqueId })
+    });
+    if (!response.ok) throw new Error(`Traccar API error: ${response.status} ${response.statusText}`);
+    return { device: (await response.json()) as TraccarDeviceSummary, created: true };
+  }
 }

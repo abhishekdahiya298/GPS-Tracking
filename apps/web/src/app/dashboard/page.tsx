@@ -6,6 +6,7 @@ import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib
 import { getServerEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { listCurrentLocations } from "@/lib/locations";
+import { ExitViewAs } from "./exit-view-as";
 import { SignOutButton } from "./sign-out-button";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,11 @@ export default async function DashboardPage() {
 
   return (
     <main style={{ fontFamily: "system-ui", padding: 24, maxWidth: 900 }}>
+      {ctx.isSuperAdmin && ctx.role === null && (
+        <p style={{ background: "#fff4d6", padding: 8, borderRadius: 6 }}>
+          Viewing as customer <strong>{org?.name}</strong> (platform admin, all actions are audited). <ExitViewAs />
+        </p>
+      )}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22 }}>{org?.name ?? "Organization"}</h1>
@@ -54,6 +60,7 @@ export default async function DashboardPage() {
           <a href="/reports">Reports</a>
           <a href="/settings/team">Team</a>
           <a href="/settings/account">My account</a>
+          {user.isSuperAdmin && <a href="/admin/customers">Customers</a>}
           <SignOutButton />
         </div>
       </header>

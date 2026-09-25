@@ -56,6 +56,18 @@ export async function resolveTenantContext(user: AuthenticatedUser): Promise<Ten
   const preferred = user.activeOrganizationId
     ? rows.find((m) => m.organizationId === user.activeOrganizationId)
     : undefined;
+  // A platform super admin who explicitly chose an organization they are not a
+  // member of ("view as customer") acts there with role null. Everyone else can
+  // only ever act in an organization they hold a membership in.
+  if (!preferred && user.isSuperAdmin && user.activeOrganizationId) {
+    const [org] = await db
+      .select({ id: schema.organizations.id })
+      .from(schema.organizations)
+      .where(eq(schema.organizations.id, user.activeOrganizationId))
+      .limit(1);
+    if (org) return { userId: user.userId, organizationId: org.id, role: null, isSuperAdmin: true };
+  }
+
   const membership = preferred ?? rows[0];
 
   if (membership && isOrgRole(membership.role)) {
@@ -65,18 +77,6 @@ export async function resolveTenantContext(user: AuthenticatedUser): Promise<Ten
       role: membership.role,
       isSuperAdmin: user.isSuperAdmin
     };
-  }
-
-  // A platform super admin may act in an explicitly selected organization without a membership.
-  if (user.isSuperAdmin && user.activeOrganizationId) {
-    const [org] = await db
-      .select({ id: schema.organizations.id })
-      .from(schema.organizations)
-      .where(eq(schema.organizations.id, user.activeOrganizationId))
-      .limit(1);
-    if (org) {
-      return { userId: user.userId, organizationId: org.id, role: null, isSuperAdmin: true };
-    }
   }
 
   throw new ForbiddenError("Your account is not a member of any organization");
