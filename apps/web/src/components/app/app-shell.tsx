@@ -26,6 +26,7 @@ import { Button } from "../ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Sheet, SheetContent } from "../ui/dialog";
 import { toast } from "../ui/toaster";
+import { CommandPalette } from "./command-palette";
 import { isActive, type NavIcon, type NavSection } from "./nav-config";
 import { UnitsProvider } from "./units-context";
 import type { UnitSystem } from "@rio-gps/core";
@@ -104,6 +105,7 @@ export function AppShell({
           </Link>
           <div className="hidden min-w-0 flex-1 truncate text-sm text-muted-foreground lg:block">{orgName}</div>
           <div className="ml-auto flex items-center gap-1">
+            <CommandPalette nav={nav} />
             {canSeeAlerts && (
               <Button asChild variant="ghost" size="icon" className="relative">
                 <Link href="/alerts" aria-label={unackAlerts > 0 ? `Alerts, ${unackAlerts} unacknowledged` : "Alerts"}>

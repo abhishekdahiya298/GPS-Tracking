@@ -17,7 +17,8 @@ commit. Nothing is pushed or deployed without the owner's go-ahead.
 | F | `19bc1c1` | Live map rebuilt on a GeoJSON layer; history + playback; mobile bottom sheet |
 | G | `cab1e02` | Reports: filter card with quick ranges, URL-shareable state, summary cards, by-day and sortable/paged trips tables, phone cards, CSV button, skeleton/empty/error states, organization units (was always km). Email schedules: cards with status, action menu, create dialog, confirm-before-delete, toasts |
 | H | `725a045` | Alerts (server-paged history + filters, severity, detail sheet, rules tab), Zones, Maintenance, map `?focus=` |
-| I | (this commit) | Team (server-paged table, role/status, action menu, dialogs) and Customers (paged table, 3-step create wizard, customer detail page with device registration and view-as) |
+| I | `f7f6cd2` | Team (server-paged table, role/status, action menu, dialogs) and Customers (paged table, 3-step create wizard, customer detail page with device registration and view-as) |
+| J | (this commit) | Global search / command palette (Cmd/Ctrl+K), server-side and permission-checked |
 
 ## Phase F: map performance and UX
 
@@ -90,6 +91,11 @@ SSE (snapshot / location / alert / end)
 - **Customers** (`/admin/customers`, platform admins only): `/api/admin/customers?page=&search=&sort=` (super-admin check unchanged), columns Customer / Users / Devices (active in 24 h) / Created / Status, actions Manage / View as. "New customer" is a 3-step wizard (company with auto short-name → first admin → review → create; one-time password shown only if email fails). New **customer detail page** `/admin/customers/[id]`: devices (IMEI last 4 only), users, Register device dialog (15-digit hint, Traccar failure shown, nothing saved), View as customer.
 - **CSP finding**: a lazily loaded component that is rendered during server rendering makes Next emit a `<link rel="preload" as="script">` **without** the nonce, which the strict CSP blocks (console error, wasted preload; the feature itself still worked). Fixed by mounting the wizard only when opened. All 13 main routes were then scanned: 0 nonce-less scripts or script preloads.
 - Tests: `team-list.itest.ts`, `customers-list.itest.ts` (403 for org admins on the paged form, paging/search/sort, detail exposes only IMEI last 4).
+
+## Phase J: global search (Cmd/Ctrl + K)
+- `GET /api/search?q=` (2–100 chars): server-side, org-scoped, each group permission-checked like its page (vehicles.read, devices.read, alerts.read, geofences.read, users.read; customers only for platform admins), ≤ 5 hits per group, search wildcards escaped. Admins (devices.manage) can find a unit by trailing IMEI digits; the IMEI is never returned.
+- Palette in the top bar (button + Cmd/Ctrl+K): "Go to" pages from the permission-filtered menu, then Vehicles, Devices, Alerts, Zones, Team, Customers. Accessible combobox/listbox (aria-activedescendant, arrow keys, Enter, Esc, focus trapped by the dialog), 200 ms debounce, stale requests aborted, error state. Results link into the existing pages' URL filters (e.g. `/vehicles?search=`).
+- Tests: `search.itest.ts` (5-per-group cap, tenant isolation, permission gating incl. IMEI digits, customers only for super admins, short/wildcard queries).
 
 ## Remaining phases
  Alerts + Zones + Maintenance · I Team + Customers · J Global search ·
