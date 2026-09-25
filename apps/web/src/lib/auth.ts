@@ -3,10 +3,13 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { writeAudit } from "./audit";
+import { isEmailEnabled, passwordResetEmail, sendEmail } from "./email";
+import { logger } from "./logger";
 import { getServerEnv } from "./env";
 
 const SEVEN_DAYS = 60 * 60 * 24 * 7;
 const ONE_DAY = 60 * 60 * 24;
+export const RESET_TOKEN_SECONDS = 30 * 60;
 
 function buildAuth() {
   const env = getServerEnv();
@@ -49,7 +52,24 @@ function buildAuth() {
       disableSignUp: true,
       minPasswordLength: 12,
       maxPasswordLength: 128,
-      revokeSessionsOnPasswordReset: true
+      revokeSessionsOnPasswordReset: true,
+      resetPasswordTokenExpiresIn: RESET_TOKEN_SECONDS,
+      // Self-service "forgot password". Always answers the same way (no account
+      // enumeration); the email is only sent when Resend is configured.
+      sendResetPassword: async ({ user, url }) => {
+        if (!isEmailEnabled()) {
+          logger.warn("auth.reset_email_skipped", { reason: "email_not_configured" });
+          return;
+        }
+        try {
+          await sendEmail(passwordResetEmail(user.email, user.name, url, RESET_TOKEN_SECONDS / 60));
+        } catch {
+          // Already logged by sendEmail; don't reveal delivery problems to the requester.
+        }
+      },
+      onPasswordReset: async ({ user }) => {
+        await writeAudit({ action: "auth.password_reset_completed", actorUserId: user.id, targetType: "user", targetId: user.id });
+      }
     },
     rateLimit: {
       enabled: true,

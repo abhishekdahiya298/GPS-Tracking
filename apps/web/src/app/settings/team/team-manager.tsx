@@ -32,6 +32,7 @@ export function TeamManager({ initialMembers, you, canManage }: { initialMembers
   const [busy, setBusy] = useState(false);
   // One-time secret display. Kept only in memory; cleared on dismiss.
   const [secret, setSecret] = useState<{ email: string; password: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
     setBusy(true);
@@ -58,6 +59,7 @@ export function TeamManager({ initialMembers, you, canManage }: { initialMembers
     if (out) {
       form.reset();
       if (out.temporaryPassword) setSecret({ email, password: out.temporaryPassword });
+      else if (out.emailed) setNotice(`Invitation email sent to ${email}.`);
     }
   }
 
@@ -76,6 +78,15 @@ export function TeamManager({ initialMembers, you, canManage }: { initialMembers
       {error && (
         <p role="alert" style={{ color: "#b00020" }}>
           {error}
+        </p>
+      )}
+
+      {notice && (
+        <p role="status" style={{ color: "#1c7a36" }}>
+          {notice}{" "}
+          <button type="button" onClick={() => setNotice(null)}>
+            OK
+          </button>
         </p>
       )}
 
@@ -137,6 +148,7 @@ export function TeamManager({ initialMembers, you, canManage }: { initialMembers
                     if (!window.confirm(`Reset ${m.name}'s password? They will be signed out everywhere.`)) return;
                     const out = await run(() => api(`/api/team/${m.userId}/reset-password`, { method: "POST" }));
                     if (out?.temporaryPassword) setSecret({ email: m.email, password: out.temporaryPassword });
+                    else if (out?.emailed) setNotice(`Password reset email sent to ${m.email}. Their old password no longer works.`);
                   }}
                 >
                   Reset password
@@ -172,7 +184,7 @@ export function TeamManager({ initialMembers, you, canManage }: { initialMembers
             </button>
           </form>
           <p style={{ color: "#5b6470", fontSize: 13, marginBottom: 0 }}>
-            New accounts get a one-time temporary password shown here. Email invitations arrive once email delivery (Resend) is configured.
+            New people get an invitation email with a link to set their password. If email can&apos;t be sent, a one-time temporary password is shown here instead.
           </p>
         </section>
       )}

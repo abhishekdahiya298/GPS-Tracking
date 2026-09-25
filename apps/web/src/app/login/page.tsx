@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getAuth } from "@/lib/auth";
+import { isEmailEnabled } from "@/lib/email";
 import { LoginForm } from "./login-form";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <h1 style={{ fontSize: 22 }}>RIO GPS</h1>
       <p style={{ color: "#555" }}>Sign in to your fleet account.</p>
       <LoginForm next={target} />
+      {isEmailEnabled() && (
+        <p>
+          <a href="/forgot-password">Forgot password?</a>
+        </p>
+      )}
     </main>
   );
 }

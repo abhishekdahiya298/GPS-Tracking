@@ -27,7 +27,15 @@ const ServerEnvSchema = z.object({
   /** Streams are closed after this long; EventSource reconnects and re-authenticates. */
   SSE_MAX_LIFETIME_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3_600),
   /** Concurrent streams per user per web instance. */
-  SSE_MAX_STREAMS_PER_USER: z.coerce.number().int().min(1).max(100).default(10)
+  SSE_MAX_STREAMS_PER_USER: z.coerce.number().int().min(1).max(100).default(10),
+  /** Resend API key. Optional: without it, email features fall back to admin-issued temporary passwords. */
+  RESEND_API_KEY: z
+    .string()
+    .regex(/^re_[A-Za-z0-9_]{16,}$/, "RESEND_API_KEY must look like re_…")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
+  /** Sender; the domain must be verified in Resend. */
+  EMAIL_FROM: z.string().min(3).default("RIO GPS <no-reply@riocaliforniainc.com>")
 });
 
 export type ServerEnv = z.infer<typeof ServerEnvSchema>;

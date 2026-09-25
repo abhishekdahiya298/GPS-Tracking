@@ -4,6 +4,9 @@ import { hashPassword } from "better-auth/crypto";
 import { and, asc, count, eq, max, ne } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
+import { getAuth } from "./auth";
+import { accessGrantedEmail, inviteEmail, isEmailEnabled, passwordResetEmail, sendEmail } from "./email";
+import { getServerEnv } from "./env";
 import { ConflictError, ForbiddenError, NotFoundError } from "./errors";
 
 /**
@@ -81,6 +84,41 @@ export async function listMembers(organizationId: string): Promise<MemberDto[]> 
   }));
 }
 
+
+const INVITE_LINK_SECONDS = 72 * 3600;
+const ADMIN_RESET_LINK_SECONDS = 24 * 3600;
+
+/**
+ * One-time "set your password" link using Better Auth's own reset-token store,
+ * so /reset-password (Better Auth's resetPassword) consumes it exactly like a
+ * self-service reset. The token is never logged or stored in audit metadata.
+ */
+async function createPasswordLink(userId: string, seconds: number): Promise<string> {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const token = Buffer.from(bytes).toString("base64url");
+  const ctx = await getAuth().$context;
+  await ctx.internalAdapter.createVerificationValue({
+    identifier: `reset-password:${token}`,
+    value: userId,
+    expiresAt: new Date(Date.now() + seconds * 1000)
+  });
+  return `${new URL(getServerEnv().AUTH_URL).origin}/reset-password?token=${encodeURIComponent(token)}`;
+}
+
+async function orgName(organizationId: string) {
+  const [o] = await getDb().select({ name: schema.organizations.name }).from(schema.organizations).where(eq(schema.organizations.id, organizationId));
+  return o?.name ?? "your organization";
+}
+
+export interface AddMemberResult {
+  userId: string;
+  /** Only when email is not configured or delivery failed; shown once to the admin. */
+  temporaryPassword: string | null;
+  /** True when an invitation / access email was sent. */
+  emailed: boolean;
+}
+
 export async function addMember(ctx: TenantContext, input: z.infer<typeof AddMemberSchema>, meta: Meta) {
   const db = getDb();
   const temporaryPassword = generateTemporaryPassword();
@@ -117,7 +155,23 @@ export async function addMember(ctx: TenantContext, input: z.infer<typeof AddMem
     metadata: { role: input.role, newAccount: result.created },
     ...meta
   });
-  return { userId: result.userId, temporaryPassword: result.created ? temporaryPassword : null };
+
+  if (isEmailEnabled()) {
+    try {
+      const org = await orgName(ctx.organizationId);
+      if (result.created) {
+        const url = await createPasswordLink(result.userId, INVITE_LINK_SECONDS);
+        await sendEmail(inviteEmail(input.email, input.name, org, url, INVITE_LINK_SECONDS / 3600));
+      } else {
+        await sendEmail(accessGrantedEmail(input.email, input.name, org, `${new URL(getServerEnv().AUTH_URL).origin}/login`));
+      }
+      // The random initial password was never shown to anyone; the invite link is the only way in.
+      return { userId: result.userId, temporaryPassword: null, emailed: true } satisfies AddMemberResult;
+    } catch {
+      // Delivery failed (already logged): fall back to the one-time temporary password.
+    }
+  }
+  return { userId: result.userId, temporaryPassword: result.created ? temporaryPassword : null, emailed: false } satisfies AddMemberResult;
 }
 
 async function lockMembership(tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0], organizationId: string, userId: string) {
@@ -199,5 +253,17 @@ export async function resetMemberPassword(ctx: TenantContext, userId: string, me
     await tx.delete(schema.sessions).where(eq(schema.sessions.userId, userId));
   });
   await writeAudit({ action: "member.password_reset", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "user", targetId: userId, ...meta });
-  return { temporaryPassword };
+
+  if (isEmailEnabled()) {
+    try {
+      const [u] = await db.select({ email: schema.users.email, name: schema.users.name }).from(schema.users).where(eq(schema.users.id, userId));
+      const url = await createPasswordLink(userId, ADMIN_RESET_LINK_SECONDS);
+      await sendEmail(passwordResetEmail(u!.email, u!.name, url, ADMIN_RESET_LINK_SECONDS / 60));
+      // The old password was already replaced by an unknown random one above.
+      return { temporaryPassword: null, emailed: true };
+    } catch {
+      // fall back to showing the temporary password once
+    }
+  }
+  return { temporaryPassword, emailed: false };
 }

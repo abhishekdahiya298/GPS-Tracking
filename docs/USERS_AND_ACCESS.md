@@ -55,7 +55,27 @@ Every action is audited:
 - `member.added`, `member.role_changed`, `member.removed`, `member.password_reset`
 - `auth.password_changed`
 
-Self-service "forgot password" emails arrive once Resend is configured.
+## Email (Resend)
+
+Set these two values in `/opt/rio-gps/.env` on the server. Never commit them:
+
+```
+RESEND_API_KEY=re_...                                   # from resend.com → API Keys
+EMAIL_FROM=RIO GPS <no-reply@riocaliforniainc.com>      # domain must be verified in Resend
+```
+
+Then recreate web: `docker compose --env-file .env -f infra/docker-compose.yml up -d --no-deps web`.
+
+With email enabled:
+
+- **Sign-in page:** shows **Forgot password?**, which emails a single-use link that expires after 30 minutes. The response is the same whether or not the account exists. Rate limit: 3 requests per 5 minutes per IP.
+- **Add member:**
+  - New accounts get an **invitation email** with a set-password link, valid 72 h. No temporary password is shown.
+  - Existing accounts get an "access granted" email.
+- **Reset password (admin):** replaces the old password immediately, then emails a set-password link valid 24 h.
+- **If sending fails:** the UI falls back to a one-time temporary password, and `email.send_failed` is logged.
+
+Logs record only the template and the recipient's domain; message bodies, links and tokens are never logged. Completing a reset is audited as `auth.password_reset_completed`.
 
 ## Integration tests
 
