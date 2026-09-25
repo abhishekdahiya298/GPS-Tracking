@@ -49,7 +49,7 @@ export function GeofenceEditor({ initial, canWrite }: { initial: GeofenceDto[]; 
       m.addSource("fences", { type: "geojson", data: fc([]) });
       m.addLayer({ id: "fences-fill", type: "fill", source: "fences", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.18 } });
       m.addLayer({ id: "fences-line", type: "line", source: "fences", paint: { "line-color": ["get", "color"], "line-width": 2 } });
-      m.addLayer({ id: "fences-label", type: "symbol", source: "fences", layout: { "text-field": ["get", "name"], "text-size": 12 }, paint: { "text-halo-color": "#fff", "text-halo-width": 1.5 } });
+      m.addLayer({ id: "fences-label", type: "symbol", source: "fences", layout: { "text-field": ["get", "name"], "text-size": 12, "text-font": ["Noto Sans Regular"] }, paint: { "text-halo-color": "#fff", "text-halo-width": 1.5 } });
       m.addSource("draft", { type: "geojson", data: fc([]) });
       m.addLayer({ id: "draft-fill", type: "fill", source: "draft", paint: { "fill-color": "#e67e22", "fill-opacity": 0.2 } });
       m.addLayer({ id: "draft-line", type: "line", source: "draft", paint: { "line-color": "#e67e22", "line-width": 2, "line-dasharray": [2, 1] } });
