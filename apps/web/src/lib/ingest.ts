@@ -4,6 +4,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 
 export type IngestOutcome =
   | { status: "unknown_device" }
+  | { status: "device_inactive"; deviceId: string; organizationId: string }
   | { status: "no_fix"; deviceId: string; organizationId: string }
   | { status: "duplicate"; deviceId: string; organizationId: string }
   | { status: "stored"; deviceId: string; organizationId: string; historyId: number; currentUpdated: boolean };
@@ -39,10 +40,12 @@ export async function ingestPosition(position: NormalizedPosition, options: Inge
         : sql`${schema.gpsDevices.lastSeenAt}`
     })
     .where(eq(schema.gpsDevices.externalDeviceId, position.externalDeviceId))
-    .returning({ id: schema.gpsDevices.id, organizationId: schema.gpsDevices.organizationId });
+    .returning({ id: schema.gpsDevices.id, organizationId: schema.gpsDevices.organizationId, status: schema.gpsDevices.status });
 
   if (!device) return { status: "unknown_device" };
   const ids = { deviceId: device.id, organizationId: device.organizationId };
+  // Deactivated by the customer: keep last_seen (the hardware is alive) but store no location.
+  if (device.status !== "active") return { status: "device_inactive", ...ids };
   if (!isUsableFix(position)) return { status: "no_fix", ...ids };
 
   return db.transaction(async (tx) => {

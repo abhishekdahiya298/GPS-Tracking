@@ -27,7 +27,7 @@ export default async function SchedulesPage() {
     <SchedulesManager
       initial={schedules}
       members={members.map((m) => ({ id: m.userId, label: `${m.name} <${m.email}>` }))}
-      devices={devices.map((d) => ({ id: d.id, label: d.vehicle ? `${d.vehicle.name} (${d.model ?? "device"})` : (d.model ?? "Device") }))}
+      devices={devices.map((d) => ({ id: d.id, label: d.vehicle ? `${d.vehicle.name} (${d.name ?? d.model ?? "device"})` : (d.name ?? d.model ?? "Device") }))}
       myUserId={ctx.userId}
       emailEnabled={isEmailEnabled()}
     />

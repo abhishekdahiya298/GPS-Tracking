@@ -36,6 +36,13 @@
       "when": 1790326737898,
       "tag": "0004_report_schedules",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790328161663,
+      "tag": "0005_devices_maintenance",
+      "breakpoints": true
     }
   ]
 }

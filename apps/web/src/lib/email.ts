@@ -202,3 +202,23 @@ ${r.rows.map((x) => `<tr><td ${tdl}>${esc(x.vehicle)}</td><td ${td}>${x.trips}</
     ...(r.csv ? { attachments: [{ filename: r.csvName, content: r.csv }] } : {})
   };
 }
+
+export function maintenanceEmail(
+  to: string,
+  name: string,
+  m: { orgName: string; vehicleName: string; itemName: string; state: "due_soon" | "overdue"; status: { kmSinceService: number; kmRemaining: number | null; daysRemaining: number | null; dueDate: string | null } },
+  url: string
+): EmailMessage {
+  const what = m.state === "overdue" ? "is overdue" : "is due soon";
+  const facts: string[] = [`Driven since last service: ${m.status.kmSinceService} km`];
+  if (m.status.kmRemaining !== null) facts.push(m.status.kmRemaining <= 0 ? `Over the distance interval by ${Math.abs(m.status.kmRemaining)} km` : `Distance left: ${m.status.kmRemaining} km`);
+  if (m.status.daysRemaining !== null) facts.push(m.status.daysRemaining <= 0 ? `Date passed: ${m.status.dueDate}` : `Due by ${m.status.dueDate} (${m.status.daysRemaining} days)`);
+  const title = `${m.vehicleName}: ${m.itemName} ${what}`;
+  return {
+    to,
+    template: `maintenance_${m.state}`,
+    subject: `RIO GPS maintenance: ${title}`,
+    html: layout(title, `<p>Hi ${esc(name || "there")},</p><p>${esc(m.orgName)}</p>${facts.map((f) => `<p>${esc(f)}</p>`).join("")}${button(url, "Open maintenance")}`),
+    text: `${title}\n${m.orgName}\n${facts.join("\n")}\n\n${url}`
+  };
+}

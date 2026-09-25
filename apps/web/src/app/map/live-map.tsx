@@ -13,7 +13,7 @@ const MAX_HISTORY_POINTS = 20_000;
 type Conn = "connecting" | "live" | "reconnecting";
 
 function label(d: CurrentDeviceLocation) {
-  return d.vehicle?.name ?? d.model ?? "Device";
+  return d.vehicle?.name ?? d.name ?? d.model ?? "Device";
 }
 
 function ago(iso: string | null, now: number) {

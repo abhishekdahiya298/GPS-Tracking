@@ -19,14 +19,15 @@ export default async function VehiclesPage() {
     throw err;
   }
   if (!contextHasPermission(ctx, "vehicles.read")) redirect("/dashboard");
-  const [vehicles, devices] = await Promise.all([listVehicles(ctx.organizationId), listDevices(ctx.organizationId)]);
+  const [vehicles, devices] = await Promise.all([listVehicles(ctx.organizationId), listDevices(ctx.organizationId, { includeImeiLast4: contextHasPermission(ctx, "devices.manage") })]);
   // Permissions are passed only to shape the UI; every API call re-checks them server-side.
   const can = {
     create: contextHasPermission(ctx, "vehicles.create"),
     update: contextHasPermission(ctx, "vehicles.update"),
     remove: contextHasPermission(ctx, "vehicles.delete"),
     assign: contextHasPermission(ctx, "devices.assign"),
-    unassign: contextHasPermission(ctx, "devices.unassign")
+    unassign: contextHasPermission(ctx, "devices.unassign"),
+    manage: contextHasPermission(ctx, "devices.manage")
   };
   return <VehiclesManager initialVehicles={vehicles} initialDevices={devices} can={can} />;
 }

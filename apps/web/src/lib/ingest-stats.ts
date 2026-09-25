@@ -11,6 +11,7 @@ export const INGEST_OUTCOMES = [
   "duplicate",
   "no_fix",
   "unknown_device",
+  "device_inactive",
   "rejected_auth",
   "rejected_payload",
   "store_failed",

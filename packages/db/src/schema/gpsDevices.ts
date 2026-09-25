@@ -23,6 +23,8 @@ export const gpsDevices = pgTable(
     externalDeviceId: text("external_device_id").notNull(),
     imei: text("imei").notNull(),
     model: text("model"),
+    /** Customer-facing label, e.g. "Truck 7 tracker" (optional). */
+    name: text("name"),
     status: gpsDeviceStatusEnum("status").notNull().default("active"),
     /** Last time RIO received any record from this device (fix or not). Drives online/offline. */
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),

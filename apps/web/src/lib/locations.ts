@@ -50,6 +50,7 @@ export function connectivityStatus(lastSeenAt: Date | null, now: Date, threshold
 export interface CurrentDeviceLocation {
   deviceId: string;
   model: string | null;
+  name: string | null;
   deviceStatus: string;
   vehicle: { id: string; name: string; licensePlate: string | null } | null;
   connectivity: ConnectivityStatus;
@@ -67,6 +68,7 @@ export async function listCurrentLocations(
     .select({
       deviceId: schema.gpsDevices.id,
       model: schema.gpsDevices.model,
+      name: schema.gpsDevices.name,
       deviceStatus: schema.gpsDevices.status,
       lastSeenAt: schema.gpsDevices.lastSeenAt,
       vehicleId: schema.vehicles.id,
@@ -94,12 +96,13 @@ export async function listCurrentLocations(
       schema.vehicles,
       and(eq(schema.vehicles.id, schema.deviceAssignments.vehicleId), eq(schema.vehicles.organizationId, organizationId))
     )
-    .where(eq(schema.gpsDevices.organizationId, organizationId))
+    .where(and(eq(schema.gpsDevices.organizationId, organizationId), eq(schema.gpsDevices.status, "active")))
     .orderBy(asc(schema.gpsDevices.createdAt));
 
   return rows.map((r) => ({
     deviceId: r.deviceId,
     model: r.model,
+    name: r.name,
     deviceStatus: r.deviceStatus,
     vehicle: r.vehicleId ? { id: r.vehicleId, name: r.vehicleName!, licensePlate: r.licensePlate } : null,
     connectivity: connectivityStatus(r.lastSeenAt, now, offlineThresholdSeconds),

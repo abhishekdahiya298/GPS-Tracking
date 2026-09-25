@@ -6,6 +6,8 @@ import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib
 import { getServerEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { listCurrentLocations } from "@/lib/locations";
+import { dueCounts } from "@/lib/maintenance";
+import { contextHasPermission } from "@rio-gps/core";
 import { ExitViewAs } from "./exit-view-as";
 import { SignOutButton } from "./sign-out-button";
 
@@ -36,6 +38,7 @@ export default async function DashboardPage() {
     .select({ name: schema.organizations.name })
     .from(schema.organizations)
     .where(eq(schema.organizations.id, ctx.organizationId));
+  const maint = contextHasPermission(ctx, "maintenance.read") ? await dueCounts(ctx.organizationId) : null;
   const devices = await listCurrentLocations(ctx.organizationId, new Date(), getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS);
 
   return (
@@ -58,17 +61,25 @@ export default async function DashboardPage() {
           <a href="/geofences">Zones</a>
           <a href="/alerts">Alerts</a>
           <a href="/reports">Reports</a>
+          <a href="/maintenance">
+            Maintenance{maint && maint.overdue + maint.dueSoon > 0 ? ` (${maint.overdue + maint.dueSoon})` : ""}
+          </a>
           <a href="/settings/team">Team</a>
           <a href="/settings/account">My account</a>
           {user.isSuperAdmin && <a href="/admin/customers">Customers</a>}
           <SignOutButton />
         </div>
       </header>
+      {maint && maint.overdue > 0 && (
+        <p style={{ background: "#fde8e8", color: "#a61b1b", padding: 8, borderRadius: 6 }}>
+          {maint.overdue} maintenance item{maint.overdue === 1 ? "" : "s"} overdue. <a href="/maintenance">Review</a>
+        </p>
+      )}
       <h2 style={{ fontSize: 18 }}>Devices ({devices.length})</h2>
       <ul>
         {devices.map((d) => (
           <li key={d.deviceId}>
-            <strong>{d.vehicle?.name ?? d.model ?? "Device"}</strong> — {d.connectivity.replace("_", " ")}
+            <strong>{d.vehicle?.name ?? d.name ?? d.model ?? "Device"}</strong> — {d.connectivity.replace("_", " ")}
             {d.location && (
               <>
                 {" "}

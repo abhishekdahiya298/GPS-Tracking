@@ -2,6 +2,7 @@
 import { startAlertScheduler } from "./lib/alerts";
 import { getServerEnv } from "./lib/env";
 import { logger } from "./lib/logger";
+import { startMaintenanceScheduler } from "./lib/maintenance";
 import { startReportScheduler } from "./lib/report-schedules";
 
 export function startNode() {
@@ -11,6 +12,7 @@ export function startNode() {
     if (env.ALERTS_SCHEDULER_ENABLED) {
       startAlertScheduler();
       startReportScheduler();
+      startMaintenanceScheduler();
     }
   } catch (err) {
     logger.error("startup.config_invalid", {}, err);

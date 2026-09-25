@@ -158,7 +158,7 @@ async function deliver(s: Row, period: DuePeriod, recipients: Recipient[]) {
   const rows = [];
   const csvParts: string[] = [];
   for (const d of devices) {
-    const label = d.vehicle?.name ?? d.model ?? "Device";
+    const label = d.vehicle?.name ?? d.name ?? d.model ?? "Device";
     const r = await buildTripReport(s.organizationId, d.id, period.from, period.to, s.timeZone);
     rows.push({ vehicle: label, trips: r.totals.trips, distanceKm: r.totals.distanceKm, drivingMin: r.totals.drivingMin, maxSpeedKph: r.totals.maxSpeedKph });
     if (s.attachCsv) {

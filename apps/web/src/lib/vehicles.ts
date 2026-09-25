@@ -35,7 +35,7 @@ export interface VehicleDto {
   name: string;
   licensePlate: string | null;
   status: string;
-  devices: { id: string; model: string | null; assignedAt: string }[];
+  devices: { id: string; model: string | null; name: string | null; assignedAt: string }[];
 }
 
 export async function listVehicles(organizationId: string): Promise<VehicleDto[]> {
@@ -50,6 +50,7 @@ export async function listVehicles(organizationId: string): Promise<VehicleDto[]
       vehicleId: schema.deviceAssignments.vehicleId,
       deviceId: schema.gpsDevices.id,
       model: schema.gpsDevices.model,
+      name: schema.gpsDevices.name,
       assignedAt: schema.deviceAssignments.assignedAt
     })
     .from(schema.deviceAssignments)
@@ -65,7 +66,7 @@ export async function listVehicles(organizationId: string): Promise<VehicleDto[]
     status: v.status,
     devices: assigned
       .filter((a) => a.vehicleId === v.id)
-      .map((a) => ({ id: a.deviceId, model: a.model, assignedAt: a.assignedAt.toISOString() }))
+      .map((a) => ({ id: a.deviceId, model: a.model, name: a.name, assignedAt: a.assignedAt.toISOString() }))
   }));
 }
 
@@ -122,16 +123,21 @@ export async function deleteVehicle(ctx: TenantContext, id: string, meta: Meta) 
 export interface DeviceDto {
   id: string;
   model: string | null;
+  name: string | null;
+  /** Only for callers with devices.manage (to tell identical trackers apart). */
+  imeiLast4?: string;
   status: string;
   lastSeenAt: string | null;
   vehicle: { id: string; name: string; assignedAt: string } | null;
 }
 
-export async function listDevices(organizationId: string): Promise<DeviceDto[]> {
+export async function listDevices(organizationId: string, opts: { includeImeiLast4?: boolean } = {}): Promise<DeviceDto[]> {
   const rows = await getDb()
     .select({
       id: schema.gpsDevices.id,
       model: schema.gpsDevices.model,
+      name: schema.gpsDevices.name,
+      imei: schema.gpsDevices.imei,
       status: schema.gpsDevices.status,
       lastSeenAt: schema.gpsDevices.lastSeenAt,
       vehicleId: schema.vehicles.id,
@@ -153,6 +159,8 @@ export async function listDevices(organizationId: string): Promise<DeviceDto[]> 
   return rows.map((r) => ({
     id: r.id,
     model: r.model,
+    name: r.name,
+    ...(opts.includeImeiLast4 ? { imeiLast4: r.imei.slice(-4) } : {}),
     status: r.status,
     lastSeenAt: r.lastSeenAt?.toISOString() ?? null,
     vehicle: r.vehicleId ? { id: r.vehicleId, name: r.vehicleName!, assignedAt: r.assignedAt!.toISOString() } : null
@@ -244,4 +252,36 @@ export async function unassignDevice(ctx: TenantContext, deviceId: string, meta:
     metadata: { vehicleId: closed[0]!.vehicleId },
     ...meta
   });
+}
+
+export const DevicePatchSchema = z
+  .object({
+    name: z.string().trim().max(80).nullable().optional(),
+    active: z.boolean().optional()
+  })
+  .refine((v) => v.name !== undefined || v.active !== undefined, "Nothing to update");
+
+/**
+ * Customer-side device management (devices.manage). Deactivating keeps the device
+ * and its history; RIO simply stops storing its positions until reactivated.
+ * Retired devices (platform decision) cannot be reactivated here.
+ */
+export async function updateDevice(ctx: TenantContext, id: string, patch: z.infer<typeof DevicePatchSchema>, meta: Meta) {
+  const db = getDb();
+  const [dev] = await db
+    .select({ status: schema.gpsDevices.status, name: schema.gpsDevices.name })
+    .from(schema.gpsDevices)
+    .where(and(eq(schema.gpsDevices.id, id), eq(schema.gpsDevices.organizationId, ctx.organizationId)));
+  if (!dev) throw new NotFoundError("Device not found");
+  if (dev.status === "retired" && patch.active !== undefined) throw new ConflictError("This device is retired; contact support");
+  const set: Partial<typeof schema.gpsDevices.$inferInsert> = { updatedAt: new Date() };
+  if (patch.name !== undefined) set.name = patch.name === "" ? null : patch.name;
+  if (patch.active !== undefined) set.status = patch.active ? "active" : "inactive";
+  await db.update(schema.gpsDevices).set(set).where(and(eq(schema.gpsDevices.id, id), eq(schema.gpsDevices.organizationId, ctx.organizationId)));
+  if (patch.name !== undefined && (set.name ?? null) !== dev.name) {
+    await writeAudit({ action: "device.renamed", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "device", targetId: id, metadata: { from: dev.name, to: set.name ?? null }, ...meta });
+  }
+  if (patch.active !== undefined && set.status !== dev.status) {
+    await writeAudit({ action: patch.active ? "device.reactivated" : "device.deactivated", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "device", targetId: id, ...meta });
+  }
 }

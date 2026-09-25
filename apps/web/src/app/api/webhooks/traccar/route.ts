@@ -58,6 +58,8 @@ export async function POST(request: Request) {
       // Accept (so Traccar doesn't retry forever) but store nothing.
       logger.warn("ingest.unknown_device", { externalDeviceId: position.externalDeviceId });
       return NextResponse.json({ status: "ignored", reason: "unknown device" }, { status: 202 });
+    case "device_inactive":
+      return NextResponse.json({ status: "ignored", reason: "device inactive" }, { status: 202 });
     case "no_fix":
       // No GNSS fix (or the 0,0 placeholder): device is alive (last_seen updated) but no location is stored.
       return NextResponse.json({ status: "ignored", reason: "no valid fix" }, { status: 202 });

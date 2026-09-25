@@ -2,7 +2,8 @@
 import { useState, type FormEvent } from "react";
 import type { DeviceDto, VehicleDto } from "@/lib/vehicles";
 
-type Can = { create: boolean; update: boolean; remove: boolean; assign: boolean; unassign: boolean };
+type Can = { create: boolean; update: boolean; remove: boolean; assign: boolean; unassign: boolean; manage: boolean };
+const devLabel = (d: DeviceDto) => d.name ?? d.model ?? "Device";
 
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) }, cache: "no-store" });
@@ -25,6 +26,7 @@ export function VehiclesManager({ initialVehicles, initialDevices, can }: { init
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
 
   async function refresh() {
     const [v, d] = await Promise.all([api("/api/vehicles"), api("/api/devices")]);
@@ -84,14 +86,54 @@ export function VehiclesManager({ initialVehicles, initialDevices, can }: { init
         <h2 style={{ fontSize: 17, marginTop: 0 }}>Devices</h2>
         {devices.length === 0 && <p>No devices registered.</p>}
         {devices.map((d) => (
-          <div key={d.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "8px 0", borderTop: "1px solid #f0f2f4" }}>
-            <strong style={{ minWidth: 90 }}>{d.model ?? "Device"}</strong>
+          <div key={d.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "8px 0", borderTop: "1px solid #f0f2f4", opacity: d.status === "active" ? 1 : 0.65 }}>
+            {renaming === d.id ? (
+              <form
+                method="post"
+                style={{ display: "flex", gap: 6 }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const name = String(new FormData(e.currentTarget).get("name") ?? "").trim();
+                  void run(() => api(`/api/devices/${d.id}`, { method: "PATCH", body: JSON.stringify({ name: name || null }) })).then(() => setRenaming(null));
+                }}
+              >
+                <input name="name" defaultValue={d.name ?? ""} maxLength={80} placeholder={d.model ?? "Tracker name"} style={input} aria-label="Tracker name" autoFocus />
+                <button type="submit" disabled={busy}>Save</button>
+                <button type="button" onClick={() => setRenaming(null)}>Cancel</button>
+              </form>
+            ) : (
+              <strong style={{ minWidth: 90 }}>
+                {devLabel(d)}
+                {d.name && d.model ? <span style={{ fontWeight: 400, color: "#5b6470" }}> · {d.model}</span> : null}
+                {d.imeiLast4 ? <span style={{ fontWeight: 400, color: "#5b6470" }}> · IMEI …{d.imeiLast4}</span> : null}
+              </strong>
+            )}
             <span style={{ color: "#5b6470", flex: 1, minWidth: 160 }}>
+              {d.status !== "active" ? <em style={{ color: "#b45309" }}>{d.status === "retired" ? "retired" : "deactivated"} · </em> : null}
               {d.vehicle ? `on ${d.vehicle.name} since ${new Date(d.vehicle.assignedAt).toLocaleDateString()}` : "not assigned"}
             </span>
+            {can.manage && renaming !== d.id && (
+              <button type="button" disabled={busy} onClick={() => setRenaming(d.id)}>
+                Rename
+              </button>
+            )}
+            {can.manage && d.status !== "retired" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  const off = d.status === "active";
+                  if (!off || window.confirm(`Deactivate ${devLabel(d)}? Its positions will stop being recorded until you reactivate it.`)) {
+                    void run(() => api(`/api/devices/${d.id}`, { method: "PATCH", body: JSON.stringify({ active: !off }) }));
+                  }
+                }}
+              >
+                {d.status === "active" ? "Deactivate" : "Reactivate"}
+              </button>
+            )}
             {can.assign && vehicles.length > 0 && (
               <select
-                aria-label={`Assign ${d.model ?? "device"} to vehicle`}
+                aria-label={`Assign ${devLabel(d)} to vehicle`}
                 value={d.vehicle?.id ?? ""}
                 disabled={busy}
                 onChange={(e) => e.target.value && run(() => api(`/api/devices/${d.id}/assignment`, { method: "PUT", body: JSON.stringify({ vehicleId: e.target.value }) }))}
@@ -140,7 +182,7 @@ export function VehiclesManager({ initialVehicles, initialDevices, can }: { init
                 {v.name} {v.licensePlate && <span style={{ fontWeight: 400, color: "#5b6470" }}>· {v.licensePlate}</span>}
               </strong>
               <span style={{ color: "#5b6470" }}>
-                {v.status} · {v.devices.length ? v.devices.map((d) => d.model ?? "device").join(", ") : "no device"}
+                {v.status} · {v.devices.length ? v.devices.map((d) => d.name ?? d.model ?? "device").join(", ") : "no device"}
               </span>
               {can.update && (
                 <button type="button" onClick={() => setEditing(v.id)} disabled={busy}>

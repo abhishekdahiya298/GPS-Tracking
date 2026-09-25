@@ -44,7 +44,7 @@ async function main() {
   if (!device) throw new Error("Device not found in Traccar");
 
   const raw = await client.listPositions(device.id, from, to);
-  const counts = { fetched: raw.length, invalid: 0, stored: 0, duplicate: 0, no_fix: 0, unknown_device: 0, current_updated: 0 };
+  const counts = { fetched: raw.length, invalid: 0, stored: 0, duplicate: 0, no_fix: 0, unknown_device: 0, device_inactive: 0, current_updated: 0 };
   for (const item of raw) {
     const parsed = TraccarForwardPositionSchema.safeParse(item);
     if (!parsed.success) {

@@ -2,7 +2,7 @@ import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 import { buildCsp, newNonce } from "@/lib/csp";
 
-const PROTECTED = ["/dashboard", "/map", "/vehicles", "/settings", "/geofences", "/alerts", "/reports", "/admin"];
+const PROTECTED = ["/dashboard", "/map", "/vehicles", "/settings", "/geofences", "/alerts", "/reports", "/admin", "/maintenance"];
 
 /**
  * Runs on every HTML page (not API routes or static assets):

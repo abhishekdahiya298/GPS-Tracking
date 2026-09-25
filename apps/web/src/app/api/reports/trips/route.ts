@@ -36,12 +36,12 @@ export async function GET(request: Request) {
     const report = await buildTripReport(ctx.organizationId, q.data.deviceId, from, to, q.data.tz);
     if (q.data.format === "csv") {
       const [label] = await getDb()
-        .select({ vehicle: schema.vehicles.name, model: schema.gpsDevices.model })
+        .select({ vehicle: schema.vehicles.name, name: schema.gpsDevices.name, model: schema.gpsDevices.model })
         .from(schema.gpsDevices)
         .leftJoin(schema.deviceAssignments, and(eq(schema.deviceAssignments.deviceId, schema.gpsDevices.id), isNull(schema.deviceAssignments.unassignedAt)))
         .leftJoin(schema.vehicles, eq(schema.vehicles.id, schema.deviceAssignments.vehicleId))
         .where(and(eq(schema.gpsDevices.id, q.data.deviceId), eq(schema.gpsDevices.organizationId, ctx.organizationId)));
-      const name = label?.vehicle ?? label?.model ?? "device";
+      const name = label?.vehicle ?? label?.name ?? label?.model ?? "device";
       const file = `trips-${name.replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 40)}-${q.data.from.slice(0, 10)}-to-${q.data.to.slice(0, 10)}.csv`;
       return new NextResponse(tripReportCsv(report, name), {
         headers: {

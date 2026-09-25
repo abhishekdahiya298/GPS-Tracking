@@ -17,6 +17,7 @@ export const PERMISSIONS = [
   "devices.read",
   "devices.assign",
   "devices.unassign",
+  "devices.manage",
   "locations.read",
   "history.read",
   "geofences.read",
@@ -24,6 +25,8 @@ export const PERMISSIONS = [
   "alerts.read",
   "alerts.write",
   "reports.manage",
+  "maintenance.read",
+  "maintenance.write",
   "users.read",
   "users.manage",
   "billing.read",
@@ -38,7 +41,8 @@ const READ_ONLY: readonly Permission[] = [
   "locations.read",
   "history.read",
   "geofences.read",
-  "alerts.read"
+  "alerts.read",
+  "maintenance.read"
 ];
 
 export const ROLE_PERMISSIONS: Readonly<Record<OrgRole, ReadonlySet<Permission>>> = {
@@ -53,6 +57,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<OrgRole, ReadonlySet<Permission>>
     "geofences.write",
     "alerts.write",
     "reports.manage",
+    "maintenance.write",
     "users.read"
   ]),
   DISPATCHER: new Set<Permission>([...READ_ONLY, "alerts.write"]),

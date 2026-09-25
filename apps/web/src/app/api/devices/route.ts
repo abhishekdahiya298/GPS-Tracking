@@ -1,3 +1,4 @@
+import { contextHasPermission } from "@rio-gps/core";
 import { NextResponse } from "next/server";
 import { requirePermission, requireTenantContext } from "@/lib/authz";
 import { errorResponse } from "@/lib/errors";
@@ -10,7 +11,7 @@ export async function GET(request: Request) {
   try {
     const ctx = await requireTenantContext(request);
     requirePermission(ctx, "devices.read");
-    return NextResponse.json({ devices: await listDevices(ctx.organizationId) }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ devices: await listDevices(ctx.organizationId, { includeImeiLast4: contextHasPermission(ctx, "devices.manage") }) }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     return errorResponse(err, { route: "devices.list" });
   }
