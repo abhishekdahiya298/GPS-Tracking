@@ -60,6 +60,8 @@
 @keyframes rio-slide-bottom { from { transform: translateY(100%); } to { transform: none; } }
 
 @layer base {
+  /* The one piece of the reset applied now: predictable sizing for padded, full-width boxes. */
+  *, ::before, ::after { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   body { font-family: var(--font-sans); color: var(--color-foreground); margin: 0; }
   /* Visible keyboard focus everywhere (mouse clicks don't show it). */

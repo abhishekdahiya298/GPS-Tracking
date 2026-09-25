@@ -2,6 +2,14 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@rio-gps/core", "@rio-gps/db", "@rio-gps/traccar-client"],
+  // Friendly aliases (owner decision: keep existing URLs, which emails link to).
+  async redirects() {
+    return [
+      { source: "/zones", destination: "/geofences", permanent: false },
+      { source: "/account", destination: "/settings/account", permanent: false },
+      { source: "/my-account", destination: "/settings/account", permanent: false }
+    ];
+  },
   webpack: (config) => {
     // Our workspace packages use TS-ESM-style ".js" extensions in relative
     // imports (correct for real Node ESM resolution) while shipping only
