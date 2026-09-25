@@ -1,21 +1,17 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireAuthenticatedUserFromHeaders } from "@/lib/authz";
-import { listCustomers } from "@/lib/customers";
-import { AppError } from "@/lib/errors";
-import { CustomersManager } from "./customers-manager";
+import { CustomerListQuery, listCustomersPage } from "@/lib/customers";
+import { parseListQuery } from "@/lib/fleet-list";
+import { getRequestContext } from "@/lib/request-context";
+import { CustomersView } from "./customers-view";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Customers · RIO GPS" };
 
-export default async function CustomersPage() {
-  let user;
-  try {
-    user = await requireAuthenticatedUserFromHeaders(await headers());
-  } catch (err) {
-    if (err instanceof AppError && err.status === 401) redirect("/login?next=/admin/customers");
-    throw err;
-  }
-  if (!user.isSuperAdmin) redirect("/dashboard");
-  return <CustomersManager initial={await listCustomers()} viewingAs={user.activeOrganizationId} />;
+export default async function CustomersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const rc = await getRequestContext();
+  if (rc.status === "unauthenticated") redirect("/login?next=/admin/customers");
+  // Platform admins only; every API behind this page re-checks isSuperAdmin.
+  if (!rc.user.isSuperAdmin) redirect("/dashboard");
+  const q = parseListQuery(CustomerListQuery, await searchParams);
+  return <CustomersView data={await listCustomersPage(q)} query={q} viewingAs={rc.user.activeOrganizationId} />;
 }

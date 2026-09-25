@@ -126,3 +126,79 @@ export async function setViewAs(actorUserId: string, sessionId: string, organiza
   await db.update(schema.sessions).set({ activeOrganizationId: organizationId }).where(eq(schema.sessions.id, sessionId));
   await writeAudit({ action: organizationId ? "admin.view_as_started" : "admin.view_as_ended", actorUserId, organizationId, targetType: "organization", targetId: organizationId, ...meta });
 }
+
+// ---------- platform admin: paged list + detail ----------
+
+export const CustomerListQuery = z.object({
+  page: z.coerce.number().int().min(1).max(100_000).default(1),
+  pageSize: z.coerce.number().int().refine((n) => [10, 25, 50, 100].includes(n)).default(25),
+  search: z.string().trim().max(100).default(""),
+  sort: z.enum(["name", "created", "devices", "members"]).default("name"),
+  direction: z.enum(["asc", "desc"]).default("asc")
+});
+export type CustomerListQuery = z.infer<typeof CustomerListQuery>;
+
+export interface CustomerRow extends CustomerDto {
+  /** Devices that reported in the last 24 h. */
+  activeDevices: number;
+}
+
+const likeP = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+/** Super-admin only (callers check isSuperAdmin): every organization, paged in SQL. */
+export async function listCustomersPage(q: CustomerListQuery): Promise<{ items: CustomerRow[]; total: number; page: number; pageSize: number }> {
+  const search = q.search ? sql`where o.name ilike ${likeP(q.search)} or o.slug ilike ${likeP(q.search)}` : sql``;
+  const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
+  const order = { name: sql`lower(name) ${dir}`, created: sql`created_at ${dir}`, devices: sql`devices ${dir}`, members: sql`members ${dir}` }[q.sort];
+  const rows = await getDb().execute<{ id: string; name: string; slug: string; created_at: Date; devices: number; members: number; active_devices: number; total: number }>(sql`
+    with f as (
+      select o.id, o.name, o.slug, o.created_at,
+        (select count(*)::int from gps_devices d where d.organization_id = o.id) as devices,
+        (select count(*)::int from gps_devices d where d.organization_id = o.id and d.last_seen_at > now() - interval '24 hours') as active_devices,
+        (select count(*)::int from memberships m where m.organization_id = o.id) as members
+      from organizations o ${search}
+    )
+    select *, count(*) over()::int as total from f order by ${order}, id limit ${q.pageSize} offset ${(q.page - 1) * q.pageSize}`);
+  return {
+    items: rows.map((r) => ({ id: r.id, name: r.name, slug: r.slug, createdAt: new Date(r.created_at).toISOString(), devices: r.devices, members: r.members, activeDevices: r.active_devices })),
+    total: rows.length ? Number(rows[0]!.total) : 0,
+    page: q.page,
+    pageSize: q.pageSize
+  };
+}
+
+export interface CustomerDetail {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: string;
+  members: { userId: string; name: string; email: string; role: string; lastSignInAt: string | null }[];
+  devices: { id: string; name: string | null; model: string | null; imeiLast4: string; status: string; lastSeenAt: string | null; vehicleName: string | null }[];
+}
+
+/** Super-admin only. Full IMEIs are not returned; the last 4 digits identify a unit. */
+export async function getCustomerDetail(organizationId: string): Promise<CustomerDetail | null> {
+  const db = getDb();
+  const [org] = await db.select().from(schema.organizations).where(eq(schema.organizations.id, organizationId));
+  if (!org) return null;
+  const [members, devices] = await Promise.all([
+    db.execute<{ user_id: string; name: string; email: string; role: string; last_sign_in: Date | null }>(sql`
+      select u.id as user_id, u.name, u.email, m.role, (select max(s.created_at) from sessions s where s.user_id = u.id) as last_sign_in
+      from memberships m join users u on u.id = m.user_id where m.organization_id = ${organizationId}
+      order by case m.role when 'ORG_ADMIN' then 0 when 'FLEET_MANAGER' then 1 when 'DISPATCHER' then 2 else 3 end, lower(u.name)`),
+    db.execute<{ id: string; name: string | null; model: string | null; imei: string; status: string; last_seen_at: Date | null; vehicle_name: string | null }>(sql`
+      select d.id, d.name, d.model, d.imei, d.status, d.last_seen_at, v.name as vehicle_name
+      from gps_devices d
+      left join device_assignments a on a.device_id = d.id and a.organization_id = d.organization_id and a.unassigned_at is null
+      left join vehicles v on v.id = a.vehicle_id and v.organization_id = d.organization_id
+      where d.organization_id = ${organizationId} order by d.created_at`)
+  ]);
+  return {
+    id: org.id,
+    name: org.name,
+    slug: org.slug,
+    createdAt: org.createdAt.toISOString(),
+    members: members.map((m) => ({ userId: m.user_id, name: m.name, email: m.email, role: m.role, lastSignInAt: m.last_sign_in ? new Date(m.last_sign_in).toISOString() : null })),
+    devices: devices.map((d) => ({ id: d.id, name: d.name, model: d.model, imeiLast4: d.imei.slice(-4), status: d.status, lastSeenAt: d.last_seen_at ? new Date(d.last_seen_at).toISOString() : null, vehicleName: d.vehicle_name }))
+  };
+}

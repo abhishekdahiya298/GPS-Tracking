@@ -1,24 +1,19 @@
 import { contextHasPermission } from "@rio-gps/core";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib/authz";
-import { AppError } from "@/lib/errors";
-import { listMembers } from "@/lib/team";
-import { TeamManager } from "./team-manager";
+import { parseListQuery } from "@/lib/fleet-list";
+import { getRequestContext } from "@/lib/request-context";
+import { listMembersPage, TeamListQuery } from "@/lib/team-list";
+import { TeamView } from "./team-view";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Team · RIO GPS" };
 
-export default async function TeamPage() {
-  let ctx;
-  try {
-    ctx = await resolveTenantContext(await requireAuthenticatedUserFromHeaders(await headers()));
-  } catch (err) {
-    if (err instanceof AppError && err.status === 401) redirect("/login?next=/settings/team");
-    if (err instanceof AppError && err.status === 403) redirect("/dashboard");
-    throw err;
-  }
+export default async function TeamPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const rc = await getRequestContext();
+  if (rc.status !== "ok") redirect("/login?next=/settings/team");
+  const { ctx } = rc;
   if (!contextHasPermission(ctx, "users.read")) redirect("/dashboard");
-  const members = await listMembers(ctx.organizationId);
-  return <TeamManager initialMembers={members} you={ctx.userId} canManage={contextHasPermission(ctx, "users.manage")} />;
+  const q = parseListQuery(TeamListQuery, await searchParams);
+  const data = await listMembersPage(ctx.organizationId, q);
+  return <TeamView data={data} query={q} you={ctx.userId} canManage={contextHasPermission(ctx, "users.manage")} />;
 }

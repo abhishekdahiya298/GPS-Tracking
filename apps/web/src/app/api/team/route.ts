@@ -4,6 +4,8 @@ import { assertSameOrigin } from "@/lib/csrf";
 import { errorResponse } from "@/lib/errors";
 import { readJson, requestMeta } from "@/lib/request-meta";
 import { AddMemberSchema, addMember, listMembers } from "@/lib/team";
+import { parseListQuery } from "@/lib/fleet-list";
+import { listMembersPage, TeamListQuery } from "@/lib/team-list";
 import { parseOrThrow } from "@/lib/vehicles";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +15,10 @@ export async function GET(request: Request) {
   try {
     const ctx = await requireTenantContext(request);
     requirePermission(ctx, "users.read");
+    const params = Object.fromEntries(new URL(request.url).searchParams);
+    if (Object.keys(params).some((k) => k in TeamListQuery.shape)) {
+      return NextResponse.json({ ...(await listMembersPage(ctx.organizationId, parseListQuery(TeamListQuery, params))), you: ctx.userId }, { headers: NO_STORE });
+    }
     return NextResponse.json({ members: await listMembers(ctx.organizationId), you: ctx.userId }, { headers: NO_STORE });
   } catch (err) {
     return errorResponse(err, { route: "team.list" });

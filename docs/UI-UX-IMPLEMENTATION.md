@@ -16,6 +16,8 @@ commit. Nothing is pushed or deployed without the owner's go-ahead.
 | E | `d0106b0` | Vehicles + Devices: server-side paginated/searchable/sortable/filterable lists, reusable DataTable (TanStack Table), vehicle detail sheet, react-hook-form dialogs, confirm dialogs |
 | F | `19bc1c1` | Live map rebuilt on a GeoJSON layer; history + playback; mobile bottom sheet |
 | G | `cab1e02` | Reports: filter card with quick ranges, URL-shareable state, summary cards, by-day and sortable/paged trips tables, phone cards, CSV button, skeleton/empty/error states, organization units (was always km). Email schedules: cards with status, action menu, create dialog, confirm-before-delete, toasts |
+| H | `725a045` | Alerts (server-paged history + filters, severity, detail sheet, rules tab), Zones, Maintenance, map `?focus=` |
+| I | (this commit) | Team (server-paged table, role/status, action menu, dialogs) and Customers (paged table, 3-step create wizard, customer detail page with device registration and view-as) |
 
 ## Phase F: map performance and UX
 
@@ -82,6 +84,12 @@ SSE (snapshot / location / alert / end)
 - **Map**: `/map?focus=<device>` (Vehicles → Show on map) now selects and centres the vehicle; the selected row is scrolled into view in the windowed list.
 - **A11y fix**: MapLibre already marks its canvas as a region; the extra wrapper region was removed and the canvas labelled ("…Use the list for keyboard access").
 - Tests: `alerts-list.itest.ts` (paging, counts, tenant isolation, each filter, wildcard escaping, time-zone day boundaries, invalid params, legacy form).
+
+## Phase I: Team and Customers
+- **Team** (`/settings/team`): `/api/team?page=&pageSize=&search=&role=&sort=&direction=` (SQL, org-scoped, escaped search; the unparameterised form is unchanged). Columns Member / Role / Last active / Status (Active, or Invited = never signed in) / actions. Action menu: Change role (dialog explaining each role), Reset password (confirm), Remove (confirm). Add member dialog; if email can't be sent the one-time password is shown once in a dialog with Copy. Server rules unchanged: last-admin protection (its error is shown in the role dialog), org-only credential resets, RBAC.
+- **Customers** (`/admin/customers`, platform admins only): `/api/admin/customers?page=&search=&sort=` (super-admin check unchanged), columns Customer / Users / Devices (active in 24 h) / Created / Status, actions Manage / View as. "New customer" is a 3-step wizard (company with auto short-name → first admin → review → create; one-time password shown only if email fails). New **customer detail page** `/admin/customers/[id]`: devices (IMEI last 4 only), users, Register device dialog (15-digit hint, Traccar failure shown, nothing saved), View as customer.
+- **CSP finding**: a lazily loaded component that is rendered during server rendering makes Next emit a `<link rel="preload" as="script">` **without** the nonce, which the strict CSP blocks (console error, wasted preload; the feature itself still worked). Fixed by mounting the wizard only when opened. All 13 main routes were then scanned: 0 nonce-less scripts or script preloads.
+- Tests: `team-list.itest.ts`, `customers-list.itest.ts` (403 for org admins on the paged form, paging/search/sort, detail exposes only IMEI last 4).
 
 ## Remaining phases
  Alerts + Zones + Maintenance · I Team + Customers · J Global search ·
