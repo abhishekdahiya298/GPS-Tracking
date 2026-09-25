@@ -2,30 +2,54 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import { shapeRing, type LonLat } from "@rio-gps/core/geo";
 import maplibregl, { type GeoJSONSource, type Map as MlMap } from "maplibre-gl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Circle, Hexagon, MoreHorizontal, Pencil, Plus, Trash2, Undo2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Feature, FeatureCollection } from "geojson";
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
+import { SearchInput } from "@/components/app/search-input";
+import { EmptyState } from "@/components/app/states";
+import { useUnits } from "@/components/app/units-context";
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Field } from "@/components/ui/label";
+import { toast } from "@/components/ui/toaster";
 import type { GeofenceDto } from "@/lib/alerts";
+import { api, errorMessage } from "@/lib/client/api";
+import { cn } from "@/lib/cn";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+const FALLBACK = { center: [-98.6, 39.8] as [number, number], zoom: 3.2 };
+const COLORS = ["#2f5bea", "#15803d", "#b45309", "#c42b2b", "#7c3aed", "#0891b2"];
 type Mode = { kind: "idle" } | { kind: "polygon"; points: LonLat[] } | { kind: "circle"; center: LonLat | null };
-
-async function api(path: string, init?: RequestInit) {
-  const res = await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) }, cache: "no-store" });
-  if (res.status === 401) {
-    window.location.assign("/login?next=/geofences");
-    throw new Error("Signed out");
-  }
-  if (res.status === 204) return null;
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.error?.message ?? `Request failed (${res.status})`);
-  return body;
-}
 
 function fc(features: Feature[]): FeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
+function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Zone colour" className="flex gap-2">
+      {COLORS.map((c) => (
+        <button
+          key={c}
+          type="button"
+          role="radio"
+          aria-checked={value === c}
+          aria-label={`Colour ${c}`}
+          onClick={() => onChange(c)}
+          className={cn("size-7 cursor-pointer rounded-full border-2 border-white shadow-card outline-offset-2", value === c && "outline outline-2 outline-foreground")}
+          style={{ background: c }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function GeofenceEditor({ initial, canWrite }: { initial: GeofenceDto[]; canWrite: boolean }) {
+  const u = useUnits();
   const mapDiv = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
   const [fences, setFences] = useState(initial);
@@ -33,26 +57,43 @@ export function GeofenceEditor({ initial, canWrite }: { initial: GeofenceDto[]; 
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const [name, setName] = useState("");
+  const [color, setColor] = useState(COLORS[0]!);
   const [radius, setRadius] = useState(300);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [editing, setEditing] = useState<GeofenceDto | null>(null);
+  const [deleting, setDeleting] = useState<GeofenceDto | null>(null);
+  const fittedOnce = useRef(false);
+
+  // Radius label in the organization's units (stored in metres).
+  const fmtRadius = (m: number) => (u.system === "imperial" ? (m < 1609 ? `${Math.round(m * 3.28084).toLocaleString()} ft` : `${(m / 1609.344).toFixed(1)} mi`) : m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(1)} km`);
 
   useEffect(() => {
     if (!mapDiv.current || map.current) return;
-    const m = new maplibregl.Map({ container: mapDiv.current, style: STYLE_URL, center: [-79.7, 43.7], zoom: 10 });
+    const m = new maplibregl.Map({ container: mapDiv.current, style: STYLE_URL, center: FALLBACK.center, zoom: FALLBACK.zoom, attributionControl: { compact: true } });
+    m.getCanvas().setAttribute("aria-label", "Zones map. Use the zone list for keyboard access.");
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
     m.on("styleimagemissing", (e) => {
       if (!m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
     });
     m.on("load", () => {
       m.addSource("fences", { type: "geojson", data: fc([]) });
-      m.addLayer({ id: "fences-fill", type: "fill", source: "fences", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.18 } });
-      m.addLayer({ id: "fences-line", type: "line", source: "fences", paint: { "line-color": ["get", "color"], "line-width": 2 } });
-      m.addLayer({ id: "fences-label", type: "symbol", source: "fences", layout: { "text-field": ["get", "name"], "text-size": 12, "text-font": ["Noto Sans Regular"] }, paint: { "text-halo-color": "#fff", "text-halo-width": 1.5 } });
+      m.addLayer({ id: "fences-fill", type: "fill", source: "fences", paint: { "fill-color": ["get", "color"], "fill-opacity": ["case", ["get", "sel"], 0.28, 0.14] } });
+      m.addLayer({ id: "fences-line", type: "line", source: "fences", paint: { "line-color": ["get", "color"], "line-width": ["case", ["get", "sel"], 3.5, 2] } });
+      if (m.getStyle().glyphs) {
+        m.addLayer({ id: "fences-label", type: "symbol", source: "fences", layout: { "text-field": ["get", "name"], "text-size": 12, "text-font": ["Noto Sans Regular"] }, paint: { "text-halo-color": "#fff", "text-halo-width": 1.5 } });
+      }
       m.addSource("draft", { type: "geojson", data: fc([]) });
       m.addLayer({ id: "draft-fill", type: "fill", source: "draft", paint: { "fill-color": "#e67e22", "fill-opacity": 0.2 } });
       m.addLayer({ id: "draft-line", type: "line", source: "draft", paint: { "line-color": "#e67e22", "line-width": 2, "line-dasharray": [2, 1] } });
+      m.on("click", "fences-fill", (e) => {
+        if (modeRef.current.kind !== "idle") return;
+        const id = e.features?.[0]?.properties?.id as string | undefined;
+        if (id) setSelected(id);
+      });
       setLoaded(true);
     });
     m.on("click", (e) => {
@@ -62,33 +103,40 @@ export function GeofenceEditor({ initial, canWrite }: { initial: GeofenceDto[]; 
       if (md.kind === "circle") setMode({ kind: "circle", center: p });
     });
     map.current = m;
-    // Center on the fleet if there is one.
-    fetch("/api/locations/current", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((b) => {
-        const loc = b?.devices?.find((d: { location: unknown }) => d.location)?.location;
-        if (loc && initial.length === 0) m.jumpTo({ center: [loc.longitude, loc.latitude], zoom: 13 });
-      })
-      .catch(() => undefined);
+    // No zones yet: start on the fleet instead of a continent view.
+    if (initial.length === 0) {
+      fetch("/api/locations/current", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((b) => {
+          const pts = (b?.devices ?? []).filter((d: { location: unknown }) => d.location).map((d: { location: { longitude: number; latitude: number } }) => [d.location.longitude, d.location.latitude] as [number, number]);
+          if (!pts.length) return;
+          const bb = new maplibregl.LngLatBounds();
+          pts.forEach((p: [number, number]) => bb.extend(p));
+          m.fitBounds(bb, { padding: 80, maxZoom: 13, duration: 0 });
+        })
+        .catch(() => undefined);
+    }
     return () => {
       m.remove();
       map.current = null;
     };
-  }, [initial.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Draw saved fences.
+  // Draw saved zones (+ selection highlight).
   useEffect(() => {
     const m = map.current;
     if (!m || !loaded) return;
     (m.getSource("fences") as GeoJSONSource).setData(
-      fc(fences.map((f) => ({ type: "Feature", properties: { name: f.name, color: f.color }, geometry: { type: "Polygon", coordinates: [shapeRing(f.shape)] } })))
+      fc(fences.map((f) => ({ type: "Feature", properties: { id: f.id, name: f.name, color: f.color, sel: f.id === selected }, geometry: { type: "Polygon", coordinates: [shapeRing(f.shape)] } })))
     );
-    if (fences.length) {
+    if (fences.length && !fittedOnce.current) {
+      fittedOnce.current = true;
       const b = new maplibregl.LngLatBounds();
       fences.forEach((f) => shapeRing(f.shape).forEach((p) => b.extend(p)));
       m.fitBounds(b, { padding: 60, maxZoom: 15, duration: 0 });
     }
-  }, [fences, loaded]);
+  }, [fences, loaded, selected]);
 
   // Draw the draft.
   useEffect(() => {
@@ -106,113 +154,233 @@ export function GeofenceEditor({ initial, canWrite }: { initial: GeofenceDto[]; 
     m.getCanvas().style.cursor = mode.kind === "idle" ? "" : "crosshair";
   }, [mode, radius, loaded]);
 
+  const focusZone = useCallback((f: GeofenceDto) => {
+    setSelected(f.id);
+    const b = new maplibregl.LngLatBounds();
+    shapeRing(f.shape).forEach((p) => b.extend(p));
+    map.current?.fitBounds(b, { padding: 80, maxZoom: 16, duration: 600 });
+  }, []);
+
   const save = useCallback(async () => {
     setError(null);
     const md = modeRef.current;
     const body =
-      md.kind === "polygon"
-        ? { kind: "polygon", name, ring: md.points }
-        : md.kind === "circle" && md.center
-          ? { kind: "circle", name, center: md.center, radiusM: Math.round(radius) }
-          : null;
+      md.kind === "polygon" ? { kind: "polygon", name, color, ring: md.points } : md.kind === "circle" && md.center ? { kind: "circle", name, color, center: md.center, radiusM: Math.round(radius) } : null;
     if (!body) return;
     setBusy(true);
     try {
-      const out = await api("/api/geofences", { method: "POST", body: JSON.stringify(body) });
+      const out = await api<{ geofence: GeofenceDto }>("/api/geofences", { method: "POST", json: body });
       setFences((f) => [...f, out.geofence].sort((a, b) => a.name.localeCompare(b.name)));
+      setSelected(out.geofence.id);
       setMode({ kind: "idle" });
       setName("");
+      toast.success(`Zone "${out.geofence.name}" saved. Use it in an alert rule to get notified.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save");
+      setError(errorMessage(err));
     } finally {
       setBusy(false);
     }
-  }, [name, radius]);
-
-  const remove = async (f: GeofenceDto) => {
-    if (!window.confirm(`Delete zone "${f.name}"? Alert rules that use it are deleted too.`)) return;
-    setError(null);
-    try {
-      await api(`/api/geofences/${f.id}`, { method: "DELETE" });
-      setFences((all) => all.filter((x) => x.id !== f.id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete");
-    }
-  };
+  }, [name, color, radius]);
 
   const canSave = name.trim().length > 0 && ((mode.kind === "polygon" && mode.points.length >= 3) || (mode.kind === "circle" && mode.center !== null));
-  const side = { padding: 14, display: "grid", gap: 10, alignContent: "start", overflow: "auto", minWidth: 0 } as const;
-  const inp = { padding: 8, fontSize: 15, width: "100%", boxSizing: "border-box" } as const;
+  const q = search.trim().toLowerCase();
+  const shown = useMemo(() => fences.filter((f) => !q || f.name.toLowerCase().includes(q)), [fences, q]);
 
   return (
-    <div style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: "minmax(0, 320px) minmax(0, 1fr)", fontFamily: "system-ui" }} className="rio-split">
-      <style>{`@media (max-width: 760px){ .rio-split{ grid-template-columns: minmax(0,1fr) !important; grid-template-rows: 55% 45%; } .rio-split > aside{ order: 2 } }`}</style>
-      <aside style={{ ...side, borderRight: "1px solid #e3e6ea" }}>
-        <h1 style={{ fontSize: 20, margin: 0 }}>Zones</h1>
+    <div className="absolute inset-0 flex flex-col md:flex-row">
+      <aside aria-label="Zones list" className="order-2 flex min-h-0 flex-1 flex-col border-t border-border bg-background md:order-1 md:w-[340px] md:flex-none md:border-r md:border-t-0">
+        <div className="border-b border-border px-4 py-3">
+          <h1 className="m-0 text-base font-semibold">Zones</h1>
+          <p className="m-0 text-xs text-muted-foreground">Areas like depots or customer sites. Use them in alert rules for enter/leave alerts.</p>
+        </div>
+
         {error && (
-          <p role="alert" style={{ color: "#b00020", margin: 0 }}>
-            {error}
-          </p>
-        )}
-        {canWrite && mode.kind === "idle" && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={() => setMode({ kind: "polygon", points: [] })}>
-              + Polygon
-            </button>
-            <button type="button" onClick={() => setMode({ kind: "circle", center: null })}>
-              + Circle
-            </button>
+          <div className="px-4 pt-3">
+            <Alert tone="danger">{error}</Alert>
           </div>
         )}
-        {mode.kind !== "idle" && (
-          <div style={{ display: "grid", gap: 8, border: "1px solid #f0c36d", background: "#fff8e1", padding: 10, borderRadius: 8 }}>
-            <strong>{mode.kind === "polygon" ? "New polygon" : "New circle"}</strong>
-            <span style={{ fontSize: 13, color: "#5b6470" }}>
-              {mode.kind === "polygon" ? `Click the map to add corners (${mode.points.length} so far, need 3+).` : mode.center ? "Adjust the radius, or click again to move." : "Click the map to place the center."}
-            </span>
-            <input aria-label="Zone name" placeholder="Zone name" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} style={inp} />
+
+        {mode.kind === "idle" ? (
+          <>
+            <div className="grid gap-2 border-b border-border px-4 py-3">
+              {canWrite && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button size="sm" onClick={() => setMode({ kind: "polygon", points: [] })}>
+                    <Hexagon /> Draw area
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setMode({ kind: "circle", center: null })}>
+                    <Circle /> Circle
+                  </Button>
+                </div>
+              )}
+              {fences.length > 0 && <SearchInput value={search} onChange={setSearch} placeholder="Search zones…" label="Search zones" debounceMs={100} />}
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto">
+              {fences.length === 0 ? (
+                <EmptyState icon={Hexagon} title="No zones yet" description={canWrite ? "Draw an area or place a circle on the map, then create an alert rule for it." : "An administrator can create zones."} />
+              ) : shown.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground">No zones match “{search}”.</p>
+              ) : (
+                <ul className="m-0 list-none p-0" aria-label="Zones">
+                  {shown.map((f) => (
+                    <li key={f.id} className={cn("flex items-center gap-2 border-b border-border/70 pr-2", selected === f.id && "bg-primary-soft")}>
+                      <button type="button" onClick={() => focusZone(f)} aria-pressed={selected === f.id} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 border-0 bg-transparent px-4 py-3 text-left">
+                        <span aria-hidden="true" className="size-3 shrink-0 rounded-sm" style={{ background: f.color }} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">{f.name}</span>
+                          <span className="block text-xs text-muted-foreground">{f.shape.kind === "circle" ? `Circle · ${fmtRadius(f.shape.radiusM)} radius` : `Area · ${f.shape.ring.length} corners`}</span>
+                        </span>
+                      </button>
+                      {canWrite && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${f.name}`}>
+                              <MoreHorizontal />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem onSelect={() => setEditing(f)}>
+                              <Pencil /> Rename / colour
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem destructive onSelect={() => setDeleting(f)}>
+                              <Trash2 /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="grid gap-3 overflow-auto p-4">
+            <div className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-sm">
+              <strong>{mode.kind === "polygon" ? "New area" : "New circle"}</strong>
+              <p className="m-0 mt-1 text-[13px]">
+                {mode.kind === "polygon" ? `Click the map to add corners (${mode.points.length} so far, at least 3).` : mode.center ? "Adjust the radius, or click the map again to move it." : "Click the map to place the centre."}
+              </p>
+            </div>
+            <Field id="z-name" label="Zone name" required>
+              <Input id="z-name" placeholder="e.g. Main depot" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} autoFocus />
+            </Field>
+            <div className="grid gap-1.5">
+              <span className="text-sm font-medium">Colour</span>
+              <ColorPicker value={color} onChange={setColor} />
+            </div>
             {mode.kind === "circle" && (
-              <label style={{ fontSize: 13 }}>
-                Radius: {Math.round(radius)} m
-                <input type="range" min={20} max={5000} step={10} value={radius} onChange={(e) => setRadius(Number(e.target.value))} style={{ width: "100%" }} aria-label="Radius in meters" />
+              <label className="grid gap-1.5 text-sm font-medium">
+                Radius: {fmtRadius(radius)}
+                <input type="range" min={20} max={5000} step={10} value={radius} onChange={(e) => setRadius(Number(e.target.value))} className="accent-[var(--color-primary)]" aria-valuetext={fmtRadius(radius)} />
               </label>
             )}
-            <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" disabled={!canSave || busy} onClick={save}>
-                Save zone
-              </button>
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={!canSave} loading={busy} onClick={save}>
+                <Plus /> Save zone
+              </Button>
               {mode.kind === "polygon" && mode.points.length > 0 && (
-                <button type="button" onClick={() => setMode({ kind: "polygon", points: mode.points.slice(0, -1) })}>
-                  Undo
-                </button>
+                <Button variant="secondary" onClick={() => setMode({ kind: "polygon", points: mode.points.slice(0, -1) })}>
+                  <Undo2 /> Undo
+                </Button>
               )}
-              <button type="button" onClick={() => setMode({ kind: "idle" })}>
+              <Button variant="ghost" onClick={() => setMode({ kind: "idle" })}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         )}
-        <div>
-          {fences.length === 0 && <p style={{ color: "#5b6470" }}>No zones yet.</p>}
-          {fences.map((f) => (
-            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid #f0f2f4" }}>
-              <span style={{ width: 12, height: 12, borderRadius: 3, background: f.color, flex: "none" }} />
-              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
-                {f.name}{" "}
-                <small style={{ color: "#5b6470" }}>{f.shape.kind === "circle" ? `circle ${f.shape.radiusM} m` : `${f.shape.ring.length} corners`}</small>
-              </span>
-              {canWrite && (
-                <button type="button" onClick={() => remove(f)} aria-label={`Delete ${f.name}`}>
-                  Delete
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
       </aside>
-      <div style={{ position: "relative", minHeight: 0 }}>
-        <div ref={mapDiv} style={{ position: "absolute", inset: 0 }} />
+
+      <div className="relative order-1 h-[55%] shrink-0 md:order-2 md:h-auto md:flex-1">
+        {/* maplibre's CSS sets position:relative on the map element; size it via the wrapper. */}
+        <div className="absolute inset-0">
+          <div ref={mapDiv} className="h-full w-full" />
+        </div>
       </div>
+
+      <EditZoneDialog
+        zone={editing}
+        onClose={() => setEditing(null)}
+        onSaved={(z) => {
+          setFences((all) => all.map((x) => (x.id === z.id ? z : x)).sort((a, b) => a.name.localeCompare(b.name)));
+          toast.success("Zone updated.");
+        }}
+      />
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        title={`Delete zone "${deleting?.name ?? ""}"?`}
+        description="Alert rules that use this zone are deleted too. Past alerts stay in the history."
+        confirmLabel="Delete zone"
+        destructive
+        onConfirm={async () => {
+          if (!deleting) return;
+          await api(`/api/geofences/${deleting.id}`, { method: "DELETE" });
+          setFences((all) => all.filter((x) => x.id !== deleting.id));
+          if (selected === deleting.id) setSelected(null);
+          setDeleting(null);
+          toast.success("Zone deleted.");
+        }}
+      />
     </div>
+  );
+}
+
+function EditZoneDialog({ zone, onClose, onSaved }: { zone: GeofenceDto | null; onClose: () => void; onSaved: (z: GeofenceDto) => void }) {
+  const [name, setName] = useState("");
+  const [color, setColor] = useState(COLORS[0]!);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (zone) {
+      setName(zone.name);
+      setColor(zone.color);
+      setError(null);
+    }
+  }, [zone]);
+  return (
+    <Dialog open={zone !== null} onOpenChange={(o) => !o && !busy && onClose()}>
+      {zone && (
+        <DialogContent title="Edit zone" description="To change the shape, delete the zone and draw it again.">
+          <form
+            method="post"
+            className="grid gap-4"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              setError(null);
+              try {
+                await api(`/api/geofences/${zone.id}`, { method: "PATCH", json: { name, color } });
+                onSaved({ ...zone, name: name.trim(), color });
+                onClose();
+              } catch (err) {
+                setError(errorMessage(err));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Field id="ze-name" label="Name" required>
+              <Input id="ze-name" value={name} required maxLength={120} onChange={(e) => setName(e.target.value)} />
+            </Field>
+            <div className="grid gap-1.5">
+              <span className="text-sm font-medium">Colour</span>
+              <ColorPicker value={COLORS.includes(color) ? color : COLORS[0]!} onChange={setColor} />
+            </div>
+            {error && <Alert tone="danger">{error}</Alert>}
+            <DialogFooter>
+              <Button variant="secondary" onClick={onClose} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={busy}>
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      )}
+    </Dialog>
   );
 }

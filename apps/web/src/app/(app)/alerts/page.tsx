@@ -1,41 +1,32 @@
 import { contextHasPermission } from "@rio-gps/core";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { countUnacknowledged, listEvents, listGeofences, listRules } from "@/lib/alerts";
-import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib/authz";
-import { AppError } from "@/lib/errors";
+import { listGeofences, listRules } from "@/lib/alerts";
+import { AlertListQuery, listAlertsPage } from "@/lib/alerts-list";
+import { parseListQuery } from "@/lib/fleet-list";
+import { getRequestContext } from "@/lib/request-context";
 import { listVehicles } from "@/lib/vehicles";
-import { AlertsManager } from "./alerts-manager";
+import { AlertsView } from "./alerts-view";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Alerts · RIO GPS" };
 
-export default async function AlertsPage() {
-  let ctx;
-  try {
-    ctx = await resolveTenantContext(await requireAuthenticatedUserFromHeaders(await headers()));
-  } catch (err) {
-    if (err instanceof AppError && err.status === 401) redirect("/login?next=/alerts");
-    if (err instanceof AppError && err.status === 403) redirect("/dashboard");
-    throw err;
-  }
+export default async function AlertsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const rc = await getRequestContext();
+  if (rc.status !== "ok") redirect("/login?next=/alerts");
+  const { ctx } = rc;
   if (!contextHasPermission(ctx, "alerts.read")) redirect("/dashboard");
   const org = ctx.organizationId;
-  const [events, unack, rules, fences, vehicles] = await Promise.all([
-    listEvents(org, { limit: 50, unacknowledgedOnly: false }),
-    countUnacknowledged(org),
-    listRules(org),
-    listGeofences(org),
-    listVehicles(org)
-  ]);
+  const q = parseListQuery(AlertListQuery, await searchParams);
+  const [page, rules, fences, vehicles] = await Promise.all([listAlertsPage(org, q), listRules(org), listGeofences(org), listVehicles(org)]);
   return (
-    <AlertsManager
-      initialEvents={events}
-      initialUnack={unack}
-      initialRules={rules}
+    <AlertsView
+      data={page}
+      query={q}
+      rules={rules}
       geofences={fences.map((f) => ({ id: f.id, name: f.name }))}
       vehicles={vehicles.map((v) => ({ id: v.id, name: v.name }))}
       canWrite={contextHasPermission(ctx, "alerts.write")}
+      canMap={contextHasPermission(ctx, "history.read")}
     />
   );
 }

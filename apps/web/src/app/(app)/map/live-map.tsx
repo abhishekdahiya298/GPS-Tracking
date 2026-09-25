@@ -111,6 +111,7 @@ export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
     if (!mapDiv.current) return;
     const m = new maplibregl.Map({ container: mapDiv.current, style: STYLE_URL, center: FALLBACK_VIEW.center, zoom: FALLBACK_VIEW.zoom, attributionControl: { compact: true } });
     mapRef.current = m;
+    m.getCanvas().setAttribute("aria-label", "Fleet map. Use the vehicle list for keyboard access.");
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
     m.addControl(new maplibregl.FullscreenControl(), "top-right");
     m.on("styleimagemissing", (e) => {
@@ -203,7 +204,17 @@ export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
     const f = q.get("from");
     const t = q.get("to");
     if (device && f && t && !Number.isNaN(Date.parse(f)) && !Number.isNaN(Date.parse(t))) setDeepLink({ device, from: f, to: t });
+    const focusId = q.get("focus");
+    if (focusId) setFocusParam(focusId);
   }, []);
+  // /map?focus=<deviceId> (from Vehicles "Show on map"): select and center once the snapshot has it.
+  const [focusParam, setFocusParam] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusParam || !loaded || !map) return;
+    if (devices.current.has(focusParam)) focus(focusParam);
+    setFocusParam(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusParam, loaded, map, version]);
   useEffect(() => {
     if (deepLink && loaded && devices.current.has(deepLink.device)) {
       setSelected(deepLink.device);
@@ -279,6 +290,16 @@ export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // Keep the selected vehicle's row in view (selection can come from the map, a link or search).
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || !selected) return;
+    const i = rows.findIndex((r) => r.d.deviceId === selected);
+    if (i < 0) return;
+    const top = i * ROW_H;
+    if (top < el.scrollTop || top + ROW_H > el.scrollTop + el.clientHeight) el.scrollTo({ top: Math.max(0, top - el.clientHeight / 2 + ROW_H / 2) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
   const start = Math.max(0, Math.floor(scrollTop / ROW_H) - 5);
   const end = Math.min(rows.length, Math.ceil((scrollTop + viewH) / ROW_H) + 5);
 
@@ -410,7 +431,7 @@ export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
       <div className="relative order-2 min-w-0 flex-1">
         {/* maplibre's CSS sets position:relative on the map element, so size it via a wrapper. */}
         <div className="absolute inset-0">
-          <div ref={mapDiv} className="h-full w-full" role="region" aria-label="Fleet map. Use the vehicle list for keyboard access." />
+          <div ref={mapDiv} className="h-full w-full" />
         </div>
         <div className="absolute left-3 top-3 z-[1] flex gap-2">
           <Button size="sm" variant="secondary" onClick={() => fitFleet(true)} disabled={counts.all === 0}>

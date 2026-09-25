@@ -15,7 +15,7 @@ commit. Nothing is pushed or deployed without the owner's go-ahead.
 | D | `aa95188` | Dashboard: summary cards, fleet status, recent alerts, recent trips, quick actions, empty states, one server round trip |
 | E | `d0106b0` | Vehicles + Devices: server-side paginated/searchable/sortable/filterable lists, reusable DataTable (TanStack Table), vehicle detail sheet, react-hook-form dialogs, confirm dialogs |
 | F | `19bc1c1` | Live map rebuilt on a GeoJSON layer; history + playback; mobile bottom sheet |
-| G | (this commit) | Reports: filter card with quick ranges, URL-shareable state, summary cards, by-day and sortable/paged trips tables, phone cards, CSV button, skeleton/empty/error states, organization units (was always km). Email schedules: cards with status, action menu, create dialog, confirm-before-delete, toasts |
+| G | `cab1e02` | Reports: filter card with quick ranges, URL-shareable state, summary cards, by-day and sortable/paged trips tables, phone cards, CSV button, skeleton/empty/error states, organization units (was always km). Email schedules: cards with status, action menu, create dialog, confirm-before-delete, toasts |
 
 ## Phase F: map performance and UX
 
@@ -75,8 +75,16 @@ SSE (snapshot / location / alert / end)
 - A report is one vehicle over ≤ the server's max range, so sorting/paging the trips client-side needs no extra requests.
 - Design-system fix found here: the native `<select>` chevron used an arbitrary `bg-[url(...)]` class that Tailwind didn't compile and that made tailwind-merge drop `bg-background`, so every select rendered grey with no arrow. Replaced by a `select-chevron` utility in `globals.css`.
 
+## Phase H: Alerts, Zones, Maintenance
+- **Alerts**: server-side paged list (`/api/alerts?page=&pageSize=&status=&type=&search=&from=&to=&tz=`, zod-validated, org-scoped, wildcards escaped; date filters are local calendar days in the viewer's time zone). The legacy `?limit=&unacknowledged=&beforeId=` form is unchanged. History tab: status (All / New / Acknowledged) with counts, type, date range, search, severity badges (text + colour), detail sheet with "Show track on map" (±15 min), acknowledge / acknowledge all. New live alerts refresh an unfiltered first page, otherwise show "N new alerts, refresh". Rules tab: switch to pause, email toggle, create dialog with the speed limit entered in the organization's unit (stored km/h), confirm before delete. Alert logic unchanged.
+- **Zones**: design-system panel, search, click a zone to fit it, rename/colour dialog, confirm before delete, colour picker, radius shown in ft/mi (imperial). Starts on the zones, else the fleet, else North America (was hard-coded Toronto). Enable/disable not offered: zones have no active flag and adding one would be a schema change.
+- **Maintenance**: status filter + search, vehicle cards, add / mark-serviced dialogs, intervals and odometer entered and shown in the organization's units (stored km), confirm before delete, presets in miles for US fleets.
+- **Map**: `/map?focus=<device>` (Vehicles → Show on map) now selects and centres the vehicle; the selected row is scrolled into view in the windowed list.
+- **A11y fix**: MapLibre already marks its canvas as a region; the extra wrapper region was removed and the canvas labelled ("…Use the list for keyboard access").
+- Tests: `alerts-list.itest.ts` (paging, counts, tenant isolation, each filter, wildcard escaping, time-zone day boundaries, invalid params, legacy form).
+
 ## Remaining phases
-H Alerts + Zones + Maintenance · I Team + Customers · J Global search ·
+ Alerts + Zones + Maintenance · I Team + Customers · J Global search ·
 K–N Responsive, accessibility, performance, final QA + `docs/UI-UX-ARCHITECTURE.md`.
 
 ## New dependencies so far
