@@ -51,6 +51,7 @@ export default async function DashboardPage() {
           <a href="/vehicles">Vehicles</a>
           <a href="/geofences">Zones</a>
           <a href="/alerts">Alerts</a>
+          <a href="/reports">Reports</a>
           <a href="/settings/team">Team</a>
           <a href="/settings/account">My account</a>
           <SignOutButton />

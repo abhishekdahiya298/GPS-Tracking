@@ -67,3 +67,30 @@ docker compose --env-file .env -f infra/docker-compose.yml exec -T web \
   pnpm admin:backfill-history --imei 864361078566115 \
   --from 2026-09-23T00:00:00Z --to 2026-09-25T00:00:00Z [--dry-run]
 ```
+
+## Trip reports
+
+`GET /api/reports/trips?deviceId=&from=&to=&tz=America/Toronto&format=json|csv` requires `history.read`. It is also available as the **Reports** page (`/reports`).
+
+**How trips are detected** (`packages/core/src/trips.ts`, pure and unit-tested):
+
+- **Active point:** ignition on or, if ignition is unknown, speed ≥ 5 km/h.
+- **Trip:** a run of active points. Sparse reporting while driving never splits a trip.
+- **Trip end:** 5 minutes inactive, or a data gap over 20 minutes.
+- **Noise:** runs shorter than 200 m **and** shorter than 2 minutes are discarded.
+- **GPS jumps:** segments implying more than 250 km/h are left out of the distance.
+
+**Outputs per trip:**
+
+- start and end time and position
+- distance
+- duration, split into driving and idle (ignition on, under 3 km/h)
+- max speed and average moving speed
+
+The report also has daily totals, bucketed by the **viewer's time zone** (`tz`, IANA name), and overall totals.
+
+**Limits:** the window is capped at `MAX_HISTORY_RANGE_DAYS`, and at most 200,000 points are processed per report.
+
+**CSV export:** a file download with a sanitized filename. Cells that start with `= + - @` get a leading `'` to prevent formula injection when the file is opened in a spreadsheet.
+
+**Map link:** each trip links to `/map?device=&from=&to=`, which opens the live map with that trip's track loaded.

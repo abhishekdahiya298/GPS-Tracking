@@ -253,6 +253,26 @@ export function LiveMap({ orgName }: { orgName: string }) {
 
   const list = useMemo(() => Object.values(devices).sort((a, b) => label(a).localeCompare(label(b))), [devices]);
 
+  // Deep link from trip reports: /map?device=<id>&from=<ISO>&to=<ISO>
+  const deepLink = useRef<{ device: string; from: string; to: string } | null>(null);
+  const [autoLoad, setAutoLoad] = useState(false);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const device = q.get("device");
+    const f = q.get("from");
+    const t = q.get("to");
+    if (device && f && t && !Number.isNaN(Date.parse(f)) && !Number.isNaN(Date.parse(t))) deepLink.current = { device, from: f, to: t };
+  }, []);
+  useEffect(() => {
+    const dl = deepLink.current;
+    if (!dl || !devices[dl.device]) return;
+    deepLink.current = null;
+    setSelected(dl.device);
+    setFrom(localInput(new Date(dl.from)));
+    setTo(localInput(new Date(dl.to)));
+    setAutoLoad(true);
+  }, [devices]);
+
   const focus = useCallback((d: CurrentDeviceLocation) => {
     setSelected(d.deviceId);
     if (d.location) map.current?.flyTo({ center: [d.location.longitude, d.location.latitude], zoom: 15 });
@@ -304,6 +324,13 @@ export function LiveMap({ orgName }: { orgName: string }) {
     }
   }, [selected, from, to, drawTrack]);
 
+  useEffect(() => {
+    if (autoLoad && selected) {
+      setAutoLoad(false);
+      void loadHistory();
+    }
+  }, [autoLoad, selected, loadHistory]);
+
   const clearHistory = useCallback(() => {
     setTrack([]);
     drawTrack([]);
@@ -351,6 +378,7 @@ export function LiveMap({ orgName }: { orgName: string }) {
             </a>
           )}
           <a href="/geofences">Zones</a>
+          <a href="/reports">Reports</a>
           <a href="/vehicles">Vehicles</a>
           <a href="/dashboard">Dashboard</a>
         </div>
