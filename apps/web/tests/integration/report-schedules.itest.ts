@@ -37,7 +37,7 @@ const ctxA = (): TenantContext => ({ userId: ids.admin!, organizationId: orgA, r
 beforeAll(async () => {
   const db = getDb();
   await db.execute(sql`truncate audit_logs, rate_limits, sessions, accounts, memberships, users, organizations restart identity cascade`);
-  orgA = (await db.insert(schema.organizations).values({ name: "Org A", slug: "org-a" }).returning())[0]!.id;
+  orgA = (await db.insert(schema.organizations).values({ name: "Org A", slug: "org-a", unitSystem: "metric" }).returning())[0]!.id;
   orgB = (await db.insert(schema.organizations).values({ name: "Org B", slug: "org-b" }).returning())[0]!.id;
   const pa = (await db.insert(schema.gpsProviders).values({ organizationId: orgA, name: "T", apiBaseUrl: "http://t" }).returning())[0]!;
   const pb = (await db.insert(schema.gpsProviders).values({ organizationId: orgB, name: "T", apiBaseUrl: "http://t" }).returning())[0]!;
@@ -149,5 +149,17 @@ describe("report schedules: delivery", () => {
     expect((await testPOST(req("POST", "fleet"), p(schedId))).status).toBe(429);
     const actions = (await getDb().select({ a: schema.auditLogs.action }).from(schema.auditLogs)).map((r) => r.a);
     expect(actions).toEqual(expect.arrayContaining(["report_schedule.created", "report_schedule.updated", "report_schedule.test_sent"]));
+  });
+
+  it("imperial organizations get miles and mph in the email and CSV", async () => {
+    await getDb().update(schema.organizations).set({ unitSystem: "imperial" }).where(eq(schema.organizations.id, orgA));
+    await getDb().update(schema.reportSchedules).set({ active: true });
+    outbox.length = 0;
+    await getDb().update(schema.reportSchedules).set({ lastPeriodKey: null });
+    expect(await runReportSchedules(new Date("2026-09-25T07:06:00Z"))).toBe(1);
+    const m = outbox[0]!;
+    expect(m.text).toContain("=Truck 7: 1 trip, 2.8 mi, 0h 09m driving, top 19 mph");
+    expect(m.attachments![0]!.content.split("\r\n")[0]).toContain("distance_mi,max_speed_mph,avg_moving_mph");
+    await getDb().update(schema.organizations).set({ unitSystem: "metric" }).where(eq(schema.organizations.id, orgA));
   });
 });

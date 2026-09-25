@@ -28,6 +28,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Sheet, SheetContent } from "../ui/dialog";
 import { toast } from "../ui/toaster";
 import { isActive, type NavIcon, type NavSection } from "./nav-config";
+import { UnitsProvider } from "./units-context";
+import type { UnitSystem } from "@rio-gps/core";
 
 const ICONS: Record<NavIcon, LucideIcon> = {
   dashboard: LayoutDashboard,
@@ -60,6 +62,7 @@ export function AppShell({
   viewingAs,
   unackAlerts,
   canSeeAlerts,
+  unitSystem,
   children
 }: {
   nav: NavSection[];
@@ -68,6 +71,7 @@ export function AppShell({
   viewingAs: boolean;
   unackAlerts: number;
   canSeeAlerts: boolean;
+  unitSystem: UnitSystem;
   children: ReactNode;
 }) {
   const pathname = usePathname() ?? "/";
@@ -120,7 +124,7 @@ export function AppShell({
         {viewingAs && <ViewAsBanner orgName={orgName} />}
 
         <main id="main" className={cn("min-h-0 flex-1", fullBleed ? "relative overflow-hidden" : "overflow-y-auto")}>
-          {fullBleed ? children : <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-6">{children}</div>}
+          <UnitsProvider system={unitSystem}>{fullBleed ? children : <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-6">{children}</div>}</UnitsProvider>
         </main>
       </div>
     </div>

@@ -29,6 +29,7 @@ export const PERMISSIONS = [
   "maintenance.write",
   "users.read",
   "users.manage",
+  "organization.manage",
   "billing.read",
   "billing.manage",
   "audit.read"

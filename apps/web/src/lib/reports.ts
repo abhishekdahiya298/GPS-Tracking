@@ -1,4 +1,4 @@
-import { csvCell, detectTrips, summarizeByDay, type DaySummary, type Trip } from "@rio-gps/core";
+import { csvCell, detectTrips, summarizeByDay, units, type DaySummary, type Trip, type UnitSystem } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
 import { and, asc, eq, gte, lt } from "drizzle-orm";
 import { ValidationError } from "./errors";
@@ -85,12 +85,18 @@ export async function buildTripReport(organizationId: string, deviceId: string, 
   };
 }
 
-export function tripReportCsv(r: TripReport, vehicleLabel: string): string {
+/** CSV in the organization's display units (column names carry the unit). */
+export function tripReportCsv(r: TripReport, vehicleLabel: string, system: UnitSystem = "metric"): string {
+  const u = units(system);
+  const d1 = (km: number) => Math.round(u.dist(km) * 10) / 10;
+  const s0 = (kph: number) => Math.round(u.speed_(kph));
+  const du = system === "imperial" ? "mi" : "km";
+  const su = system === "imperial" ? "mph" : "kph";
   const fmt = (iso: string) =>
     new Intl.DateTimeFormat("en-CA", { timeZone: r.timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso));
-  const head = ["vehicle", "start_local", "end_local", "duration_min", "driving_min", "idle_min", "distance_km", "max_speed_kph", "avg_moving_kph", "start_lat", "start_lon", "end_lat", "end_lon"];
+  const head = ["vehicle", "start_local", "end_local", "duration_min", "driving_min", "idle_min", `distance_${du}`, `max_speed_${su}`, `avg_moving_${su}`, "start_lat", "start_lon", "end_lat", "end_lon"];
   const lines = r.trips.map((t) =>
-    [vehicleLabel, fmt(t.startAt), fmt(t.endAt), t.durationMin, t.drivingMin, t.idleMin, t.distanceKm, t.maxSpeedKph, t.avgMovingKph, t.start.lat.toFixed(6), t.start.lon.toFixed(6), t.end.lat.toFixed(6), t.end.lon.toFixed(6)].map(csvCell).join(",")
+    [vehicleLabel, fmt(t.startAt), fmt(t.endAt), t.durationMin, t.drivingMin, t.idleMin, d1(t.distanceKm), s0(t.maxSpeedKph), s0(t.avgMovingKph), t.start.lat.toFixed(6), t.start.lon.toFixed(6), t.end.lat.toFixed(6), t.end.lon.toFixed(6)].map(csvCell).join(",")
   );
   return [head.join(","), ...lines].join("\r\n") + "\r\n";
 }

@@ -43,7 +43,8 @@ export async function GET(request: Request) {
         .where(and(eq(schema.gpsDevices.id, q.data.deviceId), eq(schema.gpsDevices.organizationId, ctx.organizationId)));
       const name = label?.vehicle ?? label?.name ?? label?.model ?? "device";
       const file = `trips-${name.replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 40)}-${q.data.from.slice(0, 10)}-to-${q.data.to.slice(0, 10)}.csv`;
-      return new NextResponse(tripReportCsv(report, name), {
+      const [org] = await getDb().select({ unitSystem: schema.organizations.unitSystem }).from(schema.organizations).where(eq(schema.organizations.id, ctx.organizationId));
+      return new NextResponse(tripReportCsv(report, name, org?.unitSystem ?? "imperial"), {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": `attachment; filename="${file}"`,

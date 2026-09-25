@@ -152,7 +152,7 @@ async function memberRecipients(organizationId: string, userIds: string[]): Prom
 /** Builds the summary for one period and emails it. Returns counts; never throws for a single bad recipient. */
 async function deliver(s: Row, period: DuePeriod, recipients: Recipient[]) {
   const db = getDb();
-  const [org] = await db.select({ name: schema.organizations.name }).from(schema.organizations).where(eq(schema.organizations.id, s.organizationId));
+  const [org] = await db.select({ name: schema.organizations.name, unitSystem: schema.organizations.unitSystem }).from(schema.organizations).where(eq(schema.organizations.id, s.organizationId));
   const wanted = s.deviceIds ? new Set(s.deviceIds) : null;
   const devices = (await listDevices(s.organizationId)).filter((d) => !wanted || wanted.has(d.id));
   const rows = [];
@@ -162,7 +162,7 @@ async function deliver(s: Row, period: DuePeriod, recipients: Recipient[]) {
     const r = await buildTripReport(s.organizationId, d.id, period.from, period.to, s.timeZone);
     rows.push({ vehicle: label, trips: r.totals.trips, distanceKm: r.totals.distanceKm, drivingMin: r.totals.drivingMin, maxSpeedKph: r.totals.maxSpeedKph });
     if (s.attachCsv) {
-      const csv = tripReportCsv(r, label);
+      const csv = tripReportCsv(r, label, org?.unitSystem ?? "imperial");
       csvParts.push(csvParts.length === 0 ? csv : csv.slice(csv.indexOf("\r\n") + 2));
     }
   }
@@ -174,6 +174,7 @@ async function deliver(s: Row, period: DuePeriod, recipients: Recipient[]) {
       await sendEmail(
         tripSummaryEmail(to.email, to.name, {
           orgName: org?.name ?? "Your fleet",
+          unitSystem: org?.unitSystem ?? "imperial",
           scheduleName: s.name,
           periodLabel: period.label,
           timeZone: s.timeZone,

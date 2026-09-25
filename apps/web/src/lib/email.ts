@@ -1,3 +1,4 @@
+import { units, type UnitSystem } from "@rio-gps/core";
 import { getServerEnv } from "./env";
 import { logger } from "./logger";
 
@@ -139,13 +140,15 @@ export function alertEmail(
   to: string,
   name: string,
   ev: { type: string; ruleName: string; vehicleName: string | null; occurredAt: string; latitude: number | null; longitude: number | null; details: Record<string, unknown> | null },
-  alertsUrl: string
+  alertsUrl: string,
+  unitSystem: UnitSystem = "metric"
 ): EmailMessage {
+  const u = units(unitSystem);
   const who = ev.vehicleName ?? "A device";
   const what = ALERT_LABEL[ev.type] ?? ev.type;
   const extra: string[] = [];
   if (ev.details?.geofence) extra.push(`Zone: ${String(ev.details.geofence)}`);
-  if (typeof ev.details?.speedKph === "number") extra.push(`Speed: ${ev.details.speedKph} km/h (limit ${String(ev.details.limitKph)})`);
+  if (typeof ev.details?.speedKph === "number") extra.push(`Speed: ${u.fmtSpeed(ev.details.speedKph)} (limit ${u.fmtSpeed(Number(ev.details.limitKph))})`);
   const when = new Date(ev.occurredAt).toUTCString();
   const map = ev.latitude !== null && ev.longitude !== null ? `https://www.openstreetmap.org/?mlat=${ev.latitude}&mlon=${ev.longitude}#map=16/${ev.latitude}/${ev.longitude}` : null;
   return {
@@ -173,19 +176,20 @@ const hm = (min: number) => `${Math.floor(min / 60)}h ${String(min % 60).padStar
 export function tripSummaryEmail(
   to: string,
   name: string,
-  r: { orgName: string; scheduleName: string; periodLabel: string; timeZone: string; rows: ReportEmailRow[]; reportsUrl: string; csv: string | null; csvName: string }
+  r: { orgName: string; scheduleName: string; periodLabel: string; timeZone: string; rows: ReportEmailRow[]; reportsUrl: string; csv: string | null; csvName: string; unitSystem?: UnitSystem }
 ): EmailMessage {
+  const u = units(r.unitSystem ?? "metric");
   const tot = r.rows.reduce(
     (a, x) => ({ trips: a.trips + x.trips, km: a.km + x.distanceKm, min: a.min + x.drivingMin, max: Math.max(a.max, x.maxSpeedKph) }),
     { trips: 0, km: 0, min: 0, max: 0 }
   );
-  const km = Math.round(tot.km * 10) / 10;
+  const totDist = u.fmtDist(tot.km);
   const td = 'style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right"';
   const tdl = 'style="padding:6px 8px;border-bottom:1px solid #eee;text-align:left"';
   const table = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;border-collapse:collapse">
 <tr style="color:#6b7280"><th ${tdl}>Vehicle</th><th ${td}>Trips</th><th ${td}>Distance</th><th ${td}>Driving</th><th ${td}>Top speed</th></tr>
-${r.rows.map((x) => `<tr><td ${tdl}>${esc(x.vehicle)}</td><td ${td}>${x.trips}</td><td ${td}>${x.distanceKm} km</td><td ${td}>${hm(x.drivingMin)}</td><td ${td}>${x.maxSpeedKph} km/h</td></tr>`).join("\n")}
-<tr style="font-weight:600"><td ${tdl}>Total</td><td ${td}>${tot.trips}</td><td ${td}>${km} km</td><td ${td}>${hm(tot.min)}</td><td ${td}>${tot.max} km/h</td></tr></table>`;
+${r.rows.map((x) => `<tr><td ${tdl}>${esc(x.vehicle)}</td><td ${td}>${x.trips}</td><td ${td}>${u.fmtDist(x.distanceKm)}</td><td ${td}>${hm(x.drivingMin)}</td><td ${td}>${u.fmtSpeed(x.maxSpeedKph)}</td></tr>`).join("\n")}
+<tr style="font-weight:600"><td ${tdl}>Total</td><td ${td}>${tot.trips}</td><td ${td}>${totDist}</td><td ${td}>${hm(tot.min)}</td><td ${td}>${u.fmtSpeed(tot.max)}</td></tr></table>`;
   const title = `${r.scheduleName}: ${r.periodLabel}`;
   return {
     to,
@@ -197,8 +201,8 @@ ${r.rows.map((x) => `<tr><td ${tdl}>${esc(x.vehicle)}</td><td ${td}>${x.trips}</
     ),
     text:
       `${title}\n${r.orgName} (${r.timeZone})\n\n` +
-      r.rows.map((x) => `${x.vehicle}: ${x.trips} ${x.trips === 1 ? "trip" : "trips"}, ${x.distanceKm} km, ${hm(x.drivingMin)} driving, top ${x.maxSpeedKph} km/h`).join("\n") +
-      `\nTotal: ${tot.trips} ${tot.trips === 1 ? "trip" : "trips"}, ${km} km\n\n${r.reportsUrl}`,
+      r.rows.map((x) => `${x.vehicle}: ${x.trips} ${x.trips === 1 ? "trip" : "trips"}, ${u.fmtDist(x.distanceKm)}, ${hm(x.drivingMin)} driving, top ${u.fmtSpeed(x.maxSpeedKph)}`).join("\n") +
+      `\nTotal: ${tot.trips} ${tot.trips === 1 ? "trip" : "trips"}, ${totDist}\n\n${r.reportsUrl}`,
     ...(r.csv ? { attachments: [{ filename: r.csvName, content: r.csv }] } : {})
   };
 }
@@ -207,11 +211,13 @@ export function maintenanceEmail(
   to: string,
   name: string,
   m: { orgName: string; vehicleName: string; itemName: string; state: "due_soon" | "overdue"; status: { kmSinceService: number; kmRemaining: number | null; daysRemaining: number | null; dueDate: string | null } },
-  url: string
+  url: string,
+  unitSystem: UnitSystem = "metric"
 ): EmailMessage {
+  const u = units(unitSystem);
   const what = m.state === "overdue" ? "is overdue" : "is due soon";
-  const facts: string[] = [`Driven since last service: ${m.status.kmSinceService} km`];
-  if (m.status.kmRemaining !== null) facts.push(m.status.kmRemaining <= 0 ? `Over the distance interval by ${Math.abs(m.status.kmRemaining)} km` : `Distance left: ${m.status.kmRemaining} km`);
+  const facts: string[] = [`Driven since last service: ${u.fmtDist(m.status.kmSinceService)}`];
+  if (m.status.kmRemaining !== null) facts.push(m.status.kmRemaining <= 0 ? `Over the distance interval by ${u.fmtDist(Math.abs(m.status.kmRemaining))}` : `Distance left: ${u.fmtDist(m.status.kmRemaining)}`);
   if (m.status.daysRemaining !== null) facts.push(m.status.daysRemaining <= 0 ? `Date passed: ${m.status.dueDate}` : `Due by ${m.status.dueDate} (${m.status.daysRemaining} days)`);
   const title = `${m.vehicleName}: ${m.itemName} ${what}`;
   return {

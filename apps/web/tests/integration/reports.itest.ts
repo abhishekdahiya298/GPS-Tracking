@@ -78,7 +78,9 @@ describe("trip reports", () => {
     expect(res.headers.get("content-type")).toContain("text/csv");
     expect(res.headers.get("content-disposition")).toMatch(/^attachment; filename="trips-[A-Za-z0-9_-]+-2026-09-24-to-2026-09-25\.csv"$/);
     const lines = (await res.text()).trim().split("\r\n");
-    expect(lines[0]).toBe("vehicle,start_local,end_local,duration_min,driving_min,idle_min,distance_km,max_speed_kph,avg_moving_kph,start_lat,start_lon,end_lat,end_lon");
+    // New organizations default to US units; stored values stay metric.
+    expect(lines[0]).toBe("vehicle,start_local,end_local,duration_min,driving_min,idle_min,distance_mi,max_speed_mph,avg_moving_mph,start_lat,start_lon,end_lat,end_lon");
+    expect(lines[1]!.split(",").slice(-7, -4)).toEqual(["3.1", "19", "19"]); // 5 km → 3.1 mi, 30 km/h → 19 mph
     expect(lines).toHaveLength(3);
     expect(lines[1]!.startsWith(`"'=cmd|' /C calc'!A0"`) || lines[1]!.startsWith(`'=cmd`)).toBe(true);
   });

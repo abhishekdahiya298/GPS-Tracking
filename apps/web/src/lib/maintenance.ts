@@ -221,12 +221,12 @@ export async function dueCounts(organizationId: string, now = new Date()) {
 export async function runMaintenanceCheck(now = new Date()): Promise<number> {
   const db = getDb();
   const rows = await db
-    .select({ item: schema.maintenanceItems, vehicleName: schema.vehicles.name, orgName: schema.organizations.name })
+    .select({ item: schema.maintenanceItems, vehicleName: schema.vehicles.name, orgName: schema.organizations.name, unitSystem: schema.organizations.unitSystem })
     .from(schema.maintenanceItems)
     .innerJoin(schema.vehicles, eq(schema.vehicles.id, schema.maintenanceItems.vehicleId))
     .innerJoin(schema.organizations, eq(schema.organizations.id, schema.maintenanceItems.organizationId));
   let notified = 0;
-  for (const { item, vehicleName, orgName } of rows) {
+  for (const { item, vehicleName, orgName, unitSystem } of rows) {
     try {
       const status = await withStatus({ ...item, vehicleName }, now);
       const target = status.state === "ok" ? null : status.state;
@@ -252,7 +252,7 @@ export async function runMaintenanceCheck(now = new Date()): Promise<number> {
       const url = `${new URL(getServerEnv().AUTH_URL).origin}/maintenance`;
       for (const r of recipients) {
         try {
-          await sendEmail(maintenanceEmail(r.email, r.name, { orgName, vehicleName, itemName: item.name, state: target, status }, url));
+          await sendEmail(maintenanceEmail(r.email, r.name, { orgName, vehicleName, itemName: item.name, state: target, status }, url, unitSystem));
         } catch {
           // logged by sendEmail
         }

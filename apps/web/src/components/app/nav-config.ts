@@ -44,7 +44,8 @@ const SECTIONS: { title?: string; items: Rule[] }[] = [
     title: "Administration",
     items: [
       { href: "/settings/team", label: "Team", icon: "users", permission: "users.read" },
-      { href: "/admin/customers", label: "Customers", icon: "building", superAdminOnly: true }
+      { href: "/admin/customers", label: "Customers", icon: "building", superAdminOnly: true },
+      { href: "/settings/organization", label: "Settings", icon: "settings", permission: "organization.manage" }
     ]
   }
 ];
