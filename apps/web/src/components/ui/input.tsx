@@ -19,8 +19,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
       ref={ref}
       className={cn(
         field,
-        "h-9 appearance-none bg-[length:16px] bg-[right_8px_center] bg-no-repeat pr-8",
-        "bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235b6472' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")]",
+        // Chevron comes from the `select-chevron` utility in globals.css (an arbitrary
+        // url() class was dropped by the compiler and confused tailwind-merge).
+        "h-9 appearance-none pr-8 select-chevron",
         className
       )}
       {...props}

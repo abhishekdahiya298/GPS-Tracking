@@ -14,7 +14,8 @@ commit. Nothing is pushed or deployed without the owner's go-ahead.
 | (units) | `2fb7062` | Organization display units (mph / miles default, km option); additive column `organizations.unit_system` (migration 0006) |
 | D | `aa95188` | Dashboard: summary cards, fleet status, recent alerts, recent trips, quick actions, empty states, one server round trip |
 | E | `d0106b0` | Vehicles + Devices: server-side paginated/searchable/sortable/filterable lists, reusable DataTable (TanStack Table), vehicle detail sheet, react-hook-form dialogs, confirm dialogs |
-| F | (this commit) | Live map rebuilt on a GeoJSON layer; history + playback; mobile bottom sheet |
+| F | `19bc1c1` | Live map rebuilt on a GeoJSON layer; history + playback; mobile bottom sheet |
+| G | (this commit) | Reports: filter card with quick ranges, URL-shareable state, summary cards, by-day and sortable/paged trips tables, phone cards, CSV button, skeleton/empty/error states, organization units (was always km). Email schedules: cards with status, action menu, create dialog, confirm-before-delete, toasts |
 
 ## Phase F: map performance and UX
 
@@ -69,8 +70,13 @@ SSE (snapshot / location / alert / end)
 - Reconnect verified: server killed with the map open → "Reconnecting…" → "Live", and live
   GPS continued afterwards.
 
+## Phase G notes
+- Business logic unchanged: same `/api/reports/trips` and trip detection; CSV already in org units.
+- A report is one vehicle over ≤ the server's max range, so sorting/paging the trips client-side needs no extra requests.
+- Design-system fix found here: the native `<select>` chevron used an arbitrary `bg-[url(...)]` class that Tailwind didn't compile and that made tailwind-merge drop `bg-background`, so every select rendered grey with no arrow. Replaced by a `select-chevron` utility in `globals.css`.
+
 ## Remaining phases
-G Reports · H Alerts + Zones + Maintenance · I Team + Customers · J Global search ·
+H Alerts + Zones + Maintenance · I Team + Customers · J Global search ·
 K–N Responsive, accessibility, performance, final QA + `docs/UI-UX-ARCHITECTURE.md`.
 
 ## New dependencies so far

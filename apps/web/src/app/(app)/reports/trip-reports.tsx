@@ -1,28 +1,75 @@
 "use client";
+/**
+ * Trip reports. The calculation is unchanged (server: /api/reports/trips, the
+ * same trip detection as before); this is presentation only. One report covers
+ * one vehicle for up to the server's maximum range, so the trips are sorted
+ * and paged in the browser without extra requests.
+ */
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarRange, Download, Mail, MapPinned, Route, Truck } from "lucide-react";
 import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { SegmentedFilter } from "@/components/app/filter-bar";
+import { PageHeader } from "@/components/app/page-header";
+import { Pagination } from "@/components/app/pagination";
+import { EmptyState, ErrorState, TableSkeleton } from "@/components/app/states";
+import { useUnits } from "@/components/app/units-context";
 import { Button } from "@/components/ui/button";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { TripReport } from "@/lib/reports";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input, Select } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
+import type { TripDto, TripReport } from "@/lib/reports";
 
 type Dev = { id: string; label: string };
+type Preset = "7d" | "yesterday" | "today" | "30d" | "custom";
+type SortKey = "start" | "duration" | "distance" | "max";
+const PAGE = 25;
 
-function localInput(d: Date) {
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
-}
+const day = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 const hm = (m: number) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
-const cell = { padding: "6px 8px", borderTop: "1px solid #f0f2f4", whiteSpace: "nowrap" } as const;
-const inp = { padding: 8, fontSize: 15, minWidth: 0, boxSizing: "border-box" } as const;
+
+function presetRange(p: Exclude<Preset, "custom">): [string, string] {
+  const now = new Date();
+  const back = (n: number) => day(new Date(now.getTime() - n * 86_400_000));
+  switch (p) {
+    case "today":
+      return [day(now), day(now)];
+    case "yesterday":
+      return [back(1), back(1)];
+    case "30d":
+      return [back(29), day(now)];
+    default:
+      return [back(6), day(now)];
+  }
+}
 
 export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; canSchedule?: boolean }) {
+  const u = useUnits();
   const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", []);
   const [deviceId, setDeviceId] = useState(devices[0]?.id ?? "");
-  const [fromDay, setFromDay] = useState(() => localInput(new Date(Date.now() - 6 * 86_400_000)));
-  const [toDay, setToDay] = useState(() => localInput(new Date()));
+  const [preset, setPreset] = useState<Preset>("7d");
+  const [[fromDay, toDay], setDays] = useState<[string, string]>(() => presetRange("7d"));
   const [report, setReport] = useState<TripReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "start", dir: "desc" });
+  const [page, setPage] = useState(1);
+  const [ready, setReady] = useState(false);
 
-  // Local calendar days → [start of fromDay, start of day after toDay) in the viewer's time zone.
+  // Shareable state: ?device=&from=&to= (local calendar days). Applied once, then the first load runs.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const dv = q.get("device");
+    const f = q.get("from");
+    const t = q.get("to");
+    if (dv && devices.some((d) => d.id === dv)) setDeviceId(dv);
+    if (f && t && /^\d{4}-\d{2}-\d{2}$/.test(f) && /^\d{4}-\d{2}-\d{2}$/.test(t)) {
+      setPreset("custom");
+      setDays([f, t]);
+    }
+    setReady(true);
+  }, [devices]);
+
   const range = useMemo(() => {
     const from = new Date(`${fromDay}T00:00:00`);
     const to = new Date(`${toDay}T00:00:00`);
@@ -35,6 +82,7 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
     if (!deviceId) return;
     setBusy(true);
     setError(null);
+    window.history.replaceState(null, "", `?${new URLSearchParams({ device: deviceId, from: fromDay, to: toDay })}`);
     try {
       const res = await fetch(`/api/reports/trips?${qs}`, { cache: "no-store" });
       if (res.status === 401) {
@@ -44,157 +92,308 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error?.message ?? `Request failed (${res.status})`);
       setReport(body);
+      setPage(1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load the report");
+      setError(err instanceof Error ? err.message : "Unable to load the report");
       setReport(null);
     } finally {
       setBusy(false);
     }
-  }, [deviceId, qs]);
+  }, [deviceId, qs, fromDay, toDay]);
 
   useEffect(() => {
-    void load();
-    // Only on first render; later loads are explicit.
+    if (ready) void load();
+    // First load only; later loads are explicit ("Show trips").
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
-  const fmt = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const trips = useMemo(() => {
+    const list = [...(report?.trips ?? [])];
+    const val = (t: TripDto) => (sort.key === "start" ? Date.parse(t.startAt) : sort.key === "duration" ? t.durationMin : sort.key === "distance" ? t.distanceKm : t.maxSpeedKph);
+    list.sort((a, b) => (val(a) - val(b)) * (sort.dir === "asc" ? 1 : -1));
+    return list;
+  }, [report, sort]);
+  const shown = trips.slice((page - 1) * PAGE, page * PAGE);
+
+  const fmt = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const vehicleLabel = devices.find((d) => d.id === deviceId)?.label ?? "";
+
+  const sortHead = (k: SortKey, label: string, className?: string): ReactNode => {
+    const active = sort.key === k;
+    const Icon = !active ? ArrowUpDown : sort.dir === "asc" ? ArrowUp : ArrowDown;
+    return (
+      <TH aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"} className={className}>
+        <button
+          type="button"
+          className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 font-medium uppercase text-inherit"
+          onClick={() => {
+            setSort((s) => ({ key: k, dir: s.key === k && s.dir === "desc" ? "asc" : "desc" }));
+            setPage(1);
+          }}
+        >
+          {label}
+          <Icon className="size-3.5" aria-hidden="true" />
+        </button>
+      </TH>
+    );
+  };
+
+  if (devices.length === 0) {
+    return (
+      <>
+        <PageHeader title="Trip reports" description="Trips, distance and driving time for each vehicle." />
+        <Card>
+          <EmptyState
+            icon={Truck}
+            title="No vehicles to report on yet"
+            description="Add a vehicle and assign a GPS device. Trips appear here once it has driven."
+            action={
+              <Button asChild size="sm">
+                <Link href="/vehicles">Go to vehicles</Link>
+              </Button>
+            }
+          />
+        </Card>
+      </>
+    );
+  }
 
   return (
-    <main style={{ fontFamily: "system-ui", padding: 16, maxWidth: 1100, margin: "0 auto" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <h1 style={{ fontSize: 22, margin: "8px 0" }}>Trip reports</h1>
-        {canSchedule && (
-          <Button asChild variant="secondary" size="sm">
-            <Link href="/reports/schedules">Email schedules</Link>
-          </Button>
-        )}
-      </header>
+    <>
+      <PageHeader
+        title="Trip reports"
+        description="Trips, distance, driving time and top speed for a vehicle over a period."
+        actions={
+          canSchedule && (
+            <Button asChild variant="secondary">
+              <Link href="/reports/schedules">
+                <Mail /> Email schedules
+              </Link>
+            </Button>
+          )
+        }
+      />
 
-      <form
-        method="post"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void load();
-        }}
-        style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end", margin: "8px 0 16px" }}
-      >
-        <label style={{ display: "grid", gap: 4, flex: "2 1 220px" }}>
-          Vehicle
-          <select value={deviceId} onChange={(e) => setDeviceId(e.target.value)} style={inp} aria-label="Vehicle">
-            {devices.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "grid", gap: 4, flex: "1 1 140px" }}>
-          From
-          <input type="date" value={fromDay} max={toDay} onChange={(e) => setFromDay(e.target.value)} style={inp} aria-label="From date" />
-        </label>
-        <label style={{ display: "grid", gap: 4, flex: "1 1 140px" }}>
-          To
-          <input type="date" value={toDay} min={fromDay} onChange={(e) => setToDay(e.target.value)} style={inp} aria-label="To date" />
-        </label>
-        <button type="submit" disabled={busy || !deviceId} style={{ padding: "9px 14px" }}>
-          {busy ? "Loading…" : "Show trips"}
-        </button>
-        {report && report.trips.length > 0 && (
-          <a href={`/api/reports/trips?${qs}&format=csv`} style={{ padding: "9px 4px" }}>
-            Download CSV
-          </a>
-        )}
-      </form>
-      <p style={{ fontSize: 12, color: "#5b6470", marginTop: -8 }}>Times shown in {tz}. A trip ends after 5 minutes parked or a 20-minute data gap.</p>
-
-      {error && (
-        <p role="alert" style={{ color: "#b00020" }}>
-          {error}
-        </p>
-      )}
-
-      {report && (
-        <>
-          <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 16 }}>
-            {[
-              ["Trips", String(report.totals.trips)],
-              ["Distance", `${report.totals.distanceKm} km`],
-              ["Driving time", hm(report.totals.drivingMin)],
-              ["Top speed", `${report.totals.maxSpeedKph} km/h`]
-            ].map(([k, v]) => (
-              <div key={k} style={{ border: "1px solid #e3e6ea", borderRadius: 8, padding: 12 }}>
-                <div style={{ fontSize: 12, color: "#5b6470" }}>{k}</div>
-                <div style={{ fontSize: 22, fontWeight: 600 }}>{v}</div>
-              </div>
-            ))}
-          </section>
-
-          {report.days.length > 0 && (
-            <section style={{ marginBottom: 16, overflowX: "auto" }}>
-              <h2 style={{ fontSize: 17 }}>By day</h2>
-              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 14 }}>
-                <thead>
-                  <tr style={{ textAlign: "left", color: "#5b6470" }}>
-                    <th style={cell}>Day</th>
-                    <th style={cell}>Trips</th>
-                    <th style={cell}>Distance</th>
-                    <th style={cell}>Driving</th>
-                    <th style={cell}>Top speed</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.days.map((d) => (
-                    <tr key={d.day}>
-                      <td style={cell}>{d.day}</td>
-                      <td style={cell}>{d.trips}</td>
-                      <td style={cell}>{d.distanceKm} km</td>
-                      <td style={cell}>{hm(d.drivingMin)}</td>
-                      <td style={cell}>{d.maxSpeedKph} km/h</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          )}
-
-          <section style={{ overflowX: "auto" }}>
-            <h2 style={{ fontSize: 17 }}>Trips</h2>
-            {report.trips.length === 0 ? (
-              <p style={{ color: "#5b6470" }}>No trips in this period.</p>
-            ) : (
-              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 14 }}>
-                <thead>
-                  <tr style={{ textAlign: "left", color: "#5b6470" }}>
-                    <th style={cell}>Start</th>
-                    <th style={cell}>End</th>
-                    <th style={cell}>Duration</th>
-                    <th style={cell}>Distance</th>
-                    <th style={cell}>Max</th>
-                    <th style={cell}>Avg</th>
-                    <th style={cell} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.trips.map((t) => (
-                    <tr key={t.startAt}>
-                      <td style={cell}>{fmt(t.startAt)}</td>
-                      <td style={cell}>{fmt(t.endAt)}</td>
-                      <td style={cell}>{hm(t.durationMin)}</td>
-                      <td style={cell}>{t.distanceKm} km</td>
-                      <td style={cell}>{t.maxSpeedKph} km/h</td>
-                      <td style={cell}>{t.avgMovingKph} km/h</td>
-                      <td style={cell}>
-                        <a href={`/map?${new URLSearchParams({ device: report.deviceId, from: t.startAt, to: new Date(Date.parse(t.endAt) + 60_000).toISOString() })}`}>View on map</a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <Card className="mb-4">
+        <form
+          method="post"
+          className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void load();
+          }}
+        >
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            <label className="grid gap-1.5 text-sm font-medium">
+              Vehicle
+              <Select value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
+                {devices.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="grid gap-1.5 text-sm font-medium">
+              From
+              <Input
+                type="date"
+                value={fromDay}
+                max={toDay}
+                onChange={(e) => {
+                  setPreset("custom");
+                  setDays([e.target.value, toDay]);
+                }}
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm font-medium">
+              To
+              <Input
+                type="date"
+                value={toDay}
+                min={fromDay}
+                onChange={(e) => {
+                  setPreset("custom");
+                  setDays([fromDay, e.target.value]);
+                }}
+              />
+            </label>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" loading={busy} disabled={!deviceId}>
+              <Route /> Show trips
+            </Button>
+            {report && report.trips.length > 0 && (
+              <Button asChild variant="secondary">
+                <a href={`/api/reports/trips?${qs}&format=csv`} download>
+                  <Download /> CSV
+                </a>
+              </Button>
             )}
-          </section>
-        </>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+            <SegmentedFilter<Preset>
+              label="Quick range"
+              value={preset}
+              onChange={(p) => {
+                setPreset(p);
+                if (p !== "custom") setDays(presetRange(p));
+              }}
+              options={[
+                { value: "today", label: "Today" },
+                { value: "yesterday", label: "Yesterday" },
+                { value: "7d", label: "Last 7 days" },
+                { value: "30d", label: "Last 30 days" },
+                { value: "custom", label: "Custom" }
+              ]}
+            />
+            <span className="text-xs text-muted-foreground">Times in {tz}. A trip ends after 5 minutes parked or a 20-minute gap in data.</span>
+          </div>
+        </form>
+      </Card>
+
+      {error ? (
+        <Card>
+          <ErrorState
+            title="Unable to load the report"
+            description={error}
+            action={
+              <Button variant="secondary" onClick={load}>
+                Try again
+              </Button>
+            }
+          />
+        </Card>
+      ) : !report ? (
+        <div className="grid gap-4" aria-busy="true" aria-label="Loading report">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {Array.from({ length: 4 }, (_, i) => (
+              <Skeleton key={i} className="h-[84px]" />
+            ))}
+          </div>
+          <Card>
+            <TableSkeleton rows={6} cols={5} />
+          </Card>
+        </div>
+      ) : (
+        <div className={busy ? "pointer-events-none opacity-60 transition-opacity" : "transition-opacity"} aria-busy={busy}>
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {(
+              [
+                ["Trips", String(report.totals.trips)],
+                ["Distance", u.fmtDist(report.totals.distanceKm)],
+                ["Driving time", hm(report.totals.drivingMin)],
+                ["Top speed", u.fmtSpeed(report.totals.maxSpeedKph)]
+              ] as const
+            ).map(([k, v]) => (
+              <Card key={k} className="p-4">
+                <div className="text-xs font-medium text-muted-foreground">{k}</div>
+                <div className="mt-1 text-2xl font-semibold tabular-nums">{v}</div>
+              </Card>
+            ))}
+          </div>
+
+          {report.trips.length === 0 ? (
+            <Card>
+              <EmptyState icon={CalendarRange} title="No trips in this period" description={`${vehicleLabel} didn't drive between ${fromDay} and ${toDay}. Try a longer range.`} />
+            </Card>
+          ) : (
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+              <Card className="h-fit">
+                <CardHeader>
+                  <CardTitle>By day</CardTitle>
+                </CardHeader>
+                <Table>
+                  <THead>
+                    <TR>
+                      <TH>Day</TH>
+                      <TH className="text-right">Trips</TH>
+                      <TH className="text-right">Distance</TH>
+                      <TH className="text-right">Driving</TH>
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {report.days.map((d) => (
+                      <TR key={d.day}>
+                        <TD className="whitespace-nowrap">{new Date(`${d.day}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</TD>
+                        <TD className="text-right tabular-nums">{d.trips}</TD>
+                        <TD className="whitespace-nowrap text-right tabular-nums">{u.fmtDist(d.distanceKm)}</TD>
+                        <TD className="whitespace-nowrap text-right tabular-nums">{hm(d.drivingMin)}</TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Trips</CardTitle>
+                </CardHeader>
+                <div className="hidden sm:block">
+                  <Table>
+                    <THead>
+                      <TR>
+                        {sortHead("start", "Start")}
+                        {sortHead("duration", "Duration", "text-right")}
+                        {sortHead("distance", "Distance", "text-right")}
+                        {sortHead("max", "Max", "text-right")}
+                        <TH className="text-right">Avg</TH>
+                        <TH>
+                          <span className="sr-only">Map</span>
+                        </TH>
+                      </TR>
+                    </THead>
+                    <TBody>
+                      {shown.map((t) => (
+                        <TR key={t.startAt}>
+                          <TD className="whitespace-nowrap">
+                            {fmt(t.startAt)}
+                            <div className="text-xs text-muted-foreground">to {fmt(t.endAt)}</div>
+                          </TD>
+                          <TD className="whitespace-nowrap text-right tabular-nums">{hm(t.durationMin)}</TD>
+                          <TD className="whitespace-nowrap text-right tabular-nums">{u.fmtDist(t.distanceKm)}</TD>
+                          <TD className="whitespace-nowrap text-right tabular-nums">{u.fmtSpeed(t.maxSpeedKph)}</TD>
+                          <TD className="whitespace-nowrap text-right tabular-nums">{u.fmtSpeed(t.avgMovingKph)}</TD>
+                          <TD className="text-right">
+                            <MapLink report={report} t={t} />
+                          </TD>
+                        </TR>
+                      ))}
+                    </TBody>
+                  </Table>
+                </div>
+                <ul className="m-0 list-none divide-y divide-border p-0 sm:hidden">
+                  {shown.map((t) => (
+                    <li key={t.startAt} className="flex items-center justify-between gap-3 px-4 py-3">
+                      <div className="min-w-0 text-sm">
+                        <div className="font-medium">{fmt(t.startAt)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {hm(t.durationMin)} · {u.fmtDist(t.distanceKm)} · max {u.fmtSpeed(t.maxSpeedKph)}
+                        </div>
+                      </div>
+                      <MapLink report={report} t={t} />
+                    </li>
+                  ))}
+                </ul>
+                {trips.length > PAGE && <Pagination page={page} pageSize={PAGE} total={trips.length} onPageChange={setPage} />}
+              </Card>
+            </div>
+          )}
+        </div>
       )}
-    </main>
+    </>
+  );
+}
+
+function MapLink({ report, t }: { report: TripReport; t: TripDto }) {
+  return (
+    <Button asChild variant="ghost" size="sm">
+      <Link
+        href={`/map?${new URLSearchParams({ device: report.deviceId, from: t.startAt, to: new Date(Date.parse(t.endAt) + 60_000).toISOString() })}`}
+        aria-label={`View the trip starting ${new Date(t.startAt).toLocaleString()} on the map`}
+      >
+        <MapPinned /> Map
+      </Link>
+    </Button>
   );
 }
