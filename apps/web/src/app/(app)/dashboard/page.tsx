@@ -139,7 +139,7 @@ export default async function DashboardPage() {
                       <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? d.name ?? d.model ?? "Device"}</span>
                       <span className="block truncate text-xs text-muted-foreground">
                         {d.location ? `${u.fmtSpeed(d.location.speedKph)} · ignition ${d.location.ignition === true ? "on" : d.location.ignition === false ? "off" : "unknown"} · ` : ""}
-                        seen {relativeTime(d.lastSeenAt, now.getTime())}
+                        seen {relativeTime(d.lastSeenAt, now.getTime(), rc.timeZone)}
                       </span>
                     </span>
                     <StatusBadge tone={FLEET_STATE_META[s].tone} label={FLEET_STATE_META[s].label} pulse={s === "moving"} />
@@ -173,7 +173,7 @@ export default async function DashboardPage() {
                             <strong className="font-medium">{a.vehicleName ?? "A device"}</strong> {m.short}
                           </p>
                           <p className="m-0 truncate text-xs text-muted-foreground">
-                            {a.ruleName} · {relativeTime(a.occurredAt, now.getTime())}
+                            {a.ruleName} · {relativeTime(a.occurredAt, now.getTime(), rc.timeZone)}
                           </p>
                         </div>
                         {!a.acknowledgedAt && <StatusBadge tone="danger" label="New" />}

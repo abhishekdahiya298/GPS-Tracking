@@ -1,3 +1,4 @@
+import { dateFormatter, zoneLabel, type TimeFormat } from "@rio-gps/core/timezones";
 import { units, type UnitSystem } from "@rio-gps/core";
 import { getServerEnv } from "./env";
 import { logger } from "./logger";
@@ -141,7 +142,9 @@ export function alertEmail(
   name: string,
   ev: { type: string; ruleName: string; vehicleName: string | null; occurredAt: string; latitude: number | null; longitude: number | null; details: Record<string, unknown> | null },
   alertsUrl: string,
-  unitSystem: UnitSystem = "metric"
+  unitSystem: UnitSystem = "metric",
+  /** The recipient's effective zone and clock. */
+  time: { timeZone: string; timeFormat: TimeFormat } = { timeZone: "UTC", timeFormat: "24h" }
 ): EmailMessage {
   const u = units(unitSystem);
   const who = ev.vehicleName ?? "A device";
@@ -149,7 +152,7 @@ export function alertEmail(
   const extra: string[] = [];
   if (ev.details?.geofence) extra.push(`Zone: ${String(ev.details.geofence)}`);
   if (typeof ev.details?.speedKph === "number") extra.push(`Speed: ${u.fmtSpeed(ev.details.speedKph)} (limit ${u.fmtSpeed(Number(ev.details.limitKph))})`);
-  const when = new Date(ev.occurredAt).toUTCString();
+  const when = dateFormatter(time.timeZone, time.timeFormat).full(ev.occurredAt); // e.g. "Sep 25, 2026, 3:52:07 PM EDT"
   const map = ev.latitude !== null && ev.longitude !== null ? `https://www.openstreetmap.org/?mlat=${ev.latitude}&mlon=${ev.longitude}#map=16/${ev.latitude}/${ev.longitude}` : null;
   return {
     to,
@@ -197,10 +200,10 @@ ${r.rows.map((x) => `<tr><td ${tdl}>${esc(x.vehicle)}</td><td ${td}>${x.trips}</
     subject: `RIO GPS report · ${r.orgName} · ${r.periodLabel}`,
     html: layout(
       title,
-      `<p>Hi ${esc(name || "there")},</p><p>Trip summary for <strong>${esc(r.orgName)}</strong>, ${esc(r.periodLabel)} (${esc(r.timeZone)}).</p>${table}${r.csv ? "<p style=\"font-size:13px;color:#6b7280\">Every trip is in the attached CSV.</p>" : ""}${button(r.reportsUrl, "Open reports")}`
+      `<p>Hi ${esc(name || "there")},</p><p>Trip summary for <strong>${esc(r.orgName)}</strong>, ${esc(r.periodLabel)} (${esc(zoneLabel(r.timeZone))}).</p>${table}${r.csv ? "<p style=\"font-size:13px;color:#6b7280\">Every trip is in the attached CSV.</p>" : ""}${button(r.reportsUrl, "Open reports")}`
     ),
     text:
-      `${title}\n${r.orgName} (${r.timeZone})\n\n` +
+      `${title}\n${r.orgName} (${zoneLabel(r.timeZone)})\n\n` +
       r.rows.map((x) => `${x.vehicle}: ${x.trips} ${x.trips === 1 ? "trip" : "trips"}, ${u.fmtDist(x.distanceKm)}, ${hm(x.drivingMin)} driving, top ${u.fmtSpeed(x.maxSpeedKph)}`).join("\n") +
       `\nTotal: ${tot.trips} ${tot.trips === 1 ? "trip" : "trips"}, ${totDist}\n\n${r.reportsUrl}`,
     ...(r.csv ? { attachments: [{ filename: r.csvName, content: r.csv }] } : {})

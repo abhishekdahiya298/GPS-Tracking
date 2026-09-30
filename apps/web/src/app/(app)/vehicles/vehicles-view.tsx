@@ -18,6 +18,8 @@ import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import type { Page, VehicleListQuery, VehicleRow, VehicleState } from "@/lib/fleet-list";
 import { relativeTime } from "@/lib/format";
+import { RelativeTime } from "@/components/app/local-time";
+import { useTime } from "@/components/app/time-context";
 import dynamic from "next/dynamic";
 import type { EditableVehicle } from "../_fleet/vehicle-form-dialog";
 
@@ -31,6 +33,7 @@ type Can = { create: boolean; update: boolean; remove: boolean; assign: boolean;
 
 export function VehiclesView({ data, query, can }: { data: Page<VehicleRow, VehicleState>; query: VehicleListQuery; can: Can }) {
   const u = useUnits();
+  const t = useTime();
   const { set, refresh, pending } = useListParams();
   const [detailId, setDetailId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -127,7 +130,7 @@ export function VehiclesView({ data, query, can }: { data: Page<VehicleRow, Vehi
         id: "lastSeen",
         header: "Last seen",
         meta: { sortKey: "lastSeen", hideable: true, label: "Last seen" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) => <span className="whitespace-nowrap text-muted-foreground">{v.device ? relativeTime(v.lastSeenAt) : "—"}</span>
+        cell: ({ row: { original: v } }) => <span className="whitespace-nowrap text-muted-foreground">{v.device ? <RelativeTime iso={v.lastSeenAt} /> : "—"}</span>
       },
       { id: "actions", header: () => <span className="sr-only">Actions</span>, meta: { className: "w-12 text-right" } satisfies ColumnMeta, cell: ({ row }) => <RowMenu v={row.original} /> }
     ],
@@ -195,7 +198,7 @@ export function VehiclesView({ data, query, can }: { data: Page<VehicleRow, Vehi
               <div className="min-w-0 flex-1">
                 <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
                 <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground">
-                  {[v.licensePlate, v.device ? (v.device.name ?? v.device.model) : "No device", v.location ? u.fmtSpeed(v.location.speedKph) : null, v.device ? relativeTime(v.lastSeenAt) : null].filter(Boolean).join(" · ")}
+                  {[v.licensePlate, v.device ? (v.device.name ?? v.device.model) : "No device", v.location ? u.fmtSpeed(v.location.speedKph) : null, v.device ? relativeTime(v.lastSeenAt, Date.now(), t.timeZone) : null].filter(Boolean).join(" · ")}
                 </p>
                 <div className="mt-1.5">
                   <VehicleStateBadge state={v.state} />

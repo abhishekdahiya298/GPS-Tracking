@@ -8,6 +8,8 @@ import type { GeoJSONSource, Map as MlMap } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
 import { Pause, Play, Route, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toWallTime, wallTimeToUtc } from "@rio-gps/core/timezones";
+import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,11 +21,6 @@ import { indexAtTime, quickRange, trackStats } from "./fleet-model";
 export const MAX_HISTORY_POINTS = 20_000;
 type Range = "today" | "yesterday" | "7d" | "custom";
 const SPEEDS = [1, 10, 60, 300] as const;
-
-function localInput(d: Date) {
-  const off = d.getTimezoneOffset() * 60_000;
-  return new Date(d.getTime() - off).toISOString().slice(0, 16);
-}
 
 export function HistoryPanel({
   map,
@@ -40,8 +37,12 @@ export function HistoryPanel({
   onClose: () => void;
 }) {
   const u = useUnits();
+  const t = useTime();
+  const tz = t.timeZone;
+  // datetime-local inputs hold wall-clock time in the viewer's effective zone (not the device's).
+  const localInput = (d: Date) => toWallTime(d, tz);
   const [range, setRange] = useState<Range>(initial ? "custom" : "today");
-  const [from, setFrom] = useState(() => localInput(initial ? new Date(initial.from) : quickRange("today").from));
+  const [from, setFrom] = useState(() => localInput(initial ? new Date(initial.from) : quickRange("today", tz).from));
   const [to, setTo] = useState(() => (initial ? localInput(new Date(initial.to)) : ""));
   const [track, setTrack] = useState<LocationPoint[]>([]);
   const [busy, setBusy] = useState(false);
@@ -104,8 +105,8 @@ export function HistoryPanel({
       const pts: LocationPoint[] = [];
       let next: string | null = null;
       do {
-        const qs = new URLSearchParams({ deviceId, from: new Date(from).toISOString(), limit: "5000" });
-        if (to) qs.set("to", new Date(to).toISOString());
+        const qs = new URLSearchParams({ deviceId, from: wallTimeToUtc(from, tz).toISOString(), limit: "5000" });
+        if (to) qs.set("to", wallTimeToUtc(to, tz).toISOString());
         if (next) qs.set("cursor", next);
         const r = await fetch(`/api/locations/history?${qs}`, { cache: "no-store" });
         if (r.status === 401) {
@@ -128,7 +129,7 @@ export function HistoryPanel({
     } finally {
       setBusy(false);
     }
-  }, [deviceId, from, to, draw, drawCursor]);
+  }, [deviceId, from, to, tz, draw, drawCursor]);
 
   const clear = useCallback(() => {
     setPlaying(false);
@@ -175,13 +176,12 @@ export function HistoryPanel({
   const pickRange = (r: Range) => {
     setRange(r);
     if (r === "custom") return;
-    const q = quickRange(r);
+    const q = quickRange(r, tz);
     setFrom(localInput(q.from));
     setTo(q.to ? localInput(q.to) : "");
   };
 
   const p = track[cursor];
-  const dt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" });
 
   return (
     <section aria-label={`History for ${deviceName}`} className="flex flex-col gap-3 p-4">
@@ -230,6 +230,7 @@ export function HistoryPanel({
             To (empty = now)
             <Input type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} />
           </label>
+          <p className="col-span-2 m-0 text-xs text-muted-foreground">Times in {t.abbr()} ({tz.replace(/_/g, " ")}).</p>
         </div>
       )}
 
@@ -266,7 +267,7 @@ export function HistoryPanel({
                 setCursor(Number(e.target.value));
               }}
               aria-label="Playback position"
-              aria-valuetext={p ? dt.format(new Date(p.recordedAt)) : undefined}
+              aria-valuetext={p ? t.dateTimeSec(p.recordedAt) : undefined}
             />
             <Select aria-label="Playback speed" className="h-8 w-[74px] text-[13px]" value={speed} onChange={(e) => setSpeed(Number(e.target.value) as (typeof SPEEDS)[number])}>
               {SPEEDS.map((s) => (
@@ -279,7 +280,7 @@ export function HistoryPanel({
           {p && (
             <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[13px]">
               <dt className="text-muted-foreground">Time</dt>
-              <dd className="m-0 text-right tabular-nums">{dt.format(new Date(p.recordedAt))}</dd>
+              <dd className="m-0 text-right tabular-nums" title={t.full(p.recordedAt)}>{t.dateTimeSec(p.recordedAt)}</dd>
               <dt className="text-muted-foreground">Speed</dt>
               <dd className="m-0 text-right tabular-nums">{u.fmtSpeed(p.speedKph)}</dd>
               <dt className="text-muted-foreground">Distance</dt>

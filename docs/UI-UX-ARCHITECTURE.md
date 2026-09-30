@@ -61,6 +61,12 @@ Stored data is metric (km, km/h). `organizations.unit_system` (default imperial)
 `useUnits()` for display and for converting user input (speed limits, maintenance intervals,
 odometer) before it's sent. Reports CSV and emails use the same setting.
 
+## Time zones
+Instants are stored in UTC. The organization has a default IANA zone and 12/24-hour clock;
+each user may override them. The effective zone is resolved on the server and exposed with
+`useTime()` (`TimeProvider` wraps the whole shell), so screens, reports and emails agree and
+the device's own zone is never used. Details: `TIME_ZONES.md`.
+
 ## Security-relevant UI rules
 - CSP is nonce-based with `'strict-dynamic'`. **Don't render a `next/dynamic` component on the
   server** (mount it when opened): Next emits a nonce-less `<link rel=preload>` for it that the

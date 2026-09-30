@@ -79,6 +79,12 @@ describe("paged alert list", () => {
     expect((await get("from=2026-09-24&to=2026-09-24&tz=UTC")).body.total).toBe(3);
   });
 
+  it("without tz, day filters use the viewer's effective zone (organization default: Toronto)", async () => {
+    // Sep 24 03:00 UTC is Sep 23, 11 PM in Toronto
+    expect((await get("from=2026-09-23&to=2026-09-23")).body.total).toBe(3);
+    expect((await get("from=2026-09-24&to=2026-09-24")).body.total).toBe(0);
+  });
+
   it("ignores invalid parameters instead of failing, and the legacy form still works", async () => {
     const bad = await get("page=1&pageSize=9999&type=nope&tz=Mars/Base&from=yesterday");
     expect(bad.status).toBe(200);

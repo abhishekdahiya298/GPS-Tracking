@@ -79,10 +79,18 @@ describe("trip reports", () => {
     expect(res.headers.get("content-disposition")).toMatch(/^attachment; filename="trips-[A-Za-z0-9_-]+-2026-09-24-to-2026-09-25\.csv"$/);
     const lines = (await res.text()).trim().split("\r\n");
     // New organizations default to US units; stored values stay metric.
-    expect(lines[0]).toBe("vehicle,start_local,end_local,duration_min,driving_min,idle_min,distance_mi,max_speed_mph,avg_moving_mph,start_lat,start_lon,end_lat,end_lon");
-    expect(lines[1]!.split(",").slice(-7, -4)).toEqual(["3.1", "19", "19"]); // 5 km → 3.1 mi, 30 km/h → 19 mph
+    expect(lines[0]).toBe("vehicle,start_local,end_local,duration_min,driving_min,idle_min,distance_mi,max_speed_mph,avg_moving_mph,start_lat,start_lon,end_lat,end_lon,time_zone");
+    expect(lines[1]!.split(",").slice(-8, -5)).toEqual(["3.1", "19", "19"]);
+    expect(lines[1]!.split(",").at(-1)).toBe("UTC"); // 5 km → 3.1 mi, 30 km/h → 19 mph
     expect(lines).toHaveLength(3);
     expect(lines[1]!.startsWith(`"'=cmd|' /C calc'!A0"`) || lines[1]!.startsWith(`'=cmd`)).toBe(true);
+  });
+
+  it("without tz, uses the caller's effective zone (organization default: Toronto)", async () => {
+    const r = await (await get({ deviceId: devA, ...window }, cookieA)).json();
+    expect(r.timeZone).toBe("America/Toronto");
+    const csv = (await (await get({ deviceId: devA, ...window, format: "csv" }, cookieA)).text()).trim().split("\r\n");
+    expect(csv[1]!.split(",").at(-1)).toMatch(/^E[DS]T$/);
   });
 
   it("another org's device is a 404; validation errors are 400", async () => {

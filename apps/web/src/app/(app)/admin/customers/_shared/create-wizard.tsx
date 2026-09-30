@@ -1,10 +1,13 @@
 "use client";
+import type { UnitSystem } from "@rio-gps/core";
+import { DEFAULT_TIME_ZONE, zoneAbbr, zoneLabel, zoneOption } from "@rio-gps/core/timezones";
+import { TimeZoneSelect } from "@/components/app/time-zone-select";
 import { ArrowLeft, ArrowRight, Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
@@ -27,6 +30,15 @@ export function CreateCustomerWizard({ open, onOpenChange, onCreated }: { open: 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
+  const [timeZone, setTimeZone] = useState(DEFAULT_TIME_ZONE);
+  const [unitSystem, setUnitSystem] = useState<UnitSystem>("imperial");
+  const [unitsTouched, setUnitsTouched] = useState(false);
+  // Canadian fleets usually work in km, US fleets in miles: follow the zone until units are picked.
+  const pickZone = (tz: string) => {
+    setTimeZone(tz);
+    const region = zoneOption(tz)?.region;
+    if (!unitsTouched && region && region !== "Other") setUnitSystem(region === "Canada" ? "metric" : "imperial");
+  };
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [busy, setBusy] = useState(false);
@@ -59,7 +71,7 @@ export function CreateCustomerWizard({ open, onOpenChange, onCreated }: { open: 
     try {
       const out = await api<{ organizationId: string; admin: { temporaryPassword: string | null; emailed: boolean } }>("/api/admin/customers", {
         method: "POST",
-        json: { name: name.trim(), slug, admin: { name: adminName.trim(), email: adminEmail.trim() } }
+        json: { name: name.trim(), slug, timeZone, unitSystem, admin: { name: adminName.trim(), email: adminEmail.trim() } }
       });
       setDone({ id: out.organizationId, password: out.admin.temporaryPassword, emailed: out.admin.emailed });
       toast.success(`${name.trim()} created.`);
@@ -150,6 +162,24 @@ export function CreateCustomerWizard({ open, onOpenChange, onCreated }: { open: 
                     }}
                   />
                 </Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field id="cw-tz" label="Time zone" description="Where the customer's office is. Users can change their own.">
+                    <TimeZoneSelect id="cw-tz" value={timeZone} onChange={(e) => pickZone(e.target.value)} />
+                  </Field>
+                  <Field id="cw-units" label="Units">
+                    <Select
+                      id="cw-units"
+                      value={unitSystem}
+                      onChange={(e) => {
+                        setUnitsTouched(true);
+                        setUnitSystem(e.target.value as UnitSystem);
+                      }}
+                    >
+                      <option value="imperial">Miles · mph</option>
+                      <option value="metric">Kilometres · km/h</option>
+                    </Select>
+                  </Field>
+                </div>
               </>
             )}
             {step === 1 && (
@@ -169,6 +199,12 @@ export function CreateCustomerWizard({ open, onOpenChange, onCreated }: { open: 
                 <dd className="m-0 font-medium">{name}</dd>
                 <dt className="text-muted-foreground">Short name</dt>
                 <dd className="m-0">{slug}</dd>
+                <dt className="text-muted-foreground">Time zone</dt>
+                <dd className="m-0">
+                  {zoneLabel(timeZone)} ({zoneAbbr(timeZone)})
+                </dd>
+                <dt className="text-muted-foreground">Units</dt>
+                <dd className="m-0">{unitSystem === "metric" ? "Kilometres · km/h" : "Miles · mph"}</dd>
                 <dt className="text-muted-foreground">First admin</dt>
                 <dd className="m-0">
                   {adminName} &lt;{adminEmail}&gt;

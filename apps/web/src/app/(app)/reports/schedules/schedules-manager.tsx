@@ -15,13 +15,19 @@ import { Checkbox, Input, Select } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
+import { TimeZoneSelect } from "@/components/app/time-zone-select";
+import { useTime } from "@/components/app/time-context";
+import { zoneAbbr, zoneLabel, type TimeFormat } from "@rio-gps/core/timezones";
 import type { ScheduleDto } from "@/lib/report-schedules";
 
 type Opt = { id: string; label: string };
 const DAYS = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const hour = (h: number) => new Date(2000, 0, 1, h).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+/** Label for a whole local hour in the viewer's clock: "7:00 AM" or "07:00". */
+const hourLabel = (h: number, fmt: TimeFormat) => (fmt === "24h" ? `${String(h).padStart(2, "0")}:00` : `${h % 12 === 0 ? 12 : h % 12}:00 ${h < 12 ? "AM" : "PM"}`);
 
 export function SchedulesManager(props: { initial: ScheduleDto[]; members: Opt[]; devices: Opt[]; myUserId: string; emailEnabled: boolean }) {
+  const time = useTime();
+  const hour = (h: number) => hourLabel(h, time.timeFormat);
   const [items, setItems] = useState(props.initial);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<ScheduleDto | null>(null);
@@ -86,14 +92,16 @@ export function SchedulesManager(props: { initial: ScheduleDto[]; members: Opt[]
                   <StatusBadge tone={s.active ? "success" : "neutral"} label={s.active ? "Active" : "Paused"} />
                 </div>
                 <p className="m-0 mt-1 text-sm text-foreground">
-                  {s.frequency === "daily" ? `Every day at ${hour(s.sendHour)}` : `Every ${DAYS[s.weekday]} at ${hour(s.sendHour)}`} <span className="text-muted-foreground">({s.timeZone})</span>
+                  {s.frequency === "daily" ? `Every day at ${hour(s.sendHour)}` : `Every ${DAYS[s.weekday]} at ${hour(s.sendHour)}`} <span className="text-muted-foreground">
+                    ({zoneLabel(s.timeZone)}, {zoneAbbr(s.timeZone)})
+                  </span>
                 </p>
                 <p className="m-0 mt-0.5 text-sm text-muted-foreground">
                   {s.deviceIds ? s.deviceIds.map((id) => name(props.devices, id)).join(", ") : "All vehicles"} · to {s.recipientUserIds.map((id) => name(props.members, id)).join(", ")}
                   {s.attachCsv ? " · CSV attached" : ""}
                 </p>
                 <p className="m-0 mt-1 text-xs text-muted-foreground">
-                  {s.lastSentAt ? `Last sent ${new Date(s.lastSentAt).toLocaleString()}${s.lastStatus ? ` (${s.lastStatus})` : ""}` : s.lastStatus ? `Last status: ${s.lastStatus}` : "Not sent yet"}
+                  {s.lastSentAt ? `Last sent ${time.dateTime(s.lastSentAt)} ${time.abbr(s.lastSentAt)}${s.lastStatus ? ` (${s.lastStatus})` : ""}` : s.lastStatus ? `Last status: ${s.lastStatus}` : "Not sent yet"}
                 </p>
               </div>
               <div className="flex shrink-0 gap-2">
@@ -181,7 +189,9 @@ function NewScheduleDialog({
   const [allDevices, setAllDevices] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const browserTz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "UTC";
+  const time = useTime();
+  const hour = (h: number) => hourLabel(h, time.timeFormat);
+  const [tz, setTz] = useState(time.timeZone);
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -198,7 +208,7 @@ function NewScheduleDialog({
         json: {
           name: f.get("name"),
           frequency: freq,
-          timeZone: f.get("timeZone"),
+          timeZone: tz,
           sendHour: Number(f.get("sendHour")),
           weekday: Number(f.get("weekday") ?? 1),
           deviceIds: allDevices ? null : chosen,
@@ -249,8 +259,8 @@ function NewScheduleDialog({
                 ))}
               </Select>
             </Field>
-            <Field id="rs-tz" label="Time zone" description="IANA name, e.g. America/Chicago">
-              <Input id="rs-tz" name="timeZone" required defaultValue={browserTz} maxLength={64} />
+            <Field id="rs-tz" label="Time zone" description="The hour and the day/week boundaries are in this zone.">
+              <TimeZoneSelect id="rs-tz" required value={tz} onChange={(e) => setTz(e.target.value)} />
             </Field>
           </div>
 

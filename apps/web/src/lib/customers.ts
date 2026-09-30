@@ -1,3 +1,6 @@
+import { UNIT_SYSTEMS } from "@rio-gps/core";
+import { DEFAULT_TIME_ZONE } from "@rio-gps/core/timezones";
+import { TimeZoneSchema } from "./organization";
 import { isValidImei } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
 import { eq, sql } from "drizzle-orm";
@@ -23,7 +26,10 @@ export const CreateCustomerSchema = z.object({
     .trim()
     .toLowerCase()
     .regex(/^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$/, "lowercase letters, digits and dashes"),
-  admin: z.object({ email: z.string().trim().toLowerCase().email().max(254), name: z.string().trim().min(1).max(200) })
+  admin: z.object({ email: z.string().trim().toLowerCase().email().max(254), name: z.string().trim().min(1).max(200) }),
+  /** The customer's home zone (their dispatch office); users can still override it. */
+  timeZone: TimeZoneSchema.default(DEFAULT_TIME_ZONE),
+  unitSystem: z.enum(UNIT_SYSTEMS).default("imperial")
 });
 
 export const RegisterDeviceSchema = z.object({
@@ -58,7 +64,7 @@ export async function createCustomer(actorUserId: string, input: z.infer<typeof 
   let orgId: string;
   try {
     orgId = await db.transaction(async (tx) => {
-      const [org] = await tx.insert(schema.organizations).values({ name: input.name, slug: input.slug }).returning({ id: schema.organizations.id });
+      const [org] = await tx.insert(schema.organizations).values({ name: input.name, slug: input.slug, timeZone: input.timeZone, unitSystem: input.unitSystem }).returning({ id: schema.organizations.id });
       await tx.insert(schema.gpsProviders).values({ organizationId: org!.id, kind: "traccar", name: "Traccar", apiBaseUrl: "http://traccar:8082" });
       return org!.id;
     });

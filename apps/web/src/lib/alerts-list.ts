@@ -1,3 +1,4 @@
+import { addDays, canonicalTimeZone, isValidTimeZone, startOfLocalDay } from "@rio-gps/core/timezones";
 import { ALERT_TYPES } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
 import { and, count, desc, eq, gte, ilike, isNotNull, isNull, lt, or, type SQL } from "drizzle-orm";
@@ -22,18 +23,8 @@ export const AlertListQuery = z.object({
   /** Local calendar days (YYYY-MM-DD) interpreted in `tz`. */
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  tz: z
-    .string()
-    .max(64)
-    .refine((t) => {
-      try {
-        new Intl.DateTimeFormat("en", { timeZone: t });
-        return true;
-      } catch {
-        return false;
-      }
-    })
-    .default("UTC")
+  /** Optional; callers fill in the viewer's effective zone when absent. */
+  tz: z.string().max(64).refine(isValidTimeZone).optional()
 });
 export type AlertListQuery = z.infer<typeof AlertListQuery>;
 
@@ -47,21 +38,9 @@ export interface AlertPage {
 
 const likePattern = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
-/** UTC instant of local midnight for a YYYY-MM-DD day in time zone tz. */
-function dayStart(day: string, tz: string): Date {
-  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
-  const guess = Date.UTC(y, m - 1, d);
-  const off = (t: number) => {
-    const p = new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(t));
-    const g = (k: string) => Number(p.find((x) => x.type === k)!.value);
-    return Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute"), g("second")) - t;
-  };
-  let t = guess - off(guess);
-  t = guess - off(t);
-  return new Date(t);
-}
-
-export async function listAlertsPage(organizationId: string, q: AlertListQuery): Promise<AlertPage> {
+/** `defaultTz`: the viewer's effective zone, used for the day filters when the query has none. */
+export async function listAlertsPage(organizationId: string, q: AlertListQuery, defaultTz = "UTC"): Promise<AlertPage> {
+  const tz = canonicalTimeZone(q.tz ?? defaultTz) ?? "UTC";
   const e = schema.alertEvents;
   const v = schema.vehicles;
   const base: SQL[] = [eq(e.organizationId, organizationId)];
@@ -70,11 +49,8 @@ export async function listAlertsPage(organizationId: string, q: AlertListQuery):
     const p = likePattern(q.search);
     base.push(or(ilike(e.ruleName, p), ilike(v.name, p))!);
   }
-  if (q.from) base.push(gte(e.occurredAt, dayStart(q.from, q.tz)));
-  if (q.to) {
-    const next = new Date(dayStart(q.to, q.tz).getTime() + 36 * 3600_000); // a day later, then snap to local midnight
-    base.push(lt(e.occurredAt, dayStart(new Intl.DateTimeFormat("en-CA", { timeZone: q.tz }).format(next), q.tz)));
-  }
+  if (q.from) base.push(gte(e.occurredAt, startOfLocalDay(q.from, tz)));
+  if (q.to) base.push(lt(e.occurredAt, startOfLocalDay(addDays(q.to, 1), tz)));
   const status = q.status === "unack" ? [isNull(e.acknowledgedAt)] : q.status === "ack" ? [isNotNull(e.acknowledgedAt)] : [];
   const db = getDb();
   const join = and(eq(v.id, e.vehicleId), eq(v.organizationId, organizationId));

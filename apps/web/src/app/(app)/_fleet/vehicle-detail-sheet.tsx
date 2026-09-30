@@ -2,7 +2,9 @@
 import { AlertTriangle, History, Map as MapIcon, Navigation } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
-import { LocalTime } from "@/components/app/local-time";
+import { startOfLocalDay } from "@rio-gps/core/timezones";
+import { LocalTime, RelativeTime } from "@/components/app/local-time";
+import { useTime } from "@/components/app/time-context";
 import { ErrorState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useUnits } from "@/components/app/units-context";
@@ -13,7 +15,6 @@ import { alertMeta } from "@/lib/alert-meta";
 import type { AlertEventDto } from "@/lib/alerts";
 import { api, errorMessage } from "@/lib/client/api";
 import type { VehicleDetail } from "@/lib/fleet-list";
-import { relativeTime } from "@/lib/format";
 import { VehicleStateBadge } from "./vehicle-state";
 
 type Detail = VehicleDetail & { alerts: AlertEventDto[] };
@@ -23,6 +24,7 @@ const compass = (deg: number | null) => (deg === null ? "—" : `${COMPASS[Math.
 
 export function VehicleDetailSheet({ vehicleId, onOpenChange, actions }: { vehicleId: string | null; onOpenChange: (open: boolean) => void; actions?: (d: Detail) => ReactNode }) {
   const u = useUnits();
+  const time = useTime();
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -40,8 +42,7 @@ export function VehicleDetailSheet({ vehicleId, onOpenChange, actions }: { vehic
   }, [vehicleId, nonce]);
 
   const loc = detail?.location;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = startOfLocalDay(time.dayKey(Date.now()), time.timeZone); // local midnight in the viewer's zone
 
   return (
     <Sheet open={vehicleId !== null} onOpenChange={onOpenChange}>
@@ -59,7 +60,7 @@ export function VehicleDetailSheet({ vehicleId, onOpenChange, actions }: { vehic
             <div className="flex flex-wrap items-center gap-2">
               <VehicleStateBadge state={detail.state} />
               {detail.vehicle.status !== "active" && <StatusBadge tone="warning" label={detail.vehicle.status === "maintenance" ? "In maintenance" : "Inactive"} />}
-              <span className="text-sm text-muted-foreground">Last seen {relativeTime(detail.lastSeenAt)}</span>
+              <span className="text-sm text-muted-foreground">Last seen <RelativeTime iso={detail.lastSeenAt} /></span>
             </div>
 
             {loc && (
@@ -122,7 +123,7 @@ export function VehicleDetailSheet({ vehicleId, onOpenChange, actions }: { vehic
                     <li key={a.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                       <AlertTriangle className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                       <span className="flex-1 truncate">{alertMeta(a.type).label}</span>
-                      <span className="text-xs text-muted-foreground">{relativeTime(a.occurredAt)}</span>
+                      <span className="text-xs text-muted-foreground"><RelativeTime iso={a.occurredAt} /></span>
                     </li>
                   ))}
                 </ul>

@@ -40,9 +40,14 @@ describe("fleet-model", () => {
     expect(s.cumKm[1]).toBeCloseTo(1.11, 1);
   });
   it("quickRange", () => {
-    const n = new Date(2026, 8, 25, 15, 30);
-    expect(quickRange("today", n).from.getHours()).toBe(0);
-    expect(quickRange("yesterday", n).to?.getDate()).toBe(25);
-    expect(quickRange("7d", n).from.getDate()).toBe(19);
+    const n = new Date("2026-09-26T02:30:00Z"); // Sep 25, 10:30 PM in Toronto; Sep 26 in UTC
+    expect(quickRange("today", "America/Toronto", n).from.toISOString()).toBe("2026-09-25T04:00:00.000Z");
+    expect(quickRange("yesterday", "America/Toronto", n).to?.toISOString()).toBe("2026-09-25T04:00:00.000Z");
+    expect(quickRange("yesterday", "America/Toronto", n).from.toISOString()).toBe("2026-09-24T04:00:00.000Z");
+    expect(quickRange("7d", "America/Toronto", n).from.toISOString()).toBe("2026-09-19T04:00:00.000Z");
+    expect(quickRange("today", "UTC", n).from.toISOString()).toBe("2026-09-26T00:00:00.000Z");
+    // "Yesterday" across the fall-back change is 25 hours long
+    const y = quickRange("yesterday", "America/Toronto", new Date("2026-11-02T15:00:00Z"));
+    expect((y.to!.getTime() - y.from.getTime()) / 3600_000).toBe(25);
   });
 });

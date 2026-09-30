@@ -1,4 +1,5 @@
 "use client";
+import { LocalDate } from "@/components/app/local-time";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Building2, Eye, MoreHorizontal, Plus, Settings2 } from "lucide-react";
 import Link from "next/link";
@@ -50,7 +51,7 @@ export function CustomersView({ data, query, viewingAs }: { data: { items: Custo
           </span>
         )
       },
-      { id: "created", header: "Created", meta: { sortKey: "created", className: "whitespace-nowrap" } as ColumnMeta, cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString() },
+      { id: "created", header: "Created", meta: { sortKey: "created", className: "whitespace-nowrap" } as ColumnMeta, cell: ({ row }) => <LocalDate iso={row.original.createdAt} /> },
       {
         id: "status",
         header: "Status",
@@ -126,7 +127,7 @@ export function CustomersView({ data, query, viewingAs }: { data: { items: Custo
               <div className="min-w-0 text-sm">
                 <div className="font-medium">{c.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {c.members} users · {c.devices} devices · {new Date(c.createdAt).toLocaleDateString()}
+                  {c.members} users · {c.devices} devices · <LocalDate iso={c.createdAt} />
                 </div>
               </div>
             </div>

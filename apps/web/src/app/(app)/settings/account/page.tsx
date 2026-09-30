@@ -2,6 +2,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireAuthenticatedUserFromHeaders } from "@/lib/authz";
 import { AppError } from "@/lib/errors";
+import { getOrgSettings, getUserPrefs } from "@/lib/organization";
+import { getRequestContext } from "@/lib/request-context";
 import { AccountForm } from "./account-form";
 
 export const dynamic = "force-dynamic";
@@ -15,5 +17,7 @@ export default async function AccountPage() {
     if (err instanceof AppError && err.status === 401) redirect("/login?next=/settings/account");
     throw err;
   }
-  return <AccountForm name={user.name} email={user.email} />;
+  const rc = await getRequestContext();
+  const [prefs, org] = await Promise.all([getUserPrefs(user.userId), rc.status === "ok" ? getOrgSettings(rc.ctx.organizationId) : Promise.resolve(null)]);
+  return <AccountForm name={user.name} email={user.email} prefs={prefs} orgDefaults={org ? { timeZone: org.timeZone, timeFormat: org.timeFormat } : { timeZone: "UTC", timeFormat: "12h" }} />;
 }

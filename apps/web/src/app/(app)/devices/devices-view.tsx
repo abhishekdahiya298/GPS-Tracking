@@ -18,6 +18,8 @@ import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import type { DeviceListQuery, DeviceRow, DeviceState, Page } from "@/lib/fleet-list";
 import { relativeTime } from "@/lib/format";
+import { RelativeTime } from "@/components/app/local-time";
+import { useTime } from "@/components/app/time-context";
 import dynamic from "next/dynamic";
 
 // Dialogs (and their form/validation code) load on first use, not with the page.
@@ -36,6 +38,7 @@ const STATE: Record<DeviceState, { label: string; tone: StatusTone }> = {
 const label = (d: DeviceRow) => d.name ?? d.model ?? "Device";
 
 export function DevicesView({ data, query, can }: { data: Page<DeviceRow, DeviceState | "unassigned">; query: DeviceListQuery; can: Can }) {
+  const t = useTime();
   const { set, refresh, pending } = useListParams();
   const [renaming, setRenaming] = useState<DeviceRow | null>(null);
   const [toggling, setToggling] = useState<DeviceRow | null>(null);
@@ -111,7 +114,7 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
         id: "lastSeen",
         header: "Last seen",
         meta: { sortKey: "lastSeen", hideable: true, label: "Last seen" } satisfies ColumnMeta,
-        cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{relativeTime(row.original.lastSeenAt)}</span>
+        cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground"><RelativeTime iso={row.original.lastSeenAt} /></span>
       },
       { id: "actions", header: () => <span className="sr-only">Actions</span>, meta: { className: "w-12 text-right" } satisfies ColumnMeta, cell: ({ row }) => <RowMenu d={row.original} /> }
     ],
@@ -172,7 +175,7 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
               <div className="min-w-0 flex-1">
                 <p className="m-0 truncate font-medium">{label(d)}</p>
                 <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground">
-                  {[d.vehicle ? d.vehicle.name : "Not assigned", d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null, relativeTime(d.lastSeenAt)].filter(Boolean).join(" · ")}
+                  {[d.vehicle ? d.vehicle.name : "Not assigned", d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null, relativeTime(d.lastSeenAt, Date.now(), t.timeZone)].filter(Boolean).join(" · ")}
                 </p>
                 <div className="mt-1.5">
                   <StatusBadge {...STATE[d.state]} />

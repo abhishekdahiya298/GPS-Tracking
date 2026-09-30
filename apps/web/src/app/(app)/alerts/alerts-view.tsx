@@ -9,6 +9,8 @@ import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
+import { LocalTime } from "@/components/app/local-time";
+import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
 import { useListParams } from "@/components/app/use-list-params";
 import { Button } from "@/components/ui/button";
@@ -31,7 +33,7 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
   const [detail, setDetail] = useState<AlertEventDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [incoming, setIncoming] = useState(0);
-  const tz = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", []);
+  const time = useTime();
   const filtered = query.status !== "all" || query.type !== "all" || query.search !== "" || !!query.from || !!query.to;
   const onFirstPage = query.page === 1 && !filtered;
 
@@ -62,8 +64,6 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
     }
   }
 
-  const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-
   const columns = useMemo<ColumnDef<AlertEventDto, unknown>[]>(
     () => [
       {
@@ -88,7 +88,7 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
           );
         }
       },
-      { id: "time", header: "Time", meta: { className: "whitespace-nowrap" } as ColumnMeta, cell: ({ row }) => when(row.original.occurredAt) },
+      { id: "time", header: "Time", meta: { className: "whitespace-nowrap" } as ColumnMeta, cell: ({ row }) => <LocalTime iso={row.original.occurredAt} /> },
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
@@ -192,9 +192,9 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
                     ))}
                   </Select>
                   <div className="flex items-center gap-2">
-                    <Input type="date" aria-label="From date" className="w-[150px]" value={query.from ?? ""} max={query.to} onChange={(e) => set({ from: e.target.value || null, tz })} />
+                    <Input type="date" aria-label="From date" className="w-[150px]" value={query.from ?? ""} max={query.to} onChange={(e) => set({ from: e.target.value || null, tz: null })} />
                     <span className="text-xs text-muted-foreground">to</span>
-                    <Input type="date" aria-label="To date" className="w-[150px]" value={query.to ?? ""} min={query.from} onChange={(e) => set({ to: e.target.value || null, tz })} />
+                    <Input type="date" aria-label="To date" className="w-[150px]" value={query.to ?? ""} min={query.from} onChange={(e) => set({ to: e.target.value || null, tz: null })} />
                   </div>
                   {filtered && (
                     <Button variant="ghost" size="sm" onClick={() => set({ search: null, status: null, type: null, from: null, to: null, tz: null })}>
@@ -209,7 +209,7 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
                     <div className={e.acknowledgedAt ? "" : "font-medium"}>{describeAlert(e, u)}</div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       {e.acknowledgedAt ? <StatusBadge tone="neutral" label="Acknowledged" /> : <StatusBadge tone="primary" label="New" />}
-                      {when(e.occurredAt)}
+                      <LocalTime iso={e.occurredAt} />
                     </div>
                   </div>
                 </div>
@@ -236,7 +236,7 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
             <div className="p-5">
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
               <dt className="text-muted-foreground">Status</dt>
-              <dd className="m-0">{detail.acknowledgedAt ? `Acknowledged ${new Date(detail.acknowledgedAt).toLocaleString()}` : "New"}</dd>
+              <dd className="m-0">{detail.acknowledgedAt ? `Acknowledged ${time.full(detail.acknowledgedAt)}` : "New"}</dd>
               <dt className="text-muted-foreground">Severity</dt>
               <dd className="m-0">
                 <StatusBadge tone={(SEVERITY[detail.type] ?? SEVERITY.ignition_on!).tone} label={(SEVERITY[detail.type] ?? SEVERITY.ignition_on!).label} />
@@ -244,7 +244,7 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
               <dt className="text-muted-foreground">Vehicle</dt>
               <dd className="m-0">{detail.vehicleName ?? "—"}</dd>
               <dt className="text-muted-foreground">Time</dt>
-              <dd className="m-0">{new Date(detail.occurredAt).toLocaleString()}</dd>
+              <dd className="m-0">{time.full(detail.occurredAt)}</dd>
               {detail.latitude !== null && detail.longitude !== null && (
                 <>
                   <dt className="text-muted-foreground">Location</dt>

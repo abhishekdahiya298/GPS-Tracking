@@ -9,6 +9,7 @@ import { shapeRing } from "@rio-gps/core/geo";
 import { SegmentedFilter } from "@/components/app/filter-bar";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
+import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,10 @@ function StateDot({ state }: { state: MapState }) {
 
 export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
   const u = useUnits();
+  const time = useTime();
+  // Read from callbacks that are set up once (stream handlers, the popup effect).
+  const timeRef = useRef(time);
+  timeRef.current = time;
   const mapDiv = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MlMap | null>(null);
   const layer = useRef<FleetLayer | null>(null);
@@ -84,7 +89,7 @@ export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
     },
     onAlert: (a) => {
       toast.warning(`${a.vehicleName ?? "A vehicle"}: ${a.ruleName}`, {
-        description: new Date(a.occurredAt).toLocaleTimeString(),
+        description: timeRef.current.time(a.occurredAt),
         action: { label: "View", onClick: () => window.location.assign("/alerts") }
       });
     }
@@ -261,7 +266,7 @@ export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
     s.textContent = `${STATE_LABEL[mapState(sel, Date.now(), offlineSeconds)]} · ${u.fmtSpeed(sel.location.speedKph)} · ignition ${sel.location.ignition === null ? "unknown" : sel.location.ignition ? "on" : "off"}`;
     const w = document.createElement("span");
     w.className = "text-muted-foreground";
-    w.textContent = `GPS fix ${new Date(sel.location.recordedAt).toLocaleString()}`;
+    w.textContent = `GPS fix ${timeRef.current.dateTimeSec(sel.location.recordedAt)} ${timeRef.current.abbr(sel.location.recordedAt)}`;
     el.append(t, s, w);
     const ll = layer.current?.displayed(sel.deviceId) ?? [sel.location.longitude, sel.location.latitude];
     popup.current = new maplibregl.Popup({ offset: 18, closeButton: true, maxWidth: "260px" }).setLngLat(ll).setDOMContent(el).addTo(m);

@@ -27,7 +27,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       </main>
     );
   }
-  const { user, ctx, orgName, unitSystem } = rc;
+  const { user, ctx, orgName, unitSystem, timeZone, timeFormat } = rc;
   const canSeeAlerts = contextHasPermission(ctx, "alerts.read");
   const unack = canSeeAlerts ? await getUnacknowledgedAlertCount(ctx.organizationId) : 0;
   const viewingAs = ctx.isSuperAdmin && ctx.role === null;
@@ -40,6 +40,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       unackAlerts={unack}
       canSeeAlerts={canSeeAlerts}
       unitSystem={unitSystem}
+      timeZone={timeZone}
+      timeFormat={timeFormat}
     >
       {children}
     </AppShell>

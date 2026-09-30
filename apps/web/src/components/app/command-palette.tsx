@@ -1,4 +1,5 @@
 "use client";
+import { useTime } from "./time-context";
 import * as D from "@radix-ui/react-dialog";
 import { Bell, Building2, Cpu, CornerDownLeft, Hexagon, Loader2, Search, Truck, Users, type LucideIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -107,15 +108,16 @@ function Palette({ nav, onDone }: { nav: NavSection[]; onDone: () => void }) {
     };
   }, [q]);
 
+  const time = useTime();
   const items = useMemo<Item[]>(() => {
     const term = q.trim().toLowerCase();
     const pages = nav
       .flatMap((s) => s.items)
       .filter((i) => !term || i.label.toLowerCase().includes(term))
       .map((i) => ({ key: `p:${i.href}`, group: "pages" as const, title: i.label, subtitle: null, href: i.href }));
-    const found = hits.map((h) => ({ key: `${h.group}:${h.id}`, group: h.group, title: h.title, subtitle: h.group === "alerts" && h.subtitle ? new Date(h.subtitle).toLocaleString() : h.subtitle, href: h.href }));
+    const found = hits.map((h) => ({ key: `${h.group}:${h.id}`, group: h.group, title: h.title, subtitle: h.group === "alerts" && h.subtitle ? time.dateTime(h.subtitle) : h.subtitle, href: h.href }));
     return [...pages, ...found].sort((a, b) => ORDER.indexOf(a.group) - ORDER.indexOf(b.group));
-  }, [nav, hits, q]);
+  }, [nav, hits, q, time]);
 
   useEffect(() => setActive(0), [items.length, q]);
   useEffect(() => {

@@ -1,4 +1,5 @@
 "use client";
+import { useTime } from "@/components/app/time-context";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Copy, KeyRound, MoreHorizontal, ShieldCheck, UserMinus, UserPlus, Users } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
@@ -32,10 +33,18 @@ const ROLE_HELP: Record<Role, string> = {
   VIEWER: "Read-only: live map, vehicles, history, alerts."
 };
 
-function lastActive(iso: string | null) {
-  if (!iso) return "Never signed in";
-  const d = Math.round((Date.now() - Date.parse(iso)) / 86_400_000);
-  return d <= 0 ? "Today" : d === 1 ? "Yesterday" : `${d} days ago`;
+/** Calendar days in the viewer's zone ("Yesterday" = the previous local date, not 24 h ago). */
+function LastActive({ iso }: { iso: string | null }) {
+  const time = useTime();
+  if (!iso) return <>Never signed in</>;
+  const today = time.dayKey(Date.now());
+  const day = time.dayKey(iso);
+  const days = Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${day}T12:00:00Z`)) / 86_400_000);
+  return (
+    <time dateTime={iso} title={time.full(iso)} suppressHydrationWarning>
+      {days <= 0 ? "Today" : days === 1 ? "Yesterday" : `${days} days ago`}
+    </time>
+  );
 }
 
 export function TeamView({ data, query, you, canManage }: { data: TeamPage; query: TeamListQuery; you: string; canManage: boolean }) {
@@ -77,7 +86,7 @@ export function TeamView({ data, query, you, canManage }: { data: TeamPage; quer
           </span>
         )
       },
-      { id: "lastActive", header: "Last active", meta: { sortKey: "lastActive", className: "whitespace-nowrap" } as ColumnMeta, cell: ({ row }) => lastActive(row.original.lastSignInAt) },
+      { id: "lastActive", header: "Last active", meta: { sortKey: "lastActive", className: "whitespace-nowrap" } as ColumnMeta, cell: ({ row }) => <LastActive iso={row.original.lastSignInAt} /> },
       {
         id: "status",
         header: "Status",
@@ -166,7 +175,7 @@ export function TeamView({ data, query, you, canManage }: { data: TeamPage; quer
                 </div>
                 <div className="break-all text-xs text-muted-foreground">{m.email}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  {ROLE_LABEL[m.role]} · {lastActive(m.lastSignInAt)}
+                  {ROLE_LABEL[m.role]} · <LastActive iso={m.lastSignInAt} />
                 </div>
               </div>
               {canManage && m.userId !== you && <RowMenu m={m} />}

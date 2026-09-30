@@ -1,3 +1,4 @@
+import { effectiveTimePrefs } from "@rio-gps/core/timezones";
 import {
   ALERT_TYPES,
   alertChannel,
@@ -434,13 +435,16 @@ async function deliver(organizationId: string, fired: FiredEvent[]) {
   if (toEmail.length === 0 || !isEmailEnabled()) return;
   try {
     const recipients = await db
-      .select({ email: schema.users.email, name: schema.users.name })
+      .select({ email: schema.users.email, name: schema.users.name, timeZone: schema.users.timeZone, timeFormat: schema.users.timeFormat })
       .from(schema.memberships)
       .innerJoin(schema.users, eq(schema.users.id, schema.memberships.userId))
       .where(and(eq(schema.memberships.organizationId, organizationId), inArray(schema.memberships.role, ["ORG_ADMIN", "FLEET_MANAGER", "DISPATCHER"])));
     if (recipients.length === 0) return;
     const appUrl = new URL(getServerEnv().AUTH_URL).origin;
-    const [org] = await db.select({ unitSystem: schema.organizations.unitSystem }).from(schema.organizations).where(eq(schema.organizations.id, organizationId));
+    const [org] = await db
+      .select({ unitSystem: schema.organizations.unitSystem, timeZone: schema.organizations.timeZone, timeFormat: schema.organizations.timeFormat })
+      .from(schema.organizations)
+      .where(eq(schema.organizations.id, organizationId));
     for (const f of toEmail) {
       // Throttle per (rule, device) using the rule state row.
       const allowed = await db.transaction(async (tx) => {
@@ -456,7 +460,8 @@ async function deliver(organizationId: string, fired: FiredEvent[]) {
       }
       const dto = toEventDto(f.row, f.row.vehicleId ? (names.get(f.row.vehicleId) ?? null) : null);
       for (const r of recipients) {
-        await sendEmail(alertEmail(r.email, r.name, dto, `${appUrl}/alerts`, org?.unitSystem ?? "imperial")).catch(() => undefined);
+        const time = effectiveTimePrefs({ timeZone: org?.timeZone ?? "UTC", timeFormat: org?.timeFormat ?? "12h" }, r);
+        await sendEmail(alertEmail(r.email, r.name, dto, `${appUrl}/alerts`, org?.unitSystem ?? "imperial", time)).catch(() => undefined);
       }
     }
   } catch (err) {

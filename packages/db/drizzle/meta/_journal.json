@@ -50,6 +50,13 @@
       "when": 1790334171777,
       "tag": "0006_org_unit_system",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790353960438,
+      "tag": "0007_org_user_time_zone",
+      "breakpoints": true
     }
   ]
 }

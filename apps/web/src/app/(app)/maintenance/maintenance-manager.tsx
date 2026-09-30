@@ -8,6 +8,8 @@ import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
 import { StatusBadge, type StatusTone } from "@/components/app/status-badge";
+import { wallTimeToUtc } from "@rio-gps/core/timezones";
+import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -35,10 +37,10 @@ const PRESETS = [
   { name: "Annual DOT inspection", km: null, days: 365 },
   { name: "Registration renewal", km: null, days: 365 }
 ];
-const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 
 export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[]; members: Opt[]; myUserId: string; canWrite: boolean }) {
   const u = useUnits();
+  const time = useTime();
   const router = useRouter();
   const [items, setItems] = useState(props.initial);
   const [filter, setFilter] = useState<Filter>("all");
@@ -142,7 +144,7 @@ export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[];
                           </div>
                           <div className={cn("mt-1 text-sm", i.status.state === "overdue" ? "text-danger" : "text-foreground")}>{remaining(i)}</div>
                           <div className="mt-0.5 text-xs text-muted-foreground">
-                            {u.fmtDist(i.status.kmSinceService)} since last service on {new Date(i.lastServiceAt).toLocaleDateString()}
+                            {u.fmtDist(i.status.kmSinceService)} since last service on {time.date(i.lastServiceAt)}
                             {i.lastServiceOdometerKm !== null ? ` (odometer ${u.fmtDist(i.lastServiceOdometerKm, 0)})` : ""}
                           </div>
                           {i.note && <div className="mt-0.5 text-xs text-muted-foreground">{i.note}</div>}
@@ -154,7 +156,7 @@ export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[];
                               <ul className="m-0 mt-1 grid gap-0.5 pl-5">
                                 {i.history.map((h) => (
                                   <li key={h.servicedAt}>
-                                    {new Date(h.servicedAt).toLocaleDateString()}
+                                    {time.date(h.servicedAt)}
                                     {h.kmSincePrevious !== null ? ` · ${u.fmtDist(h.kmSincePrevious, 0)} since previous` : ""}
                                     {h.odometerKm !== null ? ` · odometer ${u.fmtDist(h.odometerKm, 0)}` : ""}
                                     {h.note ? ` · ${h.note}` : ""}
@@ -237,6 +239,9 @@ export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[];
 
 function AddReminderDialog({ open, onOpenChange, vehicles, members, myUserId, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; vehicles: Opt[]; members: Opt[]; myUserId: string; onCreated: () => Promise<void> }) {
   const u = useUnits();
+  const time = useTime();
+  // Service dates are calendar days in the viewer's zone, stored as local noon (never slips a day).
+  const today = time.dayKey(Date.now());
   const [preset, setPreset] = useState<(typeof PRESETS)[number] | null>(PRESETS[0]!);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -259,7 +264,7 @@ function AddReminderDialog({ open, onOpenChange, vehicles, members, myUserId, on
           // Entered in the organization's unit; stored in km.
           intervalKm: dist === null ? null : Math.round(u.toKm(dist)),
           intervalDays: num(f.get("intervalDays")),
-          lastServiceAt: new Date(`${f.get("lastServiceAt")}T12:00:00`).toISOString(),
+          lastServiceAt: wallTimeToUtc(`${String(f.get("lastServiceAt"))}T12:00`, time.timeZone).toISOString(),
           lastServiceOdometerKm: odo === null ? null : Math.round(u.toKm(odo)),
           notifyUserIds: f.getAll("notify").map(String),
           note: String(f.get("note") ?? "").trim() || null
@@ -308,7 +313,7 @@ function AddReminderDialog({ open, onOpenChange, vehicles, members, myUserId, on
               <Input id="m-days" name="intervalDays" type="number" min={1} max={3650} defaultValue={preset?.days ?? ""} />
             </Field>
             <Field id="m-last" label="Last service date" required>
-              <Input id="m-last" name="lastServiceAt" type="date" required defaultValue={today()} max={today()} />
+              <Input id="m-last" name="lastServiceAt" type="date" required defaultValue={today} max={today} />
             </Field>
             <Field id="m-odo" label={`Odometer then (${u.distance})`} description="Optional, for your records">
               <Input id="m-odo" name="odometer" type="number" min={0} />
@@ -346,6 +351,9 @@ function AddReminderDialog({ open, onOpenChange, vehicles, members, myUserId, on
 
 function ServiceDialog({ item, onClose, onDone }: { item: ItemDto | null; onClose: () => void; onDone: () => Promise<void> }) {
   const u = useUnits();
+  const time = useTime();
+  // Service dates are calendar days in the viewer's zone, stored as local noon (never slips a day).
+  const today = time.dayKey(Date.now());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   return (
@@ -366,7 +374,7 @@ function ServiceDialog({ item, onClose, onDone }: { item: ItemDto | null; onClos
                 await api(`/api/maintenance/${item.id}/service`, {
                   method: "POST",
                   json: {
-                    servicedAt: d === today() ? undefined : new Date(`${d}T12:00:00`).toISOString(),
+                    servicedAt: d === today ? undefined : wallTimeToUtc(`${d}T12:00`, time.timeZone).toISOString(),
                     odometerKm: odo ? Math.round(u.toKm(Number(odo))) : null,
                     note: String(f.get("note") ?? "").trim() || null
                   }
@@ -382,7 +390,7 @@ function ServiceDialog({ item, onClose, onDone }: { item: ItemDto | null; onClos
           >
             <div className="grid gap-3 sm:grid-cols-2">
               <Field id="s-date" label="Service date" required>
-                <Input id="s-date" type="date" name="servicedAt" required defaultValue={today()} max={today()} />
+                <Input id="s-date" type="date" name="servicedAt" required defaultValue={today} max={today} />
               </Field>
               <Field id="s-odo" label={`Odometer (${u.distance})`} description="Optional">
                 <Input id="s-odo" type="number" name="odometer" min={0} />

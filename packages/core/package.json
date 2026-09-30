@@ -24,6 +24,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./units": "./src/units.ts",
-    "./geo": "./src/geo.ts"
+    "./geo": "./src/geo.ts",
+    "./timezones": "./src/timezones.ts"
   }
 }

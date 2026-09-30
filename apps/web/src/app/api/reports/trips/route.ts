@@ -6,7 +6,9 @@ import { requirePermission, requireTenantContext } from "@/lib/authz";
 import { getServerEnv } from "@/lib/env";
 import { errorResponse, NotFoundError, ValidationError } from "@/lib/errors";
 import { deviceBelongsToOrg } from "@/lib/locations";
-import { buildTripReport, isValidTimeZone, tripReportCsv } from "@/lib/reports";
+import { canonicalTimeZone } from "@rio-gps/core/timezones";
+import { getTimePrefs } from "@/lib/organization";
+import { buildTripReport, tripReportCsv } from "@/lib/reports";
 
 export const dynamic = "force-dynamic";
 const DAY = 86_400_000;
@@ -14,7 +16,8 @@ const Query = z.object({
   deviceId: z.string().uuid(),
   from: z.string().datetime({ offset: true }),
   to: z.string().datetime({ offset: true }),
-  tz: z.string().max(64).default("UTC"),
+  /** Optional: defaults to the caller's effective zone (their own setting, else the organization's). */
+  tz: z.string().max(64).optional(),
   format: z.enum(["json", "csv"]).default("json")
 });
 
@@ -30,10 +33,11 @@ export async function GET(request: Request) {
     if (from >= to) throw new ValidationError("from must be earlier than to");
     const maxDays = getServerEnv().MAX_HISTORY_RANGE_DAYS;
     if (to.getTime() - from.getTime() > maxDays * DAY) throw new ValidationError(`Range exceeds ${maxDays} days`);
-    if (!isValidTimeZone(q.data.tz)) throw new ValidationError("Unknown time zone");
+    const tz = q.data.tz !== undefined ? canonicalTimeZone(q.data.tz) : (await getTimePrefs(ctx.organizationId, ctx.userId)).timeZone;
+    if (!tz) throw new ValidationError("Unknown time zone");
     if (!(await deviceBelongsToOrg(q.data.deviceId, ctx.organizationId))) throw new NotFoundError("Device not found");
 
-    const report = await buildTripReport(ctx.organizationId, q.data.deviceId, from, to, q.data.tz);
+    const report = await buildTripReport(ctx.organizationId, q.data.deviceId, from, to, tz);
     if (q.data.format === "csv") {
       const [label] = await getDb()
         .select({ vehicle: schema.vehicles.name, name: schema.gpsDevices.name, model: schema.gpsDevices.model })

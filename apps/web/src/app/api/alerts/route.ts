@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { countUnacknowledged, listEvents } from "@/lib/alerts";
 import { AlertListQuery, listAlertsPage } from "@/lib/alerts-list";
+import { getTimePrefs } from "@/lib/organization";
 import { parseListQuery } from "@/lib/fleet-list";
 import { requirePermission, requireTenantContext } from "@/lib/authz";
 import { errorResponse, ValidationError } from "@/lib/errors";
@@ -22,7 +23,8 @@ export async function GET(request: Request) {
     const params = Object.fromEntries(new URL(request.url).searchParams);
     // Paged form for the Alerts page: ?page=&pageSize=&status=&type=&search=&from=&to=&tz=
     if (["page", "pageSize", "status", "type", "search", "from", "to", "tz"].some((k) => k in params)) {
-      const page = await listAlertsPage(ctx.organizationId, parseListQuery(AlertListQuery, params));
+      const q = parseListQuery(AlertListQuery, params);
+      const page = await listAlertsPage(ctx.organizationId, q, q.tz ?? (await getTimePrefs(ctx.organizationId, ctx.userId)).timeZone);
       return NextResponse.json(page, { headers: { "Cache-Control": "no-store" } });
     }
     const q = Query.safeParse(Object.fromEntries(new URL(request.url).searchParams));

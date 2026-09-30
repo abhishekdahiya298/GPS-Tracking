@@ -1,6 +1,6 @@
 /** Small, dependency-free display formatters (pure; safe on server and client). */
 
-export function relativeTime(iso: string | null | undefined, now: number = Date.now()): string {
+export function relativeTime(iso: string | null | undefined, now: number = Date.now(), timeZone?: string): string {
   if (!iso) return "never";
   const s = Math.round((now - Date.parse(iso)) / 1000);
   if (s < 0) return "just now";
@@ -12,14 +12,10 @@ export function relativeTime(iso: string | null | undefined, now: number = Date.
   if (h < 24) return `${h} h ago`;
   const d = Math.round(h / 24);
   if (d < 30) return `${d} d ago`;
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", ...(timeZone ? { timeZone } : {}) });
 }
 
 export function durationMin(min: number): string {
   if (min < 60) return `${min} min`;
   return `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m`;
-}
-
-export function dateTime(iso: string, timeZone?: string): string {
-  return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", ...(timeZone ? { timeZone } : {}) });
 }

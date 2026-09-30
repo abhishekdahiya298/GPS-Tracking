@@ -17,7 +17,7 @@ export default async function AlertsPage({ searchParams }: { searchParams: Promi
   if (!contextHasPermission(ctx, "alerts.read")) redirect("/dashboard");
   const org = ctx.organizationId;
   const q = parseListQuery(AlertListQuery, await searchParams);
-  const [page, rules, fences, vehicles] = await Promise.all([listAlertsPage(org, q), listRules(org), listGeofences(org), listVehicles(org)]);
+  const [page, rules, fences, vehicles] = await Promise.all([listAlertsPage(org, q, rc.timeZone), listRules(org), listGeofences(org), listVehicles(org)]);
   return (
     <AlertsView
       data={page}

@@ -16,7 +16,7 @@ export default async function OrganizationSettingsPage() {
   return (
     <>
       <PageHeader title="Settings" description="Organization-wide preferences. They apply to everyone in your organization." />
-      <OrgSettingsForm name={settings.name} initialUnits={settings.unitSystem} />
+      <OrgSettingsForm name={settings.name} initial={{ unitSystem: settings.unitSystem, timeZone: settings.timeZone, timeFormat: settings.timeFormat }} />
     </>
   );
 }

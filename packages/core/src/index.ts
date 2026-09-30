@@ -8,3 +8,4 @@ export * from "./trips.js";
 export * from "./schedule.js";
 export * from "./maintenance.js";
 export * from "./units.js";
+export * from "./timezones.js";

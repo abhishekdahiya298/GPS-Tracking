@@ -1,3 +1,4 @@
+import { dateFormatter } from "@rio-gps/core/timezones";
 import { csvCell, detectTrips, summarizeByDay, units, type DaySummary, type Trip, type UnitSystem } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
 import { and, asc, eq, gte, lt } from "drizzle-orm";
@@ -47,14 +48,7 @@ function toDto(t: Trip): TripDto {
   };
 }
 
-export function isValidTimeZone(tz: string): boolean {
-  try {
-    new Intl.DateTimeFormat("en", { timeZone: tz });
-    return true;
-  } catch {
-    return false;
-  }
-}
+export { isValidTimeZone } from "@rio-gps/core/timezones";
 
 /** The caller has already verified the device belongs to organizationId. */
 export async function buildTripReport(organizationId: string, deviceId: string, from: Date, to: Date, timeZone: string): Promise<TripReport> {
@@ -92,11 +86,12 @@ export function tripReportCsv(r: TripReport, vehicleLabel: string, system: UnitS
   const s0 = (kph: number) => Math.round(u.speed_(kph));
   const du = system === "imperial" ? "mi" : "km";
   const su = system === "imperial" ? "mph" : "kph";
-  const fmt = (iso: string) =>
-    new Intl.DateTimeFormat("en-CA", { timeZone: r.timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(iso));
-  const head = ["vehicle", "start_local", "end_local", "duration_min", "driving_min", "idle_min", `distance_${du}`, `max_speed_${su}`, `avg_moving_${su}`, "start_lat", "start_lon", "end_lat", "end_lon"];
+  // Local wall time ("YYYY-MM-DD HH:mm", 24 h: sortable in spreadsheets) plus the zone
+  // abbreviation in effect at the trip start, so rows around a DST change stay unambiguous.
+  const f = dateFormatter(r.timeZone, "24h");
+  const head = ["vehicle", "start_local", "end_local", "duration_min", "driving_min", "idle_min", `distance_${du}`, `max_speed_${su}`, `avg_moving_${su}`, "start_lat", "start_lon", "end_lat", "end_lon", "time_zone"];
   const lines = r.trips.map((t) =>
-    [vehicleLabel, fmt(t.startAt), fmt(t.endAt), t.durationMin, t.drivingMin, t.idleMin, d1(t.distanceKm), s0(t.maxSpeedKph), s0(t.avgMovingKph), t.start.lat.toFixed(6), t.start.lon.toFixed(6), t.end.lat.toFixed(6), t.end.lon.toFixed(6)].map(csvCell).join(",")
+    [vehicleLabel, f.iso(t.startAt), f.iso(t.endAt), t.durationMin, t.drivingMin, t.idleMin, d1(t.distanceKm), s0(t.maxSpeedKph), s0(t.avgMovingKph), t.start.lat.toFixed(6), t.start.lon.toFixed(6), t.end.lat.toFixed(6), t.end.lon.toFixed(6), f.abbr(t.startAt)].map(csvCell).join(",")
   );
   return [head.join(","), ...lines].join("\r\n") + "\r\n";
 }

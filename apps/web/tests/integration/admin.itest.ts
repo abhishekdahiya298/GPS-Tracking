@@ -99,6 +99,19 @@ describe("admin: onboarding", () => {
     expect(list.customers.find((c: { slug: string }) => c.slug === "acme")).toMatchObject({ members: 1, devices: 0 });
   });
 
+  it("new customers get their own time zone and units (defaults: Toronto, miles)", async () => {
+    const mk = (slug: string, extra: Record<string, unknown>) =>
+      customersPOST(req("POST", "/api/admin/customers", "root", { name: `Co ${slug}`, slug, admin: { email: `${slug}@x.test`, name: "A" }, ...extra }));
+    expect((await mk("van-co", { timeZone: "America/Vancouver", unitSystem: "metric" })).status).toBe(201);
+    expect((await mk("def-co", {})).status).toBe(201);
+    expect((await mk("bad-co", { timeZone: "Atlantis/Capital" })).status).toBe(400);
+    const rows = await getDb().select({ slug: schema.organizations.slug, tz: schema.organizations.timeZone, u: schema.organizations.unitSystem }).from(schema.organizations);
+    const by = Object.fromEntries(rows.map((r) => [r.slug, [r.tz, r.u]]));
+    expect(by["van-co"]).toEqual(["America/Vancouver", "metric"]);
+    expect(by["def-co"]).toEqual(["America/Toronto", "imperial"]);
+    expect(by["bad-co"]).toBeUndefined();
+  });
+
   it("validates the IMEI check digit before touching Traccar", async () => {
     const res = await devicesPOST(req("POST", "/", "root", { imei: "864361078566116", model: "FTM880" }), p(customerId));
     expect(res.status).toBe(400);

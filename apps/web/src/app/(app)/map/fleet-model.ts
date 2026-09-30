@@ -2,6 +2,7 @@
  * Pure, framework-free helpers for the live map (unit-tested). Nothing here
  * changes GPS data: interpolation only produces display coordinates.
  */
+import { addDays, dateFormatter, startOfLocalDay } from "@rio-gps/core/timezones";
 import type { CurrentDeviceLocation, LocationPoint } from "@/lib/locations";
 
 export type MapState = "moving" | "idle" | "offline";
@@ -89,13 +90,13 @@ export function trackStats(pts: LocationPoint[]): TrackStats {
   return { km, maxKph: max, cumKm: cum };
 }
 
-/** Quick history ranges in the browser's local time. */
-export function quickRange(kind: "today" | "yesterday" | "7d", now = new Date()): { from: Date; to: Date | null } {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
+/** Quick history ranges as local calendar days in `timeZone` (DST-safe). */
+export function quickRange(kind: "today" | "yesterday" | "7d", timeZone: string, now = new Date()): { from: Date; to: Date | null } {
+  const today = dateFormatter(timeZone).dayKey(now);
+  const start = startOfLocalDay(today, timeZone);
   if (kind === "today") return { from: start, to: null };
-  if (kind === "yesterday") return { from: new Date(start.getTime() - 86_400_000), to: start };
-  return { from: new Date(start.getTime() - 6 * 86_400_000), to: null };
+  if (kind === "yesterday") return { from: startOfLocalDay(addDays(today, -1), timeZone), to: start };
+  return { from: startOfLocalDay(addDays(today, -6), timeZone), to: null };
 }
 
 /** North America fallback when there's nothing to fit. */

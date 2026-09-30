@@ -1,5 +1,5 @@
 import { boolean, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { organizations } from "./organizations";
+import { organizations, timeFormatEnum } from "./organizations";
 
 /**
  * @deprecated Legacy v0 role enum, superseded by `memberships.role` (org_role).
@@ -23,6 +23,10 @@ export const users = pgTable(
     image: text("image"),
     /** Platform operator: bypasses tenant membership checks. Never settable through any API. */
     isSuperAdmin: boolean("is_super_admin").notNull().default(false),
+    /** Personal display time zone; null = the organization's. */
+    timeZone: text("time_zone"),
+    /** Personal clock; null = the organization's. */
+    timeFormat: timeFormatEnum("time_format"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     /** @deprecated v0 column; organization access is via memberships. Always NULL for new users. */

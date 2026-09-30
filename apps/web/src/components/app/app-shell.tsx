@@ -28,8 +28,9 @@ import { Sheet, SheetContent } from "../ui/dialog";
 import { toast } from "../ui/toaster";
 import { CommandPalette } from "./command-palette";
 import { isActive, type NavIcon, type NavSection } from "./nav-config";
+import { TimeProvider } from "./time-context";
 import { UnitsProvider } from "./units-context";
-import type { UnitSystem } from "@rio-gps/core";
+import type { TimeFormat, UnitSystem } from "@rio-gps/core";
 
 const ICONS: Record<NavIcon, LucideIcon> = {
   dashboard: LayoutDashboard,
@@ -63,6 +64,8 @@ export function AppShell({
   unackAlerts,
   canSeeAlerts,
   unitSystem,
+  timeZone,
+  timeFormat,
   children
 }: {
   nav: NavSection[];
@@ -72,6 +75,8 @@ export function AppShell({
   unackAlerts: number;
   canSeeAlerts: boolean;
   unitSystem: UnitSystem;
+  timeZone: string;
+  timeFormat: TimeFormat;
   children: ReactNode;
 }) {
   const pathname = usePathname() ?? "/";
@@ -80,6 +85,7 @@ export function AppShell({
   const fullBleed = FULL_BLEED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   return (
+    <TimeProvider timeZone={timeZone} timeFormat={timeFormat}>
     <div className="flex min-h-dvh bg-canvas">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:shadow-pop">
         Skip to content
@@ -129,6 +135,7 @@ export function AppShell({
         </main>
       </div>
     </div>
+    </TimeProvider>
   );
 }
 

@@ -16,22 +16,20 @@ import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import type { CustomerDetail } from "@/lib/customers";
 import { viewAs } from "../_shared/view-as";
+import { RelativeTime } from "@/components/app/local-time";
+import { useTime } from "@/components/app/time-context";
 
 const ROLE_LABEL: Record<string, string> = { ORG_ADMIN: "Org Admin", FLEET_MANAGER: "Fleet Manager", DISPATCHER: "Dispatcher", VIEWER: "Viewer" };
-const ago = (iso: string | null) => {
-  if (!iso) return "Never";
-  const m = Math.round((Date.now() - Date.parse(iso)) / 60_000);
-  return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
-};
 
 export function CustomerDetailView({ c }: { c: CustomerDetail }) {
+  const time = useTime();
   const router = useRouter();
   const [registering, setRegistering] = useState(false);
   return (
     <>
       <PageHeader
         title={c.name}
-        description={`${c.slug} · created ${new Date(c.createdAt).toLocaleDateString()}`}
+        description={`${c.slug} · created ${time.date(c.createdAt)}`}
         breadcrumbs={[{ label: "Customers", href: "/admin/customers" }, { label: c.name }]}
         actions={
           <>
@@ -81,7 +79,7 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
                     </TD>
                     <TD>{d.vehicleName ?? <span className="text-muted-foreground">Unassigned</span>}</TD>
                     <TD>{d.status === "active" ? <StatusBadge tone="success" label="Active" /> : <StatusBadge tone="neutral" label={d.status === "retired" ? "Retired" : "Deactivated"} />}</TD>
-                    <TD className="whitespace-nowrap">{ago(d.lastSeenAt)}</TD>
+                    <TD className="whitespace-nowrap">{d.lastSeenAt ? <RelativeTime iso={d.lastSeenAt} /> : "Never"}</TD>
                   </TR>
                 ))}
               </TBody>
@@ -104,7 +102,7 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
                   </div>
                   <div className="shrink-0 text-right text-xs">
                     <div>{ROLE_LABEL[m.role] ?? m.role}</div>
-                    <div className="text-muted-foreground">{m.lastSignInAt ? `Active ${ago(m.lastSignInAt)}` : "Invited"}</div>
+                    <div className="text-muted-foreground">{m.lastSignInAt ? <>Active <RelativeTime iso={m.lastSignInAt} /></> : "Invited"}</div>
                   </div>
                 </li>
               ))}
