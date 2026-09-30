@@ -53,31 +53,47 @@ export function HistoryPanel({
   const stats = useMemo(() => trackStats(track), [track]);
   const loadedFor = useRef<string | null>(null);
 
+  // The parent removes the map before this panel's cleanup runs (React unmounts parents
+  // first), so every map call is gated on the map still existing.
+  const alive = useRef(false);
+  useEffect(() => {
+    if (!map) return;
+    alive.current = true;
+    const onRemove = () => {
+      alive.current = false;
+    };
+    map.on("remove", onRemove);
+    return () => {
+      map.off("remove", onRemove);
+    };
+  }, [map]);
+  const source = useCallback((id: string) => (map && alive.current ? (map.getSource(id) as GeoJSONSource | undefined) : undefined), [map]);
+
   const draw = useCallback(
     (pts: LocationPoint[]) => {
-      const src = map?.getSource("track") as GeoJSONSource | undefined;
+      const src = source("track");
       src?.setData({
         type: "FeatureCollection",
         features: pts.length > 1 ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: pts.map((p) => [p.longitude, p.latitude]) } }] : []
       });
-      if (map && pts.length > 0) {
+      if (map && alive.current && pts.length > 0) {
         const b = new maplibregl.LngLatBounds();
         pts.forEach((p) => b.extend([p.longitude, p.latitude]));
         map.fitBounds(b, { padding: 60, maxZoom: 16, duration: 600 });
       }
     },
-    [map]
+    [map, source]
   );
 
   const drawCursor = useCallback(
     (p: LocationPoint | undefined) => {
-      const src = map?.getSource("track-pos") as GeoJSONSource | undefined;
+      const src = source("track-pos");
       src?.setData({
         type: "FeatureCollection",
         features: p ? [{ type: "Feature", properties: { heading: p.headingDeg ?? 0 }, geometry: { type: "Point", coordinates: [p.longitude, p.latitude] } }] : []
       });
     },
-    [map]
+    [source]
   );
 
   const load = useCallback(async () => {

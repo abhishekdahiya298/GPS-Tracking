@@ -109,7 +109,7 @@ export class FleetLayer {
         source: SRC,
         layout: {
           "icon-image": ["concat", "veh-", ["get", "state"]],
-          "icon-rotate": ["get", "heading"],
+          "icon-rotate": ["to-number", ["coalesce", ["get", "heading"], 0]],
           "icon-rotation-alignment": "map",
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,

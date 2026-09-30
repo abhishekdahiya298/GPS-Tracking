@@ -147,7 +147,7 @@ export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
         id: "track-pos",
         type: "symbol",
         source: "track-pos",
-        layout: { "icon-image": "veh-moving", "icon-rotate": ["get", "heading"], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-size": 1.15 }
+        layout: { "icon-image": "veh-moving", "icon-rotate": ["to-number", ["coalesce", ["get", "heading"], 0]], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-size": 1.15 }
       });
       // Seed from whatever the stream already has (snapshot may arrive before the style).
       fl.reset([...devicesRef.current.values()].map((d) => toPoint(d, Date.now(), offlineSeconds)).filter((p): p is FleetPoint => p !== null));
