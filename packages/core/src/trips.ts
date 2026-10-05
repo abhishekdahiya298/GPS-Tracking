@@ -45,8 +45,13 @@ function active(p: TrackPoint, movingKph: number) {
 }
 
 export function detectTrips(points: TrackPoint[], opts: Partial<typeof TRIP_DEFAULTS> = {}): Trip[] {
+  return splitTrips(points, opts).map((t) => t.trip);
+}
+
+/** The same trips as `detectTrips`, each with the points it is made of (for per-day splits). */
+export function splitTrips(points: TrackPoint[], opts: Partial<typeof TRIP_DEFAULTS> = {}): { trip: Trip; points: TrackPoint[] }[] {
   const o = { ...TRIP_DEFAULTS, ...opts };
-  const trips: Trip[] = [];
+  const trips: { trip: Trip; points: TrackPoint[] }[] = [];
   let cur: TrackPoint[] = [];
   let lastActiveT = -Infinity;
 
@@ -55,7 +60,7 @@ export function detectTrips(points: TrackPoint[], opts: Partial<typeof TRIP_DEFA
     while (cur.length && !active(cur[cur.length - 1]!, o.MOVING_KPH)) cur.pop();
     if (cur.length >= 2) {
       const t = summarize(cur, o);
-      if (t.distanceM >= o.MIN_TRIP_METERS || t.durationS >= o.MIN_TRIP_MINUTES * 60) trips.push(t);
+      if (t.distanceM >= o.MIN_TRIP_METERS || t.durationS >= o.MIN_TRIP_MINUTES * 60) trips.push({ trip: t, points: cur });
     }
     cur = [];
   };

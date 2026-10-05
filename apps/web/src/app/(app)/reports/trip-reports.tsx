@@ -21,6 +21,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { TripDto, TripReport } from "@/lib/reports";
+import { ReportTabs } from "./report-tabs";
 
 type Dev = { id: string; label: string };
 type Preset = "7d" | "yesterday" | "today" | "30d" | "custom";
@@ -173,6 +174,8 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
           )
         }
       />
+
+      <ReportTabs active="trips" />
 
       <Card className="mb-4">
         <form

@@ -1,5 +1,5 @@
 import { dateFormatter } from "@rio-gps/core/timezones";
-import { csvCell, detectTrips, summarizeByDay, units, type DaySummary, type Trip, type UnitSystem } from "@rio-gps/core";
+import { csvCell, detectTrips, summarizeByDay, units, type DaySummary, type TrackPoint, type Trip, type UnitSystem } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
 import { and, asc, eq, gte, lt } from "drizzle-orm";
 import { ValidationError } from "./errors";
@@ -50,18 +50,25 @@ function toDto(t: Trip): TripDto {
 
 export { isValidTimeZone } from "@rio-gps/core/timezones";
 
-/** The caller has already verified the device belongs to organizationId. */
-export async function buildTripReport(organizationId: string, deviceId: string, from: Date, to: Date, timeZone: string): Promise<TripReport> {
+/**
+ * One device's time-ordered track for [from, to), tenant-scoped. Throws when the range holds
+ * more than `maxPoints` (never silently truncates: a cut-off track would give wrong totals).
+ */
+export async function loadTrack(organizationId: string, deviceId: string, from: Date, to: Date, maxPoints = MAX_REPORT_POINTS): Promise<TrackPoint[]> {
   const h = schema.locationHistory;
   const rows = await getDb()
     .select({ t: h.recordedAt, lat: h.latitude, lon: h.longitude, speedKph: h.speedKph, ignition: h.ignition })
     .from(h)
     .where(and(eq(h.organizationId, organizationId), eq(h.deviceId, deviceId), gte(h.recordedAt, from), lt(h.recordedAt, to)))
     .orderBy(asc(h.recordedAt))
-    .limit(MAX_REPORT_POINTS + 1);
-  if (rows.length > MAX_REPORT_POINTS) throw new ValidationError("Too much data in this range; choose a shorter period");
+    .limit(maxPoints + 1);
+  if (rows.length > maxPoints) throw new ValidationError("Too much data in this range; choose a shorter period or fewer vehicles");
+  return rows.map((r) => ({ t: r.t.getTime(), lat: r.lat, lon: r.lon, speedKph: r.speedKph, ignition: r.ignition }));
+}
 
-  const trips = detectTrips(rows.map((r) => ({ t: r.t.getTime(), lat: r.lat, lon: r.lon, speedKph: r.speedKph, ignition: r.ignition })));
+/** The caller has already verified the device belongs to organizationId. */
+export async function buildTripReport(organizationId: string, deviceId: string, from: Date, to: Date, timeZone: string): Promise<TripReport> {
+  const trips = detectTrips(await loadTrack(organizationId, deviceId, from, to));
   const days = summarizeByDay(trips, timeZone).map((d) => ({ day: d.day, trips: d.trips, maxSpeedKph: d.maxSpeedKph, distanceKm: km(d.distanceM), drivingMin: minutes(d.drivingS) }));
   return {
     deviceId,

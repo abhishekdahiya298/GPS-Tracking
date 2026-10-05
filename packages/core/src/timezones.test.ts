@@ -103,6 +103,7 @@ describe("dateFormatter", () => {
     expect(dateFormatter("America/Vancouver").dayKey(late)).toBe("2026-09-25");
     expect(dateFormatter("UTC").dayKey(late)).toBe("2026-09-26");
     expect(dateFormatter("UTC").day("2026-09-25")).toBe("Fri, Sep 25");
+    expect(dateFormatter("America/Vancouver").month("2026-01")).toBe("Jan 2026");
   });
   it("is cached per zone + clock; invalid zones fall back to UTC", () => {
     expect(dateFormatter("America/Toronto", "12h")).toBe(dateFormatter("America/Toronto", "12h"));

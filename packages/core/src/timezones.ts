@@ -175,6 +175,8 @@ export interface DateFormatter {
   dayKey(v: Instant): string;
   /** "Fri, Sep 25" for a "YYYY-MM-DD" day key (no zone maths: it is already local). */
   day(dayKey: string): string;
+  /** "Sep 2026" for a "YYYY-MM" month key. */
+  month(monthKey: string): string;
   /** "EDT" at that instant. */
   abbr(v?: Instant): string;
 }
@@ -200,6 +202,7 @@ export function dateFormatter(timeZone: string, timeFormat: TimeFormat = DEFAULT
   const fullNoZone = mk({ month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit", ...hc });
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   const dayFmt = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+  const monthFmt = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "short", year: "numeric" });
   const pick = (v: Instant) => {
     const p: Record<string, string> = {};
     for (const x of parts.formatToParts(toDate(v))) p[x.type] = x.value;
@@ -223,6 +226,7 @@ export function dateFormatter(timeZone: string, timeFormat: TimeFormat = DEFAULT
       return `${p.year}-${p.month}-${p.day}`;
     },
     day: (k) => clean(dayFmt.format(new Date(`${k}T12:00:00Z`))),
+    month: (k) => clean(monthFmt.format(new Date(`${k}-15T12:00:00Z`))),
     abbr: (v = Date.now()) => zoneAbbr(tz, v)
   };
   formatterCache.set(key, f);
