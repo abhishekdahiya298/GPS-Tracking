@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
 import { NotFoundError } from "./errors";
+import { logger } from "./logger";
 
 type Meta = { ipAddress: string | null; userAgent: string | null };
 
@@ -45,6 +46,10 @@ export async function getOrgSettings(organizationId: string) {
 export async function updateOrgSettings(ctx: TenantContext, patch: z.infer<typeof OrgSettingsPatchSchema>, meta: Meta) {
   const before = await getOrgSettings(ctx.organizationId);
   await getDb().update(schema.organizations).set({ ...patch, updatedAt: new Date() }).where(eq(schema.organizations.id, ctx.organizationId));
+  if (patch.timeZone !== undefined && patch.timeZone !== before.timeZone) {
+    // Daily summaries are per local day: rebuild them for the new zone now, not at the next scheduled pass.
+    void import("./daily-stats").then((m) => m.refreshDailyStats()).catch((err) => logger.error("stats.rebuild_after_zone_change_failed", { organizationId: ctx.organizationId }, err));
+  }
   await writeAudit({
     action: "organization.settings_updated",
     actorUserId: ctx.userId,

@@ -83,6 +83,7 @@ describe("mileageByDay", () => {
     expect(days[0]!.trips).toBe(2);
     expect(Math.abs(days[0]!.distanceM - trips.reduce((a, t) => a + t.distanceM, 0))).toBeLessThanOrEqual(1);
     expect(days[0]!.drivingS).toBe(trips.reduce((a, t) => a + t.movingS, 0));
+    expect(days[0]!.maxSpeedKph).toBe(60);
   });
   it("a trip across local midnight is split between both days", () => {
     // 03:50Z–04:10Z on Sep 26 is 11:50 PM Sep 25 → 12:10 AM Sep 26 in Toronto (EDT)

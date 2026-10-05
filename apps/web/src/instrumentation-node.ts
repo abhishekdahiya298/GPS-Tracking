@@ -1,5 +1,6 @@
 /** Node.js-only startup work (imported from instrumentation.ts only in the nodejs runtime). */
 import { startAlertScheduler } from "./lib/alerts";
+import { startDailyStatsScheduler } from "./lib/daily-stats";
 import { getServerEnv } from "./lib/env";
 import { logger } from "./lib/logger";
 import { startMaintenanceScheduler } from "./lib/maintenance";
@@ -13,6 +14,7 @@ export function startNode() {
       startAlertScheduler();
       startReportScheduler();
       startMaintenanceScheduler();
+      startDailyStatsScheduler();
     }
   } catch (err) {
     logger.error("startup.config_invalid", {}, err);

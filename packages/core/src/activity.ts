@@ -123,6 +123,8 @@ export interface DayMileage {
   drivingS: number;
   idleS: number;
   trips: number;
+  /** Highest plausible speed reported during a trip that day. */
+  maxSpeedKph: number;
 }
 
 /**
@@ -135,7 +137,7 @@ export function mileageByDay(points: TrackPoint[], timeZone: string, opts: Parti
   const map = new Map<string, DayMileage>();
   const get = (day: string) => {
     let d = map.get(day);
-    if (!d) map.set(day, (d = { day, distanceM: 0, drivingS: 0, idleS: 0, trips: 0 }));
+    if (!d) map.set(day, (d = { day, distanceM: 0, drivingS: 0, idleS: 0, trips: 0, maxSpeedKph: 0 }));
     return d;
   };
   // Day lookups are the hot path on long ranges: cache per UTC hour (zones are whole
@@ -149,6 +151,13 @@ export function mileageByDay(points: TrackPoint[], timeZone: string, opts: Parti
   };
   for (const { points: pts } of splitTrips(points, opts)) {
     get(dayOf(pts[0]!.t)).trips++;
+    for (const p of pts) {
+      const v = p.speedKph ?? 0;
+      if (v <= o.MAX_PLAUSIBLE_KPH) {
+        const day = get(dayOf(p.t));
+        if (v > day.maxSpeedKph) day.maxSpeedKph = Math.round(v);
+      }
+    }
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1]!;
       const p = pts[i]!;

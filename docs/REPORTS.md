@@ -41,5 +41,28 @@ Stops, idling, speeding and mileage run for one vehicle or all vehicles, with CS
 - At most 5,000 rows are returned; totals and the per-vehicle table always cover everything.
 - Measured locally (100 simulated trucks, a point every 30 s): 1 day (88k points) ≈ 0.7–1.2 s;
   7 days (617k points) ≈ 3.5–6 s.
-- Next step for larger fleets: a daily per-vehicle summary table (planned with the dashboard
-  charts) so mileage and dashboards don't re-read raw points.
+
+## Daily summaries and dashboard charts
+`device_daily_stats` (migration 0008) holds one row per device per local calendar day:
+distance, driving time, idle time, trips and top speed. It is derived data: computed from
+`location_history` with the same engine as the reports, rebuildable at any time, and it never
+changes GPS data. The dashboard reads it instead of raw points:
+- **Fleet mileage, last 30 days** (column chart, with a table view and keyboard readout).
+- **Idling, last 7 days** (share of engine-on time).
+- **Top speeding vehicles, last 7 days** (from speeding alerts, so it needs a speed rule).
+
+How it stays current (`apps/web/src/lib/daily-stats.ts`), without touching the ingest path:
+- A scheduler pass runs every 10 minutes (first pass ~20 s after start; log events
+  `stats.scheduler_started`, `stats.pass`). It is enabled with the other schedulers
+  (`ALERTS_SCHEDULER_ENABLED`).
+- New points are found by `location_history.id > watermark` (`daily_stats_state`), which also
+  catches points a tracker delivers late for an earlier day. Each affected (device, day) is
+  recomputed from scratch, so passes are idempotent.
+- The watermark only advances over rows older than two minutes.
+- Days are in the **organization's** time zone (the same for everyone in the company). When
+  the zone changes, that organization's rows are rebuilt for the last 35 days.
+- The first pass after deploy backfills the last 35 days.
+- Measured locally: backfill of 1,202 device-days (617k points) ≈ 15 s; the dashboard section
+  renders in ≈ 0.5 s with 500 devices.
+
+To rebuild everything: `truncate device_daily_stats, daily_stats_state;` and wait for the next pass.

@@ -20,6 +20,7 @@ import { listCurrentLocations, type CurrentDeviceLocation } from "@/lib/location
 import { dueCounts } from "@/lib/maintenance";
 import { buildTripReport } from "@/lib/reports";
 import { getRequestContext, getUnacknowledgedAlertCount } from "@/lib/request-context";
+import { FleetTrends, TrendsSkeleton } from "./fleet-trends";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard · RIO GPS" };
@@ -200,6 +201,12 @@ export default async function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      {can("history.read") && (
+        <Suspense fallback={<TrendsSkeleton />}>
+          <FleetTrends organizationId={ctx.organizationId} u={u} canSeeAlerts={can("alerts.read")} now={now} />
+        </Suspense>
+      )}
 
       {can("history.read") && (
         <Suspense fallback={<TripsSkeleton />}>
