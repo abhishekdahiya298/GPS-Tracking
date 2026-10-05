@@ -2,6 +2,7 @@ import { contextHasPermission } from "@rio-gps/core";
 import { notFound, redirect } from "next/navigation";
 import { ACTIVITY_REPORT_TYPES, type ActivityReportType } from "@/lib/activity-reports";
 import { getRequestContext } from "@/lib/request-context";
+import { listGroups } from "@/lib/vehicle-groups";
 import { listDevices } from "@/lib/vehicles";
 import { ActivityReports } from "../activity-reports";
 
@@ -22,5 +23,6 @@ export default async function ActivityReportPage({ params }: { params: Promise<{
   if (rc.status !== "ok") redirect(`/login?next=/reports/${type}`);
   if (!contextHasPermission(rc.ctx, "history.read")) redirect("/dashboard");
   const devices = (await listDevices(rc.ctx.organizationId)).map((d) => ({ id: d.id, label: d.vehicle ? d.vehicle.name : (d.name ?? d.model ?? "Device") + (d.status === "active" ? "" : " (inactive)") }));
-  return <ActivityReports key={type} type={type} devices={devices} />;
+  const groups = contextHasPermission(rc.ctx, "vehicles.read") ? (await listGroups(rc.ctx.organizationId)).map((g) => ({ id: g.id, name: g.name })) : [];
+  return <ActivityReports key={type} type={type} devices={devices} groups={groups} />;
 }

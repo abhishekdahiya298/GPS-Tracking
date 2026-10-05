@@ -9,6 +9,7 @@ import { shapeRing } from "@rio-gps/core/geo";
 import { SegmentedFilter } from "@/components/app/filter-bar";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
+import { Select } from "@/components/ui/input";
 import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
 import { Alert } from "@/components/ui/alert";
@@ -54,7 +55,7 @@ function StateDot({ state }: { state: MapState }) {
   return <span aria-hidden="true" className="inline-block size-2 shrink-0 rounded-full" style={{ background: STATE_COLORS[state] }} />;
 }
 
-export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
+export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: number; groups?: { id: string; name: string; vehicleIds: string[] }[] }) {
   const u = useUnits();
   const time = useTime();
   // Read from callbacks that are set up once (stream handlers, the popup effect).
@@ -72,6 +73,7 @@ export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
   const [deepLink, setDeepLink] = useState<{ device: string; from: string; to: string } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
+  const [groupId, setGroupId] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -234,21 +236,27 @@ export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version, now, offlineSeconds]);
+  // Group filter: the list, the counts and the map all narrow to the group's vehicles.
+  const groupSet = useMemo(() => {
+    const g = groups.find((x) => x.id === groupId);
+    return g ? new Set(g.vehicleIds) : null;
+  }, [groups, groupId]);
+  const scoped = useMemo(() => (groupSet ? all.filter((r) => r.d.vehicle && groupSet.has(r.d.vehicle.id)) : all), [all, groupSet]);
   const counts = useMemo(() => {
-    const c = { all: all.length, moving: 0, idle: 0, offline: 0 };
-    for (const r of all) c[r.state]++;
+    const c = { all: scoped.length, moving: 0, idle: 0, offline: 0 };
+    for (const r of scoped) c[r.state]++;
     return c;
-  }, [all]);
+  }, [scoped]);
   const q = search.trim().toLowerCase();
   const rows = useMemo(
-    () => all.filter((r) => (filter === "all" || r.state === filter) && (!q || r.name.toLowerCase().includes(q) || (r.d.vehicle?.licensePlate ?? "").toLowerCase().includes(q))),
-    [all, filter, q]
+    () => scoped.filter((r) => (filter === "all" || r.state === filter) && (!q || r.name.toLowerCase().includes(q) || (r.d.vehicle?.licensePlate ?? "").toLowerCase().includes(q))),
+    [scoped, filter, q]
   );
 
   // Keep the map filter in step with the list.
   useEffect(() => {
-    layer.current?.filter(filter === "all" ? null : [filter], q ? new Set(rows.map((r) => r.d.deviceId)) : null);
-  }, [filter, q, rows]);
+    layer.current?.filter(filter === "all" ? null : [filter], q || groupSet ? new Set(rows.map((r) => r.d.deviceId)) : null);
+  }, [filter, q, groupSet, rows]);
 
   // Selection: halo + popup.
   const sel = selected ? devices.current.get(selected) : undefined;
@@ -343,6 +351,16 @@ export function LiveMap({ offlineSeconds }: { offlineSeconds: number }) {
         <>
           <div className="grid gap-2 border-b border-border px-4 py-3">
             <SearchInput value={search} onChange={setSearch} placeholder="Search vehicles…" label="Search vehicles" debounceMs={150} />
+            {groups.length > 0 && (
+              <Select aria-label="Filter by group" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                <option value="">All groups</option>
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name} ({g.vehicleIds.length})
+                  </option>
+                ))}
+              </Select>
+            )}
             <SegmentedFilter<Filter>
               label="Filter by status"
               value={filter}

@@ -1,6 +1,6 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Truck } from "lucide-react";
+import { Layers, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Truck } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
@@ -14,7 +14,9 @@ import { useUnits } from "@/components/app/units-context";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Select } from "@/components/ui/input";
 import { toast } from "@/components/ui/toaster";
+import type { GroupDto } from "@/lib/vehicle-groups";
 import { api, errorMessage } from "@/lib/client/api";
 import type { Page, VehicleListQuery, VehicleRow, VehicleState } from "@/lib/fleet-list";
 import { relativeTime } from "@/lib/format";
@@ -26,12 +28,13 @@ import type { EditableVehicle } from "../_fleet/vehicle-form-dialog";
 // Drawer and dialogs (with their form/validation code) load on first use, not with the page.
 const AssignDialog = dynamic(() => import("../_fleet/assign-dialog").then((m) => m.AssignDialog));
 const VehicleDetailSheet = dynamic(() => import("../_fleet/vehicle-detail-sheet").then((m) => m.VehicleDetailSheet));
+const GroupsDialog = dynamic(() => import("./groups-dialog").then((m) => m.GroupsDialog));
 const VehicleFormDialog = dynamic(() => import("../_fleet/vehicle-form-dialog").then((m) => m.VehicleFormDialog));
 import { VehicleStateBadge } from "../_fleet/vehicle-state";
 
 type Can = { create: boolean; update: boolean; remove: boolean; assign: boolean; unassign: boolean; map: boolean };
 
-export function VehiclesView({ data, query, can }: { data: Page<VehicleRow, VehicleState>; query: VehicleListQuery; can: Can }) {
+export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleRow, VehicleState>; query: VehicleListQuery; can: Can; groups: GroupDto[] }) {
   const u = useUnits();
   const t = useTime();
   const { set, refresh, pending } = useListParams();
@@ -42,7 +45,8 @@ export function VehiclesView({ data, query, can }: { data: Page<VehicleRow, Vehi
   const [deleting, setDeleting] = useState<VehicleRow | null>(null);
   const [unassigning, setUnassigning] = useState<VehicleRow | null>(null);
   const c = data.counts;
-  const filtered = query.search !== "" || query.state !== "all";
+  const [groupsOpen, setGroupsOpen] = useState(false);
+  const filtered = query.search !== "" || query.state !== "all" || !!query.group;
 
   const openEdit = (v: VehicleRow) => {
     setEditing({ id: v.id, name: v.name, licensePlate: v.licensePlate, vehicleStatus: v.vehicleStatus });
@@ -103,7 +107,7 @@ export function VehiclesView({ data, query, can }: { data: Page<VehicleRow, Vehi
         cell: ({ row: { original: v } }) => (
           <div className="min-w-0">
             <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
-            {v.licensePlate && <p className="m-0 truncate text-xs text-muted-foreground">{v.licensePlate}</p>}
+            {(v.licensePlate || v.groups.length > 0) && <p className="m-0 truncate text-xs text-muted-foreground">{[v.licensePlate, ...v.groups].filter(Boolean).join(" · ")}</p>}
           </div>
         )
       },
@@ -148,6 +152,11 @@ export function VehiclesView({ data, query, can }: { data: Page<VehicleRow, Vehi
             <IconButton label="Refresh" variant="secondary" onClick={refresh} disabled={pending}>
               <RefreshCw className={pending ? "animate-spin" : undefined} aria-hidden="true" />
             </IconButton>
+            {can.update && (
+              <Button variant="secondary" onClick={() => setGroupsOpen(true)}>
+                <Layers aria-hidden="true" /> Groups
+              </Button>
+            )}
             {can.create && (
               <Button
                 onClick={() => {
@@ -191,6 +200,16 @@ export function VehiclesView({ data, query, can }: { data: Page<VehicleRow, Vehi
                   { value: "no_device", label: "No device", count: c.no_device ?? 0 }
                 ]}
               />
+              {groups.length > 0 && (
+                <Select aria-label="Filter by group" className="w-auto min-w-[10rem] max-w-[14rem]" value={query.group ?? ""} onChange={(e) => set({ group: e.target.value || null })}>
+                  <option value="">All groups</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} ({g.vehicleIds.length})
+                    </option>
+                  ))}
+                </Select>
+              )}
             </>
           }
           mobileRow={(v) => (
@@ -209,7 +228,7 @@ export function VehiclesView({ data, query, can }: { data: Page<VehicleRow, Vehi
           )}
           empty={
             filtered ? (
-              <EmptyState title="No vehicles match" description="Try a different search or filter." action={<Button variant="secondary" onClick={() => set({ search: null, state: null })}>Clear filters</Button>} />
+              <EmptyState title="No vehicles match" description="Try a different search or filter." action={<Button variant="secondary" onClick={() => set({ search: null, state: null, group: null })}>Clear filters</Button>} />
             ) : (
               <EmptyState
                 icon={Truck}
@@ -236,6 +255,14 @@ export function VehiclesView({ data, query, can }: { data: Page<VehicleRow, Vehi
       {formOpen && <VehicleFormDialog open={formOpen} onOpenChange={setFormOpen} vehicle={editing} onSaved={refresh} />}
       {assignFor && (
         <AssignDialog open onOpenChange={(o) => !o && setAssignFor(null)} mode="device" fixedId={assignFor.id} title={`Assign a device to ${assignFor.name}`} onDone={refresh} />
+      )}
+      {groupsOpen && (
+        <GroupsDialog
+          open
+          onOpenChange={setGroupsOpen}
+          groups={groups}
+          onChanged={refresh}
+        />
       )}
       <ConfirmDialog
         open={unassigning !== null}

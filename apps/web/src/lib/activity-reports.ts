@@ -5,6 +5,7 @@ import { getDb, schema } from "@rio-gps/db";
 import { and, count, eq, gte, lt } from "drizzle-orm";
 import { NotFoundError, ValidationError } from "./errors";
 import { loadTrack, MAX_REPORT_POINTS } from "./reports";
+import { groupVehicleIds } from "./vehicle-groups";
 import { listDevices } from "./vehicles";
 
 /**
@@ -27,6 +28,8 @@ export const ActivityQuery = z.object({
   type: z.enum(ACTIVITY_REPORT_TYPES),
   /** One device, or "all" for every device in the organization. */
   deviceId: z.union([z.literal("all"), z.string().uuid()]).default("all"),
+  /** With deviceId "all": only vehicles in this group. */
+  groupId: z.string().uuid().optional(),
   from: z.string().datetime({ offset: true }),
   to: z.string().datetime({ offset: true }),
   tz: z.string().max(64).optional(),
@@ -104,8 +107,14 @@ export async function buildActivityReport(organizationId: string, q: ActivityQue
   const from = new Date(q.from);
   const to = new Date(q.to);
   const all = await listDevices(organizationId);
-  const devices = q.deviceId === "all" ? all.filter((d) => d.status === "active") : all.filter((d) => d.id === q.deviceId);
+  let devices = q.deviceId === "all" ? all.filter((d) => d.status === "active") : all.filter((d) => d.id === q.deviceId);
   if (q.deviceId !== "all" && devices.length === 0) throw new NotFoundError("Device not found");
+  if (q.deviceId === "all" && q.groupId) {
+    const members = await groupVehicleIds(organizationId, q.groupId);
+    if (!members) throw new NotFoundError("Group not found");
+    const set = new Set(members);
+    devices = devices.filter((d) => d.vehicle && set.has(d.vehicle.id));
+  }
   const label = (d: (typeof all)[number]) => d.vehicle?.name ?? d.name ?? d.model ?? "Device";
   // An ongoing stop lasts until the end of the range, but never into the future.
   const untilT = Math.min(to.getTime(), now.getTime());

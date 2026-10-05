@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getServerEnv } from "@/lib/env";
 import { listVehiclesPage, parseListQuery, VehicleListQuery } from "@/lib/fleet-list";
 import { getRequestContext } from "@/lib/request-context";
+import { listGroups } from "@/lib/vehicle-groups";
 import { VehiclesView } from "./vehicles-view";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,9 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
   const { ctx } = rc;
   if (!contextHasPermission(ctx, "vehicles.read")) redirect("/dashboard");
   const q = parseListQuery(VehicleListQuery, await searchParams);
+  const groups = await listGroups(ctx.organizationId);
+  // A group that no longer exists (deleted, or an id from elsewhere) is not a filter.
+  if (q.group && !groups.some((g) => g.id === q.group)) q.group = undefined;
   const data = await listVehiclesPage(ctx.organizationId, q, new Date(), getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS);
   // Permissions only shape the UI; every API call re-checks them on the server.
   const can = {
@@ -24,5 +28,5 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
     unassign: contextHasPermission(ctx, "devices.unassign"),
     map: contextHasPermission(ctx, "locations.read")
   };
-  return <VehiclesView data={data} query={q} can={can} />;
+  return <VehiclesView data={data} query={q} can={can} groups={groups} />;
 }

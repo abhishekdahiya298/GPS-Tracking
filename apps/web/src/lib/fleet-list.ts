@@ -27,7 +27,9 @@ export type VehicleState = (typeof VEHICLE_STATES)[number];
 export const VehicleListQuery = z.object({
   ...base,
   sort: z.enum(["name", "plate", "state", "speed", "lastSeen"]).default("state"),
-  state: z.enum(["all", "moving", "idle", "offline", "no_device"]).default("all")
+  state: z.enum(["all", "moving", "idle", "offline", "no_device"]).default("all"),
+  /** Only vehicles in this group (of the caller's organization). */
+  group: z.string().uuid().optional()
 });
 export type VehicleListQuery = z.infer<typeof VehicleListQuery>;
 
@@ -63,6 +65,8 @@ export interface VehicleRow {
   device: { id: string; name: string | null; model: string | null } | null;
   lastSeenAt: string | null;
   location: { latitude: number; longitude: number; speedKph: number | null; headingDeg: number | null; ignition: boolean | null; recordedAt: string } | null;
+  /** Names of the groups this vehicle is in. */
+  groups: string[];
 }
 
 export interface Page<T, S extends string> {
@@ -77,6 +81,9 @@ const vehicleBase = (organizationId: string, offlineSeconds: number, now: Date) 
   select v.id, v.name, v.license_plate, v.status as vehicle_status,
          d.id as device_id, d.name as device_name, d.model as device_model, d.last_seen_at,
          cl.latitude, cl.longitude, cl.speed_kph, cl.heading_deg, cl.ignition, cl.recorded_at,
+         (select coalesce(array_agg(g.name order by lower(g.name)), '{}')
+            from vehicle_group_members gm join vehicle_groups g on g.id = gm.group_id
+           where gm.vehicle_id = v.id and gm.organization_id = ${organizationId}) as group_names,
          case
            when d.id is null then 'no_device'
            when d.status <> 'active' then 'inactive'
@@ -103,7 +110,9 @@ export async function listVehiclesPage(organizationId: string, q: VehicleListQue
   const search = q.search
     ? sql` and (v.name ilike ${likePattern(q.search)} or coalesce(v.license_plate, '') ilike ${likePattern(q.search)} or coalesce(d.name, '') ilike ${likePattern(q.search)} or coalesce(d.model, '') ilike ${likePattern(q.search)})`
     : sql``;
-  const inner = sql`${vehicleBase(organizationId, offlineSeconds, now)}${search}`;
+  // Tenant-scoped membership check: a group id from another organization matches nothing.
+  const group = q.group ? sql` and exists (select 1 from vehicle_group_members gm where gm.group_id = ${q.group} and gm.vehicle_id = v.id and gm.organization_id = ${organizationId})` : sql``;
+  const inner = sql`${vehicleBase(organizationId, offlineSeconds, now)}${search}${group}`;
   const stateFilter = q.state === "all" ? sql`true` : q.state === "offline" ? sql`state in ('offline', 'never_seen', 'inactive')` : sql`state = ${q.state}`;
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
   const order: SQL = {
@@ -132,6 +141,7 @@ export async function listVehiclesPage(organizationId: string, q: VehicleListQue
       licensePlate: (r.license_plate as string | null) ?? null,
       vehicleStatus: String(r.vehicle_status),
       state: r.state as VehicleState,
+      groups: (r.group_names as string[] | null) ?? [],
       device: r.device_id ? { id: String(r.device_id), name: (r.device_name as string | null) ?? null, model: (r.device_model as string | null) ?? null } : null,
       lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at as string).toISOString() : null,
       location:

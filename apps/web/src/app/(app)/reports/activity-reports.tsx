@@ -76,7 +76,7 @@ function presetRange(p: Exclude<Preset, "custom">, tz: string): [string, string]
   }
 }
 
-export function ActivityReports({ type, devices }: { type: ActivityReportType; devices: Dev[] }) {
+export function ActivityReports({ type, devices, groups = [] }: { type: ActivityReportType; devices: Dev[]; groups?: { id: string; name: string }[] }) {
   const u = useUnits();
   const time = useTime();
   const tz = time.timeZone;
@@ -101,7 +101,7 @@ export function ActivityReports({ type, devices }: { type: ActivityReportType; d
     const t = q.get("to");
     const m = Number(q.get("min"));
     const l = Number(q.get("limit"));
-    if (dv && (dv === "all" || devices.some((d) => d.id === dv))) setDeviceId(dv);
+    if (dv && (dv === "all" || devices.some((d) => d.id === dv) || groups.some((g) => `group:${g.id}` === dv))) setDeviceId(dv);
     if (f && t && DAY_RE.test(f) && DAY_RE.test(t)) {
       setPreset("custom");
       setDays([f, t]);
@@ -109,13 +109,16 @@ export function ActivityReports({ type, devices }: { type: ActivityReportType; d
     if (Number.isInteger(m) && m >= 1 && m <= 1440) setMinMinutes(m);
     if (Number.isFinite(l) && l >= 10 && l <= 200) setLimit(l);
     setReady(true);
-  }, [devices]);
+  }, [devices, groups]);
 
   const limitOk = Number.isFinite(limit) && limit >= 10 && u.toKph(limit) <= 250;
   const qs = useMemo(() => {
+    // The vehicle picker also lists groups ("group:<id>"): all vehicles, narrowed to the group.
+    const groupId = deviceId.startsWith("group:") ? deviceId.slice(6) : null;
     const p = new URLSearchParams({
       type,
-      deviceId,
+      deviceId: groupId ? "all" : deviceId,
+      ...(groupId ? { groupId } : {}),
       // Midnight to midnight in the report's zone (23 or 25 hours on clock-change days).
       from: startOfLocalDay(fromDay, tz).toISOString(),
       to: startOfLocalDay(addDays(toDay, 1), tz).toISOString(),
@@ -157,7 +160,7 @@ export function ActivityReports({ type, devices }: { type: ActivityReportType; d
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
-  const many = deviceId === "all" && devices.length > 1;
+  const many = (deviceId === "all" || deviceId.startsWith("group:")) && devices.length > 1;
   const rows = report?.rows ?? [];
   const shown = rows.slice((page - 1) * PAGE, page * PAGE);
 
@@ -231,11 +234,22 @@ export function ActivityReports({ type, devices }: { type: ActivityReportType; d
               Vehicle
               <Select value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
                 <option value="all">All vehicles</option>
-                {devices.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.label}
-                  </option>
-                ))}
+                {groups.length > 0 && (
+                  <optgroup label="Groups">
+                    {groups.map((g) => (
+                      <option key={g.id} value={`group:${g.id}`}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="Vehicles">
+                  {devices.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.label}
+                    </option>
+                  ))}
+                </optgroup>
               </Select>
             </label>
             <label className="grid gap-1.5 text-sm font-medium">
