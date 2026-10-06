@@ -153,6 +153,7 @@ export class FleetLayer {
   /** Ids currently in the map source (filters are applied to the data, so cluster counts match the list). */
   private inSource = new Set<string>();
   private labels = true;
+  private clustering = true;
   private handlers: Array<() => void> = [];
 
   constructor(
@@ -182,7 +183,7 @@ export class FleetLayer {
       m.addImage("veh-moving", img, { pixelRatio: ratio });
     }
     // promoteId lets live updates send only the vehicles that changed (updateData diff).
-    if (!m.getSource(SRC)) m.addSource(SRC, { type: "geojson", data: this.collection(), promoteId: "id", cluster: true, clusterMaxZoom: CLUSTER_MAX_ZOOM, clusterRadius: 48 });
+    if (!m.getSource(SRC)) m.addSource(SRC, { type: "geojson", data: this.collection(), promoteId: "id", cluster: this.clustering, clusterMaxZoom: CLUSTER_MAX_ZOOM, clusterRadius: 48 });
     this.structural = true;
     if (!m.getLayer("fleet-halo")) {
       m.addLayer({
@@ -368,6 +369,13 @@ export class FleetLayer {
     this.filterIds = ids;
     this.structural = true;
     this.schedule();
+  }
+
+  /** Merge nearby vehicles into counted bubbles when zoomed out (on by default). */
+  setClustering(on: boolean) {
+    this.clustering = on;
+    if (!this.ready) return;
+    (this.map.getSource(SRC) as GeoJSONSource | undefined)?.setClusterOptions({ cluster: on, clusterMaxZoom: CLUSTER_MAX_ZOOM, clusterRadius: 48 });
   }
 
   /** Show or hide vehicle names next to the markers. */

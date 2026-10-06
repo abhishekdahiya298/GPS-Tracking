@@ -112,5 +112,13 @@ export function quickRange(kind: "today" | "yesterday" | "7d", timeZone: string,
   return { from: startOfLocalDay(addDays(today, -6), timeZone), to: null };
 }
 
+/** One CSV cell: quoted when needed, and never starting a spreadsheet formula. */
+export function csvSafe(v: string | number | null | undefined): string {
+  let s = v === null || v === undefined ? "" : String(v);
+  // Plain numbers (a negative longitude) are data, not formulas.
+  if (typeof v === "string" && /^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
 /** North America fallback when there's nothing to fit. */
 export const FALLBACK_VIEW = { center: [-98.6, 39.8] as [number, number], zoom: 3.2 };

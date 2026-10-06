@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bearing, compass, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, trackStats } from "./fleet-model";
+import { bearing, compass, csvSafe, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, trackStats } from "./fleet-model";
 
 const now = Date.parse("2026-09-25T12:00:00Z");
 const loc = (speedKph: number | null, ignition: boolean | null = null) => ({ latitude: 0, longitude: 0, speedKph, headingDeg: 0, altitudeM: null, ignition, motion: null, recordedAt: "2026-09-25T11:59:00Z", receivedAt: "2026-09-25T11:59:00Z" });
@@ -13,6 +13,15 @@ describe("fleet-model", () => {
     expect(mapState({ lastSeenAt: "2026-09-25T11:59:00Z", location: loc(2) }, now, 600)).toBe("stopped");
     expect(mapState({ lastSeenAt: "2026-09-25T11:40:00Z", location: loc(40) }, now, 600)).toBe("offline");
     expect(mapState({ lastSeenAt: null, location: null }, now, 600)).toBe("offline");
+  });
+  it("csvSafe quotes and defuses formulas", () => {
+    expect(csvSafe("Truck 1")).toBe("Truck 1");
+    expect(csvSafe('a,"b"')).toBe('"a,""b"""');
+    expect(csvSafe("=HYPERLINK(1)")).toBe("'=HYPERLINK(1)");
+    expect(csvSafe(-79.5)).toBe("-79.5");
+    expect(csvSafe("-118.600000")).toBe("-118.600000");
+    expect(csvSafe("-1+cmd")).toBe("'-1+cmd");
+    expect(csvSafe(null)).toBe("");
   });
   it("compass", () => {
     expect(compass(0)).toBe("N");

@@ -1,7 +1,7 @@
 "use client";
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
-import { ChevronUp, Copy, Crosshair, ExternalLink, History, Hexagon, LocateFixed, Maximize2, PanelLeftClose, PanelLeftOpen, Radio, Share2, Tag, Truck, X } from "lucide-react";
+import { ChevronUp, CircleDotDashed, Copy, Download, Crosshair, ExternalLink, History, Hexagon, LocateFixed, Maximize2, PanelLeftClose, PanelLeftOpen, Radio, Share2, Tag, Truck, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,7 +21,7 @@ import type { GeofenceDto } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { FleetLayer, STATE_COLORS, type FleetPoint } from "./fleet-layer";
-import { compass, deviceLabel, FALLBACK_VIEW, mapState, MAP_STATES, type MapState } from "./fleet-model";
+import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, mapState, MAP_STATES, type MapState } from "./fleet-model";
 import { useFleetStream } from "./use-fleet-stream";
 
 // Loaded on first use: most sessions never open history.
@@ -104,6 +104,8 @@ export function LiveMap({
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [groupId, setGroupId] = useState("");
+  const [sort, setSort] = useState<"status" | "name" | "recent" | "speed">("status");
+  const [clustered, setClustered] = useState(true);
   const [now, setNow] = useState(() => Date.now());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -276,10 +278,19 @@ export function LiveMap({
   // List (recomputed at most once per stream tick, not per GPS event).
   const all = useMemo(() => {
     const rows = [...devices.current.values()].map((d) => ({ d, state: mapState(d, now, offlineSeconds), name: deviceLabel(d) }));
-    rows.sort((a, b) => MAP_STATES.indexOf(a.state) - MAP_STATES.indexOf(b.state) || a.name.localeCompare(b.name));
+    const byName = (a: (typeof rows)[number], b: (typeof rows)[number]) => a.name.localeCompare(b.name, undefined, { numeric: true });
+    rows.sort(
+      sort === "name"
+        ? byName
+        : sort === "recent"
+          ? (a, b) => Date.parse(b.d.lastSeenAt ?? "1970-01-01") - Date.parse(a.d.lastSeenAt ?? "1970-01-01") || byName(a, b)
+          : sort === "speed"
+            ? (a, b) => (b.d.location?.speedKph ?? -1) - (a.d.location?.speedKph ?? -1) || byName(a, b)
+            : (a, b) => MAP_STATES.indexOf(a.state) - MAP_STATES.indexOf(b.state) || byName(a, b)
+    );
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [version, now, offlineSeconds]);
+  }, [version, now, offlineSeconds, sort]);
   // Group filter: the list, the counts and the map all narrow to the group's vehicles.
   const groupSet = useMemo(() => {
     const g = groups.find((x) => x.id === groupId);
@@ -305,6 +316,38 @@ export function LiveMap({
   useEffect(() => {
     layer.current?.setLabels(showLabels);
   }, [showLabels, map]);
+  useEffect(() => {
+    layer.current?.setClustering(clustered);
+  }, [clustered, map]);
+
+  /** Download what the list shows right now (after search and filters) as a spreadsheet file. */
+  const exportCsv = () => {
+    const head = ["vehicle", "plate", "type", "status", `speed_${u.speed === "mph" ? "mph" : "kmh"}`, "ignition", "latitude", "longitude", "last_gps_fix", "time_zone"];
+    const lines = rows.map((r) => {
+      const l = r.d.location;
+      return [
+        r.name,
+        r.d.vehicle?.licensePlate ?? "",
+        r.d.vehicle ? VEHICLE_TYPE_LABEL[asVehicleType(r.d.vehicle.type)] : "",
+        STATE_LABEL[r.state],
+        l?.speedKph === null || l?.speedKph === undefined ? "" : Math.round(u.speed_(l.speedKph)),
+        l?.ignition === null || l?.ignition === undefined ? "" : l.ignition ? "on" : "off",
+        l ? l.latitude.toFixed(6) : "",
+        l ? l.longitude.toFixed(6) : "",
+        l ? time.iso(l.recordedAt) : "",
+        l ? time.abbr(l.recordedAt) : ""
+      ]
+        .map(csvSafe)
+        .join(",");
+    });
+    const blob = new Blob([[head.join(","), ...lines].join("\r\n") + "\r\n"], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `fleet-positions-${time.dayKey(new Date().toISOString())}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast.success(`Exported ${rows.length} vehicle${rows.length === 1 ? "" : "s"}.`);
+  };
   useEffect(() => {
     if (!map) return;
     for (const id of ZONE_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", showZones ? "visible" : "none");
@@ -418,6 +461,17 @@ export function LiveMap({
                 ))}
               </Select>
             )}
+            <div className="flex gap-2">
+              <Select aria-label="Sort vehicles" className="min-w-0 flex-1" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+                <option value="status">Sort: status</option>
+                <option value="name">Sort: name</option>
+                <option value="recent">Sort: latest update</option>
+                <option value="speed">Sort: speed</option>
+              </Select>
+              <Button size="md" variant="secondary" className="shrink-0 px-3" onClick={exportCsv} disabled={rows.length === 0} aria-label="Export this list as CSV" title="Export this list as CSV">
+                <Download />
+              </Button>
+            </div>
             <div role="group" aria-label="Filter by status" className="grid grid-cols-5 gap-1">
               {(["all", ...MAP_STATES] as Filter[]).map((f) => {
                 const on = filter === f;
@@ -624,10 +678,13 @@ export function LiveMap({
             <Maximize2 /> Fit all
           </Button>
           <Button size="sm" variant="secondary" aria-pressed={showLabels} className={cn(!showLabels && "text-muted-foreground")} onClick={() => setShowLabels((v) => !v)}>
-            <Tag /> Names
+            <Tag /> <span className="sr-only sm:not-sr-only">Names</span>
+          </Button>
+          <Button size="sm" variant="secondary" aria-pressed={clustered} className={cn(!clustered && "text-muted-foreground")} title="Group nearby vehicles when zoomed out" onClick={() => setClustered((v) => !v)}>
+            <CircleDotDashed /> <span className="sr-only sm:not-sr-only">Cluster</span>
           </Button>
           <Button size="sm" variant="secondary" aria-pressed={showZones} className={cn(!showZones && "text-muted-foreground")} onClick={() => setShowZones((v) => !v)}>
-            <Hexagon /> Zones
+            <Hexagon /> <span className="sr-only sm:not-sr-only">Zones</span>
           </Button>
         </div>
         {follow && sel && (
