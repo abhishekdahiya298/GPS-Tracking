@@ -84,7 +84,8 @@
 
 /* Toasts (Sonner "rich colors"): the default coloured text is below 4.5:1 on its tinted
    background. Darker text for each tone keeps toasts readable (WCAG AA). */
-[data-sonner-toaster][data-sonner-theme="light"] {
+/* "html" raises the specificity above Sonner's own stylesheet, which is injected later. */
+html [data-sonner-toaster][data-sonner-theme="light"] {
   --success-text: #14532d;
   --error-text: #7f1d1d;
   --warning-text: #713f12;

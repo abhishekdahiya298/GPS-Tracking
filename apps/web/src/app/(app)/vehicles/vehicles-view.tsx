@@ -1,6 +1,6 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Layers, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2, Truck } from "lucide-react";
+import { Layers, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2, Truck } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
@@ -28,6 +28,7 @@ import type { EditableVehicle } from "../_fleet/vehicle-form-dialog";
 // Drawer and dialogs (with their form/validation code) load on first use, not with the page.
 const AssignDialog = dynamic(() => import("../_fleet/assign-dialog").then((m) => m.AssignDialog));
 const VehicleDetailSheet = dynamic(() => import("../_fleet/vehicle-detail-sheet").then((m) => m.VehicleDetailSheet));
+const ShareDialog = dynamic(() => import("./share-dialog").then((m) => m.ShareDialog));
 const GroupsDialog = dynamic(() => import("./groups-dialog").then((m) => m.GroupsDialog));
 const VehicleFormDialog = dynamic(() => import("../_fleet/vehicle-form-dialog").then((m) => m.VehicleFormDialog));
 import { VehicleStateBadge } from "../_fleet/vehicle-state";
@@ -46,6 +47,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
   const [unassigning, setUnassigning] = useState<VehicleRow | null>(null);
   const c = data.counts;
   const [groupsOpen, setGroupsOpen] = useState(false);
+  const [sharing, setSharing] = useState<VehicleRow | null>(null);
   const filtered = query.search !== "" || query.state !== "all" || !!query.group;
 
   const openEdit = (v: VehicleRow) => {
@@ -69,6 +71,11 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
             <Link href={`/map?focus=${v.device.id}`}>
               <MapIcon aria-hidden="true" /> Show on map
             </Link>
+          </DropdownMenuItem>
+        )}
+        {can.update && can.map && (
+          <DropdownMenuItem onSelect={() => setSharing(v)}>
+            <Share2 aria-hidden="true" /> Share live location
           </DropdownMenuItem>
         )}
         {can.update && (
@@ -256,6 +263,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
       {assignFor && (
         <AssignDialog open onOpenChange={(o) => !o && setAssignFor(null)} mode="device" fixedId={assignFor.id} title={`Assign a device to ${assignFor.name}`} onDone={refresh} />
       )}
+      {sharing && <ShareDialog vehicle={{ id: sharing.id, name: sharing.name, hasDevice: sharing.device !== null }} onClose={() => setSharing(null)} />}
       {groupsOpen && (
         <GroupsDialog
           open

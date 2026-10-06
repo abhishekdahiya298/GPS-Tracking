@@ -15,3 +15,4 @@ export * from "./maintenance";
 export * from "./dailyStats";
 export * from "./vehicleGroups";
 export * from "./renewals";
+export * from "./shareLinks";
