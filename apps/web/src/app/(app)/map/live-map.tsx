@@ -371,10 +371,11 @@ export function LiveMap({
     const t = document.createElement("strong");
     t.textContent = deviceLabel(sel);
     const s = document.createElement("span");
-    s.textContent = `${STATE_LABEL[mapState(sel, Date.now(), offlineSeconds)]} · ${u.fmtSpeed(sel.location.speedKph)} · ignition ${sel.location.ignition === null ? "unknown" : sel.location.ignition ? "on" : "off"}`;
+    const st = mapState(sel, Date.now(), offlineSeconds);
+    s.textContent = st === "moving" ? `${STATE_LABEL[st]} · ${u.fmtSpeed(sel.location.speedKph)}` : STATE_LABEL[st];
     const w = document.createElement("span");
     w.className = "text-muted-foreground";
-    w.textContent = `GPS fix ${timeRef.current.dateTimeSec(sel.location.recordedAt)} ${timeRef.current.abbr(sel.location.recordedAt)}`;
+    w.textContent = `Last update ${timeRef.current.dateTime(sel.location.recordedAt)} ${timeRef.current.abbr(sel.location.recordedAt)}`;
     el.append(t, s, w);
     const ll = layer.current?.displayed(sel.deviceId) ?? [sel.location.longitude, sel.location.latitude];
     popup.current = new maplibregl.Popup({ offset: 18, closeButton: true, maxWidth: "260px" }).setLngLat(ll).setDOMContent(el).addTo(m);
@@ -522,16 +523,17 @@ export function LiveMap({
                 <>
                   <dl className="m-0 grid grid-cols-3 gap-x-3 gap-y-2">
                     <Stat label="Speed" value={u.fmtSpeed(sel.location.speedKph)} />
-                    <Stat label="Ignition" value={sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} />
-                    <Stat label="Heading" value={selState === "moving" ? (compass(sel.location.headingDeg) ?? "–") : "–"} />
+                    <Stat label="Engine" value={sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} />
+                    <Stat label="Direction" value={selState === "moving" ? (compass(sel.location.headingDeg) ?? "–") : "–"} />
                     <div className="col-span-3 min-w-0">
-                      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Last GPS fix</dt>
+                      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Last update</dt>
                       <dd className="m-0 truncate text-sm font-medium">
                         {time.dateTimeSec(sel.location.recordedAt)} {time.abbr(sel.location.recordedAt)} <span className="font-normal text-muted-foreground">({ago(sel.location.recordedAt, now)})</span>
                       </dd>
                     </div>
                   </dl>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <span className="sr-only">Last location: </span>
                     <span className="truncate tabular-nums">
                       {sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)}
                     </span>
@@ -641,7 +643,7 @@ export function LiveMap({
                         </span>
                         <span className="flex gap-1.5 pl-7 text-xs text-muted-foreground">
                           <span className="truncate">{d.location ? [d.vehicle?.licensePlate, r.state === "moving" ? "Moving" : STATE_HINT[r.state]].filter(Boolean).join(" · ") : "No position yet"}</span>
-                          <span className="ml-auto shrink-0">{ago(d.lastSeenAt, now)}</span>
+                          <span className="ml-auto shrink-0">{d.lastSeenAt ? `Updated ${ago(d.lastSeenAt, now)}` : "No data yet"}</span>
                         </span>
                       </button>
                     </li>
@@ -681,7 +683,7 @@ export function LiveMap({
             <Tag /> <span className="sr-only sm:not-sr-only">Names</span>
           </Button>
           <Button size="sm" variant="secondary" aria-pressed={clustered} className={cn(!clustered && "text-muted-foreground")} title="Group nearby vehicles when zoomed out" onClick={() => setClustered((v) => !v)}>
-            <CircleDotDashed /> <span className="sr-only sm:not-sr-only">Cluster</span>
+            <CircleDotDashed /> <span className="sr-only">Group nearby vehicles</span>
           </Button>
           <Button size="sm" variant="secondary" aria-pressed={showZones} className={cn(!showZones && "text-muted-foreground")} onClick={() => setShowZones((v) => !v)}>
             <Hexagon /> <span className="sr-only sm:not-sr-only">Zones</span>

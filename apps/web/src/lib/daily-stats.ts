@@ -22,7 +22,8 @@ import { loadTrack } from "./reports";
  */
 
 /** How far back the first run (and a time-zone change) rebuilds. */
-export const STATS_BACKFILL_DAYS = 35;
+/** Covers the longest dashboard range (90 days) on a first run or after a time zone change. */
+export const STATS_BACKFILL_DAYS = 95;
 /** Extra track loaded around the day so trips are detected exactly as in a longer range. */
 const PAD_BEFORE_MS = 2 * 3_600_000;
 const PAD_AFTER_MS = 3_600_000;
@@ -140,8 +141,10 @@ export function startDailyStatsScheduler(intervalMs = 10 * 60_000) {
 
 export interface FleetCharts {
   timeZone: string;
-  /** Last 30 local days, oldest first, zero-filled. */
+  /** Last `days` local days, oldest first, zero-filled. */
   mileage: { day: string; distanceKm: number }[];
+  /** Earliest day this organization has a daily summary for (null: none yet). */
+  firstDay: string | null;
   /** Last 7 local days. */
   idling: { idleMin: number; drivingMin: number; ratio: number | null };
   /** Speeding alerts in the last 7 local days, by vehicle. */
@@ -151,21 +154,26 @@ export interface FleetCharts {
 }
 
 /** Tenant-scoped: every query carries organizationId. `timeZone` is the organization's. */
-export async function getFleetCharts(organizationId: string, timeZone: string, now = new Date()): Promise<FleetCharts> {
+export const CHART_RANGES = [7, 30, 90] as const;
+export type ChartRange = (typeof CHART_RANGES)[number];
+
+export async function getFleetCharts(organizationId: string, timeZone: string, now = new Date(), days: ChartRange = 30): Promise<FleetCharts> {
   const db = getDb();
   const t = schema.deviceDailyStats;
   const today = dateFormatter(timeZone).dayKey(now);
-  const first = addDays(today, -29);
+  const first = addDays(today, -(Math.max(days, 7) - 1));
+  const chartFirst = addDays(today, -(days - 1));
   const weekStart = addDays(today, -6);
   const scope = and(eq(t.organizationId, organizationId), eq(t.timeZone, timeZone), gte(t.day, first), lte(t.day, today));
 
-  const [byDay, [upd], speeding] = await Promise.all([
+  const [byDay, [upd], [earliest], speeding] = await Promise.all([
     db
       .select({ day: t.day, distanceM: sql<string>`sum(${t.distanceM})`, drivingS: sql<string>`sum(${t.drivingS})`, idleS: sql<string>`sum(${t.idleS})` })
       .from(t)
       .where(scope)
       .groupBy(t.day),
     db.select({ at: sql<Date | null>`max(${t.computedAt})` }).from(t).where(scope),
+    db.select({ day: sql<string | null>`min(${t.day})` }).from(t).where(and(eq(t.organizationId, organizationId), eq(t.timeZone, timeZone))),
     db.execute<{ vehicle: string; events: string; max_kph: number | null }>(
       sql`select coalesce(v.name, d.name, d.model, 'Device') as vehicle, count(*) as events, max((e.details->>'speedKph')::float) as max_kph
           from alert_events e
@@ -180,8 +188,8 @@ export async function getFleetCharts(organizationId: string, timeZone: string, n
   ]);
 
   const map = new Map(byDay.map((r) => [r.day, r]));
-  const mileage = Array.from({ length: 30 }, (_, i) => {
-    const day = addDays(first, i);
+  const mileage = Array.from({ length: days }, (_, i) => {
+    const day = addDays(chartFirst, i);
     return { day, distanceKm: Math.round(Number(map.get(day)?.distanceM ?? 0) / 100) / 10 };
   });
   let idleS = 0;
@@ -195,6 +203,7 @@ export async function getFleetCharts(organizationId: string, timeZone: string, n
   return {
     timeZone,
     mileage,
+    firstDay: earliest?.day ?? null,
     idling: { idleMin: Math.round(idleS / 60), drivingMin: Math.round(drivingS / 60), ratio: idleS + drivingS > 0 ? idleS / (idleS + drivingS) : null },
     speeding: speeding.map((r) => ({ vehicle: r.vehicle, events: Number(r.events), maxSpeedKph: r.max_kph === null ? null : Math.round(Number(r.max_kph)) })),
     updatedAt: upd?.at ? new Date(upd.at).toISOString() : null

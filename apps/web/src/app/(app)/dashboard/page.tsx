@@ -1,6 +1,7 @@
 import { contextHasPermission, units, type TenantContext, type Units } from "@rio-gps/core";
-import { Activity, AlertTriangle, CalendarClock, ArrowRight, Bell, Car, CircleOff, CircleParking, Hexagon, Map as MapIcon, MapPin, Plus, Route, Truck, Wrench } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, CalendarClock, ArrowRight, Bell, Car, CircleOff, CircleParking, Hexagon, Map as MapIcon, Plus, Route, Truck, Wrench } from "lucide-react";
 import Link from "next/link";
+import { CHART_RANGES, type ChartRange } from "@/lib/daily-stats";
 import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
 import { redirect } from "next/navigation";
 import { cache, Suspense, type ReactNode } from "react";
@@ -30,7 +31,9 @@ export const metadata = { title: "Dashboard · RIO GPS" };
 /** Trip summary covers the vehicles most recently seen, to keep the page fast on big fleets. */
 const TRIP_SUMMARY_MAX_DEVICES = 25;
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
+  const rangeParam = Number((await searchParams).range);
+  const chartDays: ChartRange = (CHART_RANGES as readonly number[]).includes(rangeParam) ? (rangeParam as ChartRange) : 30;
   const rc = await getRequestContext();
   if (rc.status !== "ok") redirect("/login?next=/dashboard");
   const { ctx, user, unitSystem } = rc;
@@ -49,6 +52,8 @@ export default async function DashboardPage() {
   const states = devices.map((d) => ({ d, s: fleetState(d) }));
   const count = (s: FleetState) => states.filter((x) => x.s === s).length;
   const firstName = (user.name || "").split(" ")[0];
+  // Vehicles, Moving, Stopped, Offline, then Idling and Alerts when they apply.
+  const tileCount = 4 + (count("idle") > 0 ? 1 : 0) + (can("alerts.read") ? 1 : 0);
 
   const actions = (
     <>
@@ -97,18 +102,14 @@ export default async function DashboardPage() {
     <>
       <PageHeader title="Fleet overview" description="What's happening with your fleet right now." actions={actions} />
 
-      <section aria-label="Fleet summary" className="stagger-in mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-7">
-        <Stat label="Vehicles" value={devices.length} icon={Truck} href="/vehicles" className="col-span-2 2xl:col-span-1" />
+      <section aria-label="Fleet summary" className={cn("stagger-in mb-5 grid grid-cols-2 gap-3", tileCount === 6 ? "md:grid-cols-3 xl:grid-cols-6" : tileCount === 5 ? "md:grid-cols-5" : "md:grid-cols-4")}>
+        <Stat label="Vehicles" value={devices.length} icon={Truck} href="/vehicles" className={cn(tileCount % 2 === 1 && "col-span-2 md:col-span-1")} />
         <Stat label="Moving" value={count("moving")} icon={Car} tone="success" href="/vehicles?state=moving" />
-        <Stat label="Idling" value={count("idle")} icon={Activity} tone={count("idle") > 0 ? "warning" : undefined} hint="engine on" href="/vehicles?state=idle" />
         <Stat label="Stopped" value={count("stopped")} icon={CircleParking} tone="info" href="/vehicles?state=stopped" />
         <Stat label="Offline" value={count("offline") + count("never_seen")} icon={CircleOff} href="/vehicles?state=offline" />
+        {/* Idling only earns a tile when something is idling: engine running, going nowhere. */}
+        {count("idle") > 0 && <Stat label="Idling" value={count("idle")} icon={Activity} tone="warning" hint="engine on" href="/vehicles?state=idle" />}
         {can("alerts.read") && <Stat label="Unread alerts" value={unack} icon={Bell} tone={unack > 0 ? "danger" : undefined} href="/alerts" />}
-        {can("history.read") && (
-          <Suspense fallback={<StatSkeleton label="Trips · 24 h" />}>
-            <TripsStat ctx={ctx} devices={devices} now={now} />
-          </Suspense>
-        )}
       </section>
 
       {/* Things that need attention sit side by side on wide screens instead of stacking. */}
@@ -178,8 +179,8 @@ export default async function DashboardPage() {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? d.name ?? d.model ?? "Device"}</span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {d.location ? `${u.fmtSpeed(d.location.speedKph)} · ignition ${d.location.ignition === true ? "on" : d.location.ignition === false ? "off" : "unknown"} · ` : ""}
-                        seen {relativeTime(d.lastSeenAt, now.getTime(), rc.timeZone)}
+                        {d.location ? `${u.fmtSpeed(d.location.speedKph)} · engine ${d.location.ignition === true ? "on" : d.location.ignition === false ? "off" : "unknown"} · ` : ""}
+                        last update {relativeTime(d.lastSeenAt, now.getTime(), rc.timeZone)}
                       </span>
                     </span>
                     <StatusBadge tone={FLEET_STATE_META[s].tone} label={FLEET_STATE_META[s].label} pulse={s === "moving"} />
@@ -187,7 +188,7 @@ export default async function DashboardPage() {
                 </li>
               ))}
           </ul>
-          {devices.length > 8 && <p className="m-0 border-t border-border px-5 py-2.5 text-xs text-muted-foreground">Showing 8 of {devices.length}. Moving and idle vehicles first.</p>}
+          {devices.length > 8 && <p className="m-0 border-t border-border px-5 py-2.5 text-xs text-muted-foreground">Showing 8 of {devices.length}. Moving vehicles first.</p>}
         </Card>
 
         <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-2">
@@ -200,7 +201,15 @@ export default async function DashboardPage() {
                 </Link>
               </CardHeader>
               {recentAlerts.length === 0 ? (
-                <CardContent className="text-sm text-muted-foreground">No alerts yet. Set up speeding, zone and offline alerts to be notified.</CardContent>
+                <CardContent className="flex items-center gap-3">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-success-soft text-success">
+                    <CheckCircle2 className="size-4" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 text-sm">
+                    <p className="m-0 font-medium">You&apos;re all caught up</p>
+                    <p className="m-0 text-muted-foreground">No alerts right now. Speeding, zone and offline alerts appear here.</p>
+                  </div>
+                </CardContent>
               ) : (
                 <ul className="m-0 list-none divide-y divide-border p-0">
                   {recentAlerts.map((a) => {
@@ -234,8 +243,7 @@ export default async function DashboardPage() {
               {can("vehicles.create") && <QuickAction href="/vehicles" icon={Plus} label="Add vehicle" />}
               {can("geofences.write") && <QuickAction href="/geofences" icon={Hexagon} label="Create zone" />}
               {can("history.read") && <QuickAction href="/reports" icon={Route} label="Trip reports" />}
-              {can("alerts.write") && <QuickAction href="/alerts" icon={Bell} label="Alert rules" />}
-              {ctx.isSuperAdmin && <QuickAction href="/admin/customers" icon={MapPin} label="Add device" />}
+              {can("alerts.write") && !can("vehicles.create") && <QuickAction href="/alerts" icon={Bell} label="Alert rules" />}
             </CardContent>
           </Card>
         </div>
@@ -243,7 +251,7 @@ export default async function DashboardPage() {
 
       {can("history.read") && (
         <Suspense fallback={<TrendsSkeleton />}>
-          <FleetTrends organizationId={ctx.organizationId} u={u} canSeeAlerts={can("alerts.read")} now={now} />
+          <FleetTrends organizationId={ctx.organizationId} u={u} canSeeAlerts={can("alerts.read")} now={now} days={chartDays} />
         </Suspense>
       )}
 
@@ -294,7 +302,7 @@ function Stat({ label, value, icon: Icon, tone, hint, href, className }: { label
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
         <Icon className={cn("size-4", tone === "success" ? "text-success" : tone === "danger" ? "text-danger" : tone === "warning" ? "text-warning" : tone === "info" ? "text-info" : "text-muted-foreground")} aria-hidden="true" />
       </div>
-      <p className="m-0 mt-2 text-2xl font-semibold tabular-nums text-foreground">
+      <p className="m-0 mt-2 text-[28px] font-semibold leading-8 tabular-nums text-foreground">
         {value}
         {hint && <span className="ml-1 text-sm font-normal text-muted-foreground">{hint}</span>}
       </p>
@@ -306,15 +314,6 @@ function Stat({ label, value, icon: Icon, tone, hint, href, className }: { label
     </Link>
   ) : (
     <div className={className}>{body}</div>
-  );
-}
-
-function StatSkeleton({ label }: { label: string }) {
-  return (
-    <Card className="p-4" aria-busy="true">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <Skeleton className="mt-3 h-6 w-12" />
-    </Card>
   );
 }
 
@@ -340,11 +339,6 @@ const tripsLast24h = cache(async (ctx: TenantContext, devices: CurrentDeviceLoca
   const trips = reports.flatMap(({ d, r }) => r.trips.map((t) => ({ ...t, vehicle: d.vehicle?.name ?? d.name ?? d.model ?? "Device", deviceId: d.deviceId })));
   return { trips: trips.sort((a, b) => Date.parse(b.startAt) - Date.parse(a.startAt)), partial: devices.length > TRIP_SUMMARY_MAX_DEVICES, from };
 });
-
-async function TripsStat({ ctx, devices, now }: { ctx: TenantContext; devices: CurrentDeviceLocation[]; now: Date }) {
-  const { trips } = await tripsLast24h(ctx, devices, now);
-  return <Stat label="Trips · 24 h" value={trips.length} icon={Route} href="/reports" />;
-}
 
 async function RecentTrips({ ctx, devices, now, u }: { ctx: TenantContext; devices: CurrentDeviceLocation[]; now: Date; u: Units }) {
   const { trips, partial, from } = await tripsLast24h(ctx, devices, now);
