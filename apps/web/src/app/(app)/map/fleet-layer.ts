@@ -20,7 +20,10 @@ const ANIM_MS = 900;
 const MAX_ANIMATING = 400;
 const MIN_FRAME_MS = 33; // ~30 fps is plenty for smooth marker glides
 
-export const STATE_COLORS: Record<MapState, string> = { moving: "#15803d", idle: "#b45309", offline: "#6b7280" };
+export const STATE_COLORS: Record<MapState, string> = { moving: "#15803d", idle: "#b45309", stopped: "#c42b2b", offline: "#6b7280" };
+/** Below this zoom nearby vehicles merge into one counted bubble, so a large fleet stays readable. */
+const CLUSTER_MAX_ZOOM = 8;
+const NOT_CLUSTER = ["!", ["has", "point_count"]];
 
 interface Anim {
   from: [number, number];
@@ -75,6 +78,9 @@ export class FleetLayer {
   private selected: string | null = null;
   private filterStates: MapState[] | null = null;
   private filterIds: Set<string> | null = null;
+  /** Ids currently in the map source (filters are applied to the data, so cluster counts match the list). */
+  private inSource = new Set<string>();
+  private labels = true;
   private handlers: Array<() => void> = [];
 
   constructor(
@@ -85,17 +91,40 @@ export class FleetLayer {
   /** Call after the style has loaded. Safe to call again after a style change. */
   install() {
     const m = this.map;
-    for (const s of ["moving", "idle", "offline"] as MapState[]) {
+    for (const s of ["moving", "idle", "stopped", "offline"] as MapState[]) {
       const id = `veh-${s}`;
       if (!m.hasImage(id)) {
-        const { img, ratio } = arrowIcon(STATE_COLORS[s], s !== "offline");
+        const { img, ratio } = arrowIcon(STATE_COLORS[s], s === "moving" || s === "idle");
         m.addImage(id, img, { pixelRatio: ratio });
       }
     }
     // promoteId lets live updates send only the vehicles that changed (updateData diff).
-    if (!m.getSource(SRC)) m.addSource(SRC, { type: "geojson", data: this.collection(), promoteId: "id" });
+    if (!m.getSource(SRC)) m.addSource(SRC, { type: "geojson", data: this.collection(), promoteId: "id", cluster: true, clusterMaxZoom: CLUSTER_MAX_ZOOM, clusterRadius: 48 });
     this.structural = true;
     if (!m.getLayer("fleet-halo")) {
+      m.addLayer({
+        id: "fleet-clusters",
+        type: "circle",
+        source: SRC,
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-color": "#1f2937",
+          "circle-opacity": 0.92,
+          "circle-radius": ["step", ["get", "point_count"], 16, 10, 20, 50, 25, 200, 30],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2
+        }
+      });
+      if (m.getStyle().glyphs) {
+        m.addLayer({
+          id: "fleet-cluster-count",
+          type: "symbol",
+          source: SRC,
+          filter: ["has", "point_count"],
+          layout: { "text-field": ["get", "point_count_abbreviated"], "text-font": ["Noto Sans Regular"], "text-size": 13, "text-allow-overlap": true },
+          paint: { "text-color": "#ffffff" }
+        });
+      }
       m.addLayer({
         id: "fleet-halo",
         type: "circle",
@@ -107,13 +136,14 @@ export class FleetLayer {
         id: "fleet-icons",
         type: "symbol",
         source: SRC,
+        filter: NOT_CLUSTER as never,
         layout: {
           "icon-image": ["concat", "veh-", ["get", "state"]],
           "icon-rotate": ["to-number", ["coalesce", ["get", "heading"], 0]],
           "icon-rotation-alignment": "map",
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
-          "symbol-sort-key": ["match", ["get", "state"], "moving", 3, "idle", 2, 1]
+          "symbol-sort-key": ["match", ["get", "state"], "moving", 4, "idle", 3, "stopped", 2, 1]
         }
       });
       // Names need glyphs; the production style has them, a bare style may not.
@@ -123,6 +153,7 @@ export class FleetLayer {
           type: "symbol",
           source: SRC,
           minzoom: 10,
+          filter: NOT_CLUSTER as never,
           layout: {
             "text-field": ["get", "name"],
             "text-font": ["Noto Sans Regular"],
@@ -148,6 +179,31 @@ export class FleetLayer {
         m.getCanvas().style.cursor = "";
         this.opts.onHover?.(null);
       };
+      // A bubble zooms in just far enough to split apart.
+      const clusterClick = (e: MapLayerMouseEvent) => {
+        const f = e.features?.[0];
+        const cid = f?.properties?.cluster_id as number | undefined;
+        if (cid === undefined || f?.geometry.type !== "Point") return;
+        const center = f.geometry.coordinates as [number, number];
+        (m.getSource(SRC) as GeoJSONSource)
+          .getClusterExpansionZoom(cid)
+          .then((zoom) => m.easeTo({ center, zoom: Math.min(zoom + 0.5, 16), duration: 500 }))
+          .catch((err) => console.error("cluster zoom failed", err));
+      };
+      const clusterEnter = () => {
+        m.getCanvas().style.cursor = "pointer";
+      };
+      const clusterLeave = () => {
+        m.getCanvas().style.cursor = "";
+      };
+      m.on("click", "fleet-clusters", clusterClick);
+      m.on("mouseenter", "fleet-clusters", clusterEnter);
+      m.on("mouseleave", "fleet-clusters", clusterLeave);
+      this.handlers.push(() => {
+        m.off("click", "fleet-clusters", clusterClick);
+        m.off("mouseenter", "fleet-clusters", clusterEnter);
+        m.off("mouseleave", "fleet-clusters", clusterLeave);
+      });
       m.on("click", "fleet-icons", click);
       m.on("mousemove", "fleet-icons", enter);
       m.on("mouseleave", "fleet-icons", leave);
@@ -158,8 +214,8 @@ export class FleetLayer {
       });
     }
     this.ready = true;
-    this.applyFilter();
     this.applySelection();
+    this.applyLabels();
     this.schedule();
   }
 
@@ -215,7 +271,14 @@ export class FleetLayer {
   filter(states: MapState[] | null, ids: Set<string> | null) {
     this.filterStates = states;
     this.filterIds = ids;
-    this.applyFilter();
+    this.structural = true;
+    this.schedule();
+  }
+
+  /** Show or hide vehicle names next to the markers. */
+  setLabels(visible: boolean) {
+    this.labels = visible;
+    this.applyLabels();
   }
 
   displayed(id: string): [number, number] | undefined {
@@ -234,14 +297,13 @@ export class FleetLayer {
     this.map.setFilter("fleet-halo", ["==", ["get", "id"], this.selected ?? ""]);
   }
 
-  private applyFilter() {
-    if (!this.ready || !this.map.getLayer("fleet-icons")) return;
-    const parts: unknown[] = [];
-    if (this.filterStates) parts.push(["in", ["get", "state"], ["literal", this.filterStates]]);
-    if (this.filterIds) parts.push(["in", ["get", "id"], ["literal", [...this.filterIds]]]);
-    const f = (parts.length ? ["all", ...parts] : null) as Parameters<MlMap["setFilter"]>[1];
-    this.map.setFilter("fleet-icons", f);
-    if (this.map.getLayer("fleet-labels")) this.map.setFilter("fleet-labels", f);
+  private applyLabels() {
+    if (!this.ready || !this.map.getLayer("fleet-labels")) return;
+    this.map.setLayoutProperty("fleet-labels", "visibility", this.labels ? "visible" : "none");
+  }
+
+  private passes(p: FleetPoint) {
+    return (!this.filterStates || this.filterStates.includes(p.state)) && (!this.filterIds || this.filterIds.has(p.id));
   }
 
   private schedule() {
@@ -265,6 +327,16 @@ export class FleetLayer {
       } else this.display.set(id, lerpLngLat(a.from, a.to, k));
       this.changed.add(id);
     }
+    // A vehicle entering or leaving the active filter changes what is on the map: rebuild.
+    if (!this.structural) {
+      for (const id of this.changed) {
+        const p = this.points.get(id);
+        if (p && this.passes(p) !== this.inSource.has(id)) {
+          this.structural = true;
+          break;
+        }
+      }
+    }
     const src = this.map.getSource(SRC) as GeoJSONSource | undefined;
     if (src) {
       if (this.structural) src.setData(this.collection());
@@ -272,7 +344,7 @@ export class FleetLayer {
         src.updateData({
           update: [...this.changed].flatMap((id) => {
             const p = this.points.get(id);
-            if (!p) return [];
+            if (!p || !this.inSource.has(id)) return [];
             return [
               {
                 id,
@@ -297,7 +369,10 @@ export class FleetLayer {
 
   private collection(): GeoJSON.FeatureCollection<GeoJSON.Point> {
     const features: GeoJSON.Feature<GeoJSON.Point>[] = [];
+    this.inSource.clear();
     for (const p of this.points.values()) {
+      if (!this.passes(p)) continue;
+      this.inSource.add(p.id);
       features.push({
         type: "Feature",
         geometry: { type: "Point", coordinates: this.display.get(p.id) ?? p.lngLat },

@@ -5,8 +5,13 @@
 import { addDays, dateFormatter, startOfLocalDay } from "@rio-gps/core/timezones";
 import type { CurrentDeviceLocation, LocationPoint } from "@/lib/locations";
 
-export type MapState = "moving" | "idle" | "offline";
-export const MAP_STATES: MapState[] = ["moving", "idle", "offline"];
+/**
+ * moving: travelling. idle: engine on but standing still (burning fuel).
+ * stopped: standing still with the engine off, or the tracker has no ignition wire.
+ * offline: the tracker has not reported for longer than the offline threshold.
+ */
+export type MapState = "moving" | "idle" | "stopped" | "offline";
+export const MAP_STATES: MapState[] = ["moving", "idle", "stopped", "offline"];
 export const MOVING_KPH = 5;
 
 export function deviceLabel(d: Pick<CurrentDeviceLocation, "vehicle" | "name" | "model">) {
@@ -16,7 +21,15 @@ export function deviceLabel(d: Pick<CurrentDeviceLocation, "vehicle" | "name" | 
 /** Presentation state. Offline is decided from last_seen so it stays right between snapshots. */
 export function mapState(d: Pick<CurrentDeviceLocation, "lastSeenAt" | "location">, nowMs: number, offlineSeconds: number): MapState {
   if (!d.lastSeenAt || nowMs - Date.parse(d.lastSeenAt) > offlineSeconds * 1000) return "offline";
-  return (d.location?.speedKph ?? 0) >= MOVING_KPH ? "moving" : "idle";
+  if ((d.location?.speedKph ?? 0) >= MOVING_KPH) return "moving";
+  return d.location?.ignition === true ? "idle" : "stopped";
+}
+
+const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
+/** Eight-point compass direction for a heading in degrees (0 = north). */
+export function compass(deg: number | null | undefined): string | null {
+  if (deg === null || deg === undefined || !Number.isFinite(deg)) return null;
+  return COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8]!;
 }
 
 const rad = (d: number) => (d * Math.PI) / 180;

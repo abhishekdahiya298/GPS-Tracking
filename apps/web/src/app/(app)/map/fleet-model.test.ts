@@ -1,15 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { bearing, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, trackStats } from "./fleet-model";
+import { bearing, compass, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, trackStats } from "./fleet-model";
 
 const now = Date.parse("2026-09-25T12:00:00Z");
-const loc = (speedKph: number | null) => ({ latitude: 0, longitude: 0, speedKph, headingDeg: 0, altitudeM: null, ignition: null, motion: null, recordedAt: "2026-09-25T11:59:00Z", receivedAt: "2026-09-25T11:59:00Z" });
+const loc = (speedKph: number | null, ignition: boolean | null = null) => ({ latitude: 0, longitude: 0, speedKph, headingDeg: 0, altitudeM: null, ignition, motion: null, recordedAt: "2026-09-25T11:59:00Z", receivedAt: "2026-09-25T11:59:00Z" });
 
 describe("fleet-model", () => {
-  it("mapState: offline from last_seen, else moving/idle by speed", () => {
+  it("mapState: offline from last_seen, moving by speed, idle only with the engine on", () => {
     expect(mapState({ lastSeenAt: "2026-09-25T11:59:00Z", location: loc(40) }, now, 600)).toBe("moving");
-    expect(mapState({ lastSeenAt: "2026-09-25T11:59:00Z", location: loc(2) }, now, 600)).toBe("idle");
+    expect(mapState({ lastSeenAt: "2026-09-25T11:59:00Z", location: loc(40, false) }, now, 600)).toBe("moving");
+    expect(mapState({ lastSeenAt: "2026-09-25T11:59:00Z", location: loc(2, true) }, now, 600)).toBe("idle");
+    expect(mapState({ lastSeenAt: "2026-09-25T11:59:00Z", location: loc(2, false) }, now, 600)).toBe("stopped");
+    expect(mapState({ lastSeenAt: "2026-09-25T11:59:00Z", location: loc(2) }, now, 600)).toBe("stopped");
     expect(mapState({ lastSeenAt: "2026-09-25T11:40:00Z", location: loc(40) }, now, 600)).toBe("offline");
     expect(mapState({ lastSeenAt: null, location: null }, now, 600)).toBe("offline");
+  });
+  it("compass", () => {
+    expect(compass(0)).toBe("N");
+    expect(compass(44)).toBe("NE");
+    expect(compass(180)).toBe("S");
+    expect(compass(350)).toBe("N");
+    expect(compass(-90)).toBe("W");
+    expect(compass(null)).toBeNull();
   });
   it("bearing", () => {
     expect(Math.round(bearing([0, 0], [0, 1]))).toBe(0);

@@ -1,12 +1,11 @@
 "use client";
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
-import { ChevronUp, Crosshair, History, Maximize2, Radio, Truck } from "lucide-react";
+import { ChevronUp, Copy, Crosshair, ExternalLink, History, Hexagon, LocateFixed, Maximize2, PanelLeftClose, PanelLeftOpen, Radio, Share2, Tag, Truck, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { shapeRing } from "@rio-gps/core/geo";
-import { SegmentedFilter } from "@/components/app/filter-bar";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
 import { Select } from "@/components/ui/input";
@@ -20,15 +19,23 @@ import type { GeofenceDto } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { FleetLayer, STATE_COLORS, type FleetPoint } from "./fleet-layer";
-import { deviceLabel, FALLBACK_VIEW, mapState, MAP_STATES, type MapState } from "./fleet-model";
+import { compass, deviceLabel, FALLBACK_VIEW, mapState, MAP_STATES, type MapState } from "./fleet-model";
 import { useFleetStream } from "./use-fleet-stream";
 
 // Loaded on first use: most sessions never open history.
 const HistoryPanel = dynamic(() => import("./history-panel").then((m) => m.HistoryPanel), { ssr: false });
+const ShareDialog = dynamic(() => import("../vehicles/share-dialog").then((m) => m.ShareDialog), { ssr: false });
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 const ROW_H = 64;
-const STATE_LABEL: Record<MapState, string> = { moving: "Moving", idle: "Idle", offline: "Offline" };
+const STATE_LABEL: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", offline: "Offline" };
+const STATE_HINT: Record<MapState, string> = {
+  moving: "Travelling",
+  idle: "Engine on, not moving",
+  stopped: "Parked, engine off",
+  offline: "Tracker not reporting"
+};
+const ZONE_LAYERS = ["fences-fill", "fences-line", "fences-label"];
 type Filter = "all" | MapState;
 
 function ago(iso: string | null, now: number) {
@@ -55,7 +62,27 @@ function StateDot({ state }: { state: MapState }) {
   return <span aria-hidden="true" className="inline-block size-2 shrink-0 rounded-full" style={{ background: STATE_COLORS[state] }} />;
 }
 
-export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: number; groups?: { id: string; name: string; vehicleIds: string[] }[] }) {
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="m-0 truncate text-sm font-medium" title={hint}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+export function LiveMap({
+  offlineSeconds,
+  groups = [],
+  canShare = false
+}: {
+  offlineSeconds: number;
+  groups?: { id: string; name: string; vehicleIds: string[] }[];
+  /** Whether this user may create public share links (the server enforces it regardless). */
+  canShare?: boolean;
+}) {
   const u = useUnits();
   const time = useTime();
   // Read from callbacks that are set up once (stream handlers, the popup effect).
@@ -76,6 +103,14 @@ export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: numbe
   const [groupId, setGroupId] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [showLabels, setShowLabels] = useState(true);
+  const [showZones, setShowZones] = useState(true);
+  const [follow, setFollow] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  // Read inside stream callbacks that are created once.
+  const followRef = useRef<string | null>(null);
+  followRef.current = follow ? selected : null;
 
   const mapRef = useRef<MlMap | null>(null);
 
@@ -88,6 +123,10 @@ export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: numbe
     onUpdate: (list) => {
       const pts = list.map((d) => toPoint(d, Date.now(), offlineSeconds)).filter((p): p is FleetPoint => p !== null);
       layer.current?.upsert(pts);
+      // Follow mode: keep the selected vehicle in view as it moves.
+      const f = followRef.current;
+      const hit = f ? pts.find((p) => p.id === f) : undefined;
+      if (hit) mapRef.current?.easeTo({ center: hit.lngLat, duration: 900 });
     },
     onAlert: (a) => {
       toast.warning(`${a.vehicleName ?? "A vehicle"}: ${a.ruleName}`, {
@@ -125,6 +164,8 @@ export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: numbe
       // The OpenFreeMap style references a few icons its sprite doesn't ship.
       if (!m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
     });
+    // Panning by hand means "let me look around": stop following.
+    m.on("dragstart", () => setFollow(false));
     m.on("error", (e) => {
       console.error("map error", e.error);
       if (!m.isStyleLoaded()) setMapError("Map tiles failed to load. Vehicle positions are still updating in the list.");
@@ -243,7 +284,7 @@ export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: numbe
   }, [groups, groupId]);
   const scoped = useMemo(() => (groupSet ? all.filter((r) => r.d.vehicle && groupSet.has(r.d.vehicle.id)) : all), [all, groupSet]);
   const counts = useMemo(() => {
-    const c = { all: scoped.length, moving: 0, idle: 0, offline: 0 };
+    const c = { all: scoped.length, moving: 0, idle: 0, stopped: 0, offline: 0 };
     for (const r of scoped) c[r.state]++;
     return c;
   }, [scoped]);
@@ -258,8 +299,21 @@ export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: numbe
     layer.current?.filter(filter === "all" ? null : [filter], q || groupSet ? new Set(rows.map((r) => r.d.deviceId)) : null);
   }, [filter, q, groupSet, rows]);
 
+  useEffect(() => {
+    layer.current?.setLabels(showLabels);
+  }, [showLabels, map]);
+  useEffect(() => {
+    if (!map) return;
+    for (const id of ZONE_LAYERS) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", showZones ? "visible" : "none");
+  }, [showZones, map]);
+  // Following only makes sense while one vehicle is selected.
+  useEffect(() => {
+    if (!selected) setFollow(false);
+  }, [selected]);
+
   // Selection: halo + popup.
   const sel = selected ? devices.current.get(selected) : undefined;
+  const selState: MapState = sel ? mapState(sel, now, offlineSeconds) : "offline";
   useEffect(() => {
     layer.current?.select(selected);
     popup.current?.remove();
@@ -361,36 +415,122 @@ export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: numbe
                 ))}
               </Select>
             )}
-            <SegmentedFilter<Filter>
-              label="Filter by status"
-              value={filter}
-              onChange={setFilter}
-              options={[
-                { value: "all", label: "All", count: counts.all },
-                { value: "moving", label: "Moving", count: counts.moving },
-                { value: "idle", label: "Idle", count: counts.idle },
-                { value: "offline", label: "Offline", count: counts.offline }
-              ]}
-            />
+            <div role="group" aria-label="Filter by status" className="grid grid-cols-5 gap-1">
+              {(["all", ...MAP_STATES] as Filter[]).map((f) => {
+                const on = filter === f;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    aria-pressed={on}
+                    title={f === "all" ? "Every vehicle" : STATE_HINT[f]}
+                    onClick={() => setFilter(on && f !== "all" ? "all" : f)}
+                    className={cn(
+                      "grid cursor-pointer justify-items-center gap-0.5 rounded-lg border bg-background px-1 py-1.5 hover:bg-muted",
+                      on ? "border-primary bg-primary-soft hover:bg-primary-soft" : "border-border"
+                    )}
+                  >
+                    <span className="text-base font-semibold leading-5 tabular-nums">{counts[f]}</span>
+                    <span className="flex items-center gap-1 text-[11px] leading-4 text-muted-foreground">
+                      {f !== "all" && <span aria-hidden="true" className="inline-block size-1.5 rounded-full" style={{ background: STATE_COLORS[f] }} />}
+                      {f === "all" ? "All" : STATE_LABEL[f]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {sel && (
-            <div className="grid gap-2 border-b border-border bg-primary-soft/60 px-4 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <strong className="truncate text-sm">{deviceLabel(sel)}</strong>
-                <button type="button" className="cursor-pointer border-0 bg-transparent text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelected(null)}>
-                  Clear
+            <section aria-label="Selected vehicle" className="grid gap-3 border-b border-border bg-primary-soft/50 px-4 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h2 className="m-0 truncate text-sm font-semibold">{deviceLabel(sel)}</h2>
+                  <p className="m-0 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <StateDot state={selState} />
+                    <span className="font-medium text-foreground">{STATE_LABEL[selState]}</span>
+                    {sel.vehicle?.licensePlate && <span className="truncate">· {sel.vehicle.licensePlate}</span>}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close vehicle details"
+                  className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => setSelected(null)}
+                >
+                  <X className="size-4" aria-hidden="true" />
                 </button>
               </div>
+              {sel.location ? (
+                <>
+                  <dl className="m-0 grid grid-cols-3 gap-x-3 gap-y-2">
+                    <Stat label="Speed" value={u.fmtSpeed(sel.location.speedKph)} />
+                    <Stat label="Ignition" value={sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} />
+                    <Stat label="Heading" value={selState === "moving" ? (compass(sel.location.headingDeg) ?? "–") : "–"} />
+                    <div className="col-span-3 min-w-0">
+                      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Last GPS fix</dt>
+                      <dd className="m-0 truncate text-sm font-medium">
+                        {time.dateTimeSec(sel.location.recordedAt)} {time.abbr(sel.location.recordedAt)} <span className="font-normal text-muted-foreground">({ago(sel.location.recordedAt, now)})</span>
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <span className="truncate tabular-nums">
+                      {sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Copy coordinates"
+                      className="grid size-6 shrink-0 cursor-pointer place-items-center rounded border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+                      onClick={() => {
+                        const text = `${sel.location!.latitude.toFixed(6)}, ${sel.location!.longitude.toFixed(6)}`;
+                        navigator.clipboard.writeText(text).then(
+                          () => toast.success("Coordinates copied."),
+                          () => toast.error("Couldn't copy. Select the coordinates and copy them.")
+                        );
+                      }}
+                    >
+                      <Copy className="size-3.5" aria-hidden="true" />
+                    </button>
+                    <a
+                      className="ml-auto inline-flex shrink-0 items-center gap-1 text-primary hover:underline"
+                      href={`https://www.google.com/maps/search/?api=1&query=${sel.location.latitude.toFixed(6)},${sel.location.longitude.toFixed(6)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Google Maps <ExternalLink className="size-3" aria-hidden="true" />
+                    </a>
+                  </div>
+                </>
+              ) : (
+                <p className="m-0 text-xs text-muted-foreground">This tracker hasn&apos;t reported a position yet.</p>
+              )}
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="secondary" onClick={() => focus(sel.deviceId)}>
+                <Button size="sm" variant="secondary" onClick={() => focus(sel.deviceId)} disabled={!sel.location}>
                   <Crosshair /> Center
+                </Button>
+                <Button
+                  size="sm"
+                  variant={follow ? "primary" : "secondary"}
+                  aria-pressed={follow}
+                  disabled={!sel.location}
+                  onClick={() => {
+                    if (!follow) focus(sel.deviceId);
+                    setFollow((v) => !v);
+                  }}
+                >
+                  <LocateFixed /> {follow ? "Following" : "Follow"}
                 </Button>
                 <Button size="sm" variant="secondary" onClick={() => setHistoryFor(sel.deviceId)}>
                   <History /> History
                 </Button>
+                {canShare && sel.vehicle && (
+                  <Button size="sm" variant="secondary" onClick={() => setSharing(true)}>
+                    <Share2 /> Share
+                  </Button>
+                )}
               </div>
-            </div>
+            </section>
           )}
 
           <div ref={listRef} className="relative min-h-0 flex-1 overflow-auto" onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
@@ -432,10 +572,13 @@ export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: numbe
                         <span className="flex items-center gap-2 text-sm font-medium">
                           <StateDot state={r.state} />
                           <span className="truncate">{r.name}</span>
-                          <span className="ml-auto shrink-0 text-xs font-normal text-muted-foreground">{STATE_LABEL[r.state]}</span>
+                          <span className="ml-auto shrink-0 text-xs font-normal tabular-nums text-muted-foreground">
+                            {r.state === "moving" && d.location ? u.fmtSpeed(d.location.speedKph) : STATE_LABEL[r.state]}
+                          </span>
                         </span>
-                        <span className="truncate pl-4 text-xs text-muted-foreground">
-                          {d.location ? `${u.fmtSpeed(d.location.speedKph)} · ignition ${d.location.ignition === null ? "?" : d.location.ignition ? "on" : "off"} · ${ago(d.lastSeenAt, now)}` : "No position yet"}
+                        <span className="flex gap-1.5 pl-4 text-xs text-muted-foreground">
+                          <span className="truncate">{d.location ? [d.vehicle?.licensePlate, r.state === "moving" ? "Moving" : STATE_HINT[r.state]].filter(Boolean).join(" · ") : "No position yet"}</span>
+                          <span className="ml-auto shrink-0">{ago(d.lastSeenAt, now)}</span>
                         </span>
                       </button>
                     </li>
@@ -456,11 +599,38 @@ export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: numbe
         <div className="absolute inset-0">
           <div ref={mapDiv} className="h-full w-full" />
         </div>
-        <div className="absolute left-3 top-3 z-[1] flex gap-2">
+        <div className="absolute left-3 top-3 z-[1] flex flex-wrap gap-2 pr-14">
+          <Button
+            size="sm"
+            variant="secondary"
+            className="hidden md:inline-flex"
+            aria-expanded={panelOpen}
+            aria-label={panelOpen ? "Hide vehicle panel" : "Show vehicle panel"}
+            title={panelOpen ? "Hide vehicle panel" : "Show vehicle panel"}
+            onClick={() => setPanelOpen((v) => !v)}
+          >
+            {panelOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+          </Button>
           <Button size="sm" variant="secondary" onClick={() => fitFleet(true)} disabled={counts.all === 0}>
             <Maximize2 /> Fit all
           </Button>
+          <Button size="sm" variant="secondary" aria-pressed={showLabels} className={cn(!showLabels && "text-muted-foreground")} onClick={() => setShowLabels((v) => !v)}>
+            <Tag /> Names
+          </Button>
+          <Button size="sm" variant="secondary" aria-pressed={showZones} className={cn(!showZones && "text-muted-foreground")} onClick={() => setShowZones((v) => !v)}>
+            <Hexagon /> Zones
+          </Button>
         </div>
+        {follow && sel && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-[160px] z-[1] flex justify-center md:bottom-4">
+            <span role="status" className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-foreground px-3 py-1.5 text-xs font-medium text-background shadow-pop">
+              <LocateFixed className="size-3.5" aria-hidden="true" /> Following {deviceLabel(sel)}
+              <button type="button" className="cursor-pointer border-0 bg-transparent p-0 text-xs font-medium text-background underline" onClick={() => setFollow(false)}>
+                Stop
+              </button>
+            </span>
+          </div>
+        )}
         {mapError && (
           <div className="absolute inset-x-3 top-14 z-[1] md:right-14">
             <Alert tone="warning">{mapError}</Alert>
@@ -474,7 +644,8 @@ export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: numbe
         className={cn(
           "absolute inset-x-0 bottom-0 z-[2] flex flex-col rounded-t-xl border-t border-border bg-background shadow-pop transition-[height] duration-200",
           sheetOpen || historyFor ? "h-[70%]" : "h-[148px]",
-          "md:static md:order-1 md:h-auto md:w-[340px] md:shrink-0 md:rounded-none md:border-r md:border-t-0 md:shadow-none md:transition-none"
+          "md:static md:order-1 md:h-auto md:w-[340px] md:shrink-0 md:rounded-none md:border-r md:border-t-0 md:shadow-none md:transition-none",
+          !panelOpen && "md:hidden"
         )}
       >
         <button
@@ -488,6 +659,7 @@ export function LiveMap({ offlineSeconds, groups = [] }: { offlineSeconds: numbe
         </button>
         <div className="flex min-h-0 flex-1 flex-col">{panel}</div>
       </aside>
+      {sharing && sel?.vehicle && <ShareDialog vehicle={{ id: sel.vehicle.id, name: sel.vehicle.name, hasDevice: true }} onClose={() => setSharing(false)} />}
     </div>
   );
 }

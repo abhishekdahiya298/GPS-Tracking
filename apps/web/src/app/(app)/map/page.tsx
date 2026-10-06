@@ -23,5 +23,6 @@ export default async function MapPage() {
   // session-authenticated stream, scoped to the caller's organization.
   // Groups are only names and vehicle ids of the caller's own organization.
   const groups = contextHasPermission(ctx, "vehicles.read") ? await listGroups(ctx.organizationId) : [];
-  return <LiveMap offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} groups={groups} />;
+  const canShare = contextHasPermission(ctx, "vehicles.update") && contextHasPermission(ctx, "locations.read");
+  return <LiveMap offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} groups={groups} canShare={canShare} />;
 }
