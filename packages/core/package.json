@@ -25,6 +25,7 @@
     ".": "./src/index.ts",
     "./units": "./src/units.ts",
     "./geo": "./src/geo.ts",
-    "./timezones": "./src/timezones.ts"
+    "./timezones": "./src/timezones.ts",
+    "./renewals": "./src/renewals.ts"
   }
 }

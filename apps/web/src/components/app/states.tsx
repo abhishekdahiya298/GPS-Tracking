@@ -12,7 +12,7 @@ export function EmptyState({ icon: Icon, title, description, action, className }
           <Icon className="size-5" aria-hidden="true" />
         </div>
       )}
-      <h3 className="m-0 text-[15px] font-semibold text-foreground">{title}</h3>
+      <h2 className="m-0 text-[15px] font-semibold text-foreground">{title}</h2>
       {description && <p className="m-0 mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>}
       {action && <div className="mt-4 flex flex-wrap justify-center gap-2">{action}</div>}
     </div>
@@ -26,7 +26,7 @@ export function ErrorState({ title = "Something went wrong", description, action
       <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-danger-soft text-danger">
         <AlertCircle className="size-5" aria-hidden="true" />
       </div>
-      <h3 className="m-0 text-[15px] font-semibold text-foreground">{title}</h3>
+      <h2 className="m-0 text-[15px] font-semibold text-foreground">{title}</h2>
       {description && <p className="m-0 mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>

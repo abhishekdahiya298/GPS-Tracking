@@ -1,3 +1,4 @@
+import { RENEWAL_TYPE_LABEL, renewalDueText, type RenewalType } from "@rio-gps/core/renewals";
 import { dateFormatter, zoneLabel, type TimeFormat } from "@rio-gps/core/timezones";
 import { units, type UnitSystem } from "@rio-gps/core";
 import { getServerEnv } from "./env";
@@ -228,6 +229,26 @@ export function maintenanceEmail(
     template: `maintenance_${m.state}`,
     subject: `RIO GPS maintenance: ${title}`,
     html: layout(title, `<p>Hi ${esc(name || "there")},</p><p>${esc(m.orgName)}</p>${facts.map((f) => `<p>${esc(f)}</p>`).join("")}${button(url, "Open maintenance")}`),
+    text: `${title}\n${m.orgName}\n${facts.join("\n")}\n\n${url}`
+  };
+}
+
+export function renewalEmail(
+  to: string,
+  name: string,
+  m: { orgName: string; vehicleName: string | null; title: string; type: RenewalType; state: "due_soon" | "overdue"; dueDate: string; daysRemaining: number },
+  url: string
+): EmailMessage {
+  // The due date is a calendar day, not an instant: format it without any zone shift.
+  const due = dateFormatter("UTC").date(`${m.dueDate}T12:00:00Z`);
+  const what = m.state === "overdue" ? `expired ${renewalDueText(m.daysRemaining)}` : `expires ${renewalDueText(m.daysRemaining)}`;
+  const title = `${m.vehicleName ? `${m.vehicleName}: ` : ""}${m.title} ${what}`;
+  const facts = [`${RENEWAL_TYPE_LABEL[m.type]}`, `Due date: ${due}`];
+  return {
+    to,
+    template: `renewal_${m.state}`,
+    subject: `RIO GPS renewal: ${title}`,
+    html: layout(title, `<p>Hi ${esc(name || "there")},</p><p>${esc(m.orgName)}</p>${facts.map((f) => `<p>${esc(f)}</p>`).join("")}${button(url, "Open renewals")}`),
     text: `${title}\n${m.orgName}\n${facts.join("\n")}\n\n${url}`
   };
 }

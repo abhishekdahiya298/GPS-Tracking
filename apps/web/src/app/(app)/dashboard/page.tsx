@@ -1,5 +1,5 @@
 import { contextHasPermission, units, type TenantContext, type Units } from "@rio-gps/core";
-import { Activity, AlertTriangle, ArrowRight, Bell, Car, CircleOff, Hexagon, Map as MapIcon, MapPin, Plus, Route, Truck, Wrench } from "lucide-react";
+import { Activity, AlertTriangle, CalendarClock, ArrowRight, Bell, Car, CircleOff, Hexagon, Map as MapIcon, MapPin, Plus, Route, Truck, Wrench } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cache, Suspense, type ReactNode } from "react";
@@ -18,6 +18,7 @@ import { FLEET_STATE_META, fleetState, type FleetState } from "@/lib/fleet-statu
 import { durationMin, relativeTime } from "@/lib/format";
 import { listCurrentLocations, type CurrentDeviceLocation } from "@/lib/locations";
 import { dueCounts } from "@/lib/maintenance";
+import { renewalCounts } from "@/lib/renewals";
 import { buildTripReport } from "@/lib/reports";
 import { getRequestContext, getUnacknowledgedAlertCount } from "@/lib/request-context";
 import { FleetTrends, TrendsSkeleton } from "./fleet-trends";
@@ -36,10 +37,11 @@ export default async function DashboardPage() {
   const now = new Date();
   const can = (p: Parameters<typeof contextHasPermission>[1]) => contextHasPermission(ctx, p);
 
-  const [devices, unack, maint, recentAlerts] = await Promise.all([
+  const [devices, unack, maint, renewals, recentAlerts] = await Promise.all([
     can("locations.read") ? listCurrentLocations(ctx.organizationId, now, getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS) : Promise.resolve([] as CurrentDeviceLocation[]),
     can("alerts.read") ? getUnacknowledgedAlertCount(ctx.organizationId) : Promise.resolve(0),
     can("maintenance.read") ? dueCounts(ctx.organizationId, now) : Promise.resolve(null),
+    can("maintenance.read") ? renewalCounts(ctx.organizationId, now) : Promise.resolve(null),
     can("alerts.read") ? listEvents(ctx.organizationId, { limit: 5, unacknowledgedOnly: false }) : Promise.resolve([])
   ]);
 
@@ -115,6 +117,30 @@ export default async function DashboardPage() {
             <strong>{maint.overdue}</strong> maintenance item{maint.overdue === 1 ? " is" : "s are"} overdue{maint.dueSoon ? `, ${maint.dueSoon} due soon` : ""}.
           </span>
           <span className="font-medium text-danger">Review</span>
+        </Link>
+      )}
+
+      {renewals && (renewals.overdue > 0 || renewals.dueSoon > 0) && (
+        <Link
+          href="/maintenance/renewals"
+          className={cn(
+            "mb-5 flex items-center gap-3 rounded-lg border px-4 py-3 text-sm text-foreground no-underline",
+            renewals.overdue > 0 ? "border-danger/30 bg-danger-soft hover:border-danger/50" : "border-warning/30 bg-warning-soft hover:border-warning/50"
+          )}
+        >
+          <CalendarClock className={cn("size-4 shrink-0", renewals.overdue > 0 ? "text-danger" : "text-warning")} aria-hidden="true" />
+          <span className="flex-1">
+            {renewals.overdue > 0 ? (
+              <>
+                <strong>{renewals.overdue}</strong> renewal{renewals.overdue === 1 ? " has" : "s have"} expired{renewals.dueSoon ? `, ${renewals.dueSoon} due soon` : ""}.
+              </>
+            ) : (
+              <>
+                <strong>{renewals.dueSoon}</strong> renewal{renewals.dueSoon === 1 ? " is" : "s are"} due soon.
+              </>
+            )}
+          </span>
+          <span className={cn("font-medium", renewals.overdue > 0 ? "text-danger" : "text-warning")}>Review</span>
         </Link>
       )}
 

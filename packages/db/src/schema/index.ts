@@ -14,3 +14,4 @@ export * from "./reportSchedules";
 export * from "./maintenance";
 export * from "./dailyStats";
 export * from "./vehicleGroups";
+export * from "./renewals";

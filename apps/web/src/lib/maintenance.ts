@@ -269,7 +269,11 @@ export async function runMaintenanceCheck(now = new Date()): Promise<number> {
 const g = globalThis as { __rioMaintenanceScheduler?: NodeJS.Timeout };
 export function startMaintenanceScheduler(intervalMs = 15 * 60_000) {
   if (g.__rioMaintenanceScheduler) return;
-  const tick = () => runMaintenanceCheck().catch((err) => logger.error("maintenance.scheduler_tick_failed", {}, err));
+  const tick = () => {
+    runMaintenanceCheck().catch((err) => logger.error("maintenance.scheduler_tick_failed", {}, err));
+    // Renewal reminders share this scheduler (same cadence, same kind of email).
+    void import("./renewals").then((m) => m.runRenewalCheck()).catch((err) => logger.error("renewals.scheduler_tick_failed", {}, err));
+  };
   g.__rioMaintenanceScheduler = setInterval(tick, intervalMs);
   g.__rioMaintenanceScheduler.unref?.();
   setTimeout(tick, 60_000).unref?.();

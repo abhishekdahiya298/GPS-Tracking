@@ -22,6 +22,7 @@ import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
 import type { ItemDto } from "@/lib/maintenance";
+import { MaintenanceTabs } from "./maintenance-tabs";
 
 type Opt = { id: string; label: string };
 type Filter = "all" | "overdue" | "due_soon" | "ok";
@@ -38,7 +39,7 @@ const PRESETS = [
   { name: "Registration renewal", km: null, days: 365 }
 ];
 
-export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[]; members: Opt[]; myUserId: string; canWrite: boolean }) {
+export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[]; members: Opt[]; myUserId: string; canWrite: boolean; renewalsDue?: number }) {
   const u = useUnits();
   const time = useTime();
   const router = useRouter();
@@ -89,6 +90,7 @@ export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[];
           )
         }
       />
+      <MaintenanceTabs active="service" renewalsDue={props.renewalsDue} />
 
       {items.length === 0 ? (
         <Card>

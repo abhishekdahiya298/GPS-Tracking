@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib/authz";
 import { AppError } from "@/lib/errors";
 import { listItems } from "@/lib/maintenance";
+import { renewalCounts } from "@/lib/renewals";
 import { listMembers } from "@/lib/team";
 import { listVehicles } from "@/lib/vehicles";
 import { MaintenanceManager } from "./maintenance-manager";
@@ -22,8 +23,9 @@ export default async function MaintenancePage() {
   }
   if (!contextHasPermission(ctx, "maintenance.read")) redirect("/dashboard");
   const canWrite = contextHasPermission(ctx, "maintenance.write");
-  const [items, vehicles, members] = await Promise.all([
+  const [items, renewals, vehicles, members] = await Promise.all([
     listItems(ctx.organizationId),
+    renewalCounts(ctx.organizationId),
     listVehicles(ctx.organizationId),
     canWrite ? listMembers(ctx.organizationId) : Promise.resolve([])
   ]);
@@ -34,6 +36,7 @@ export default async function MaintenancePage() {
       members={members.map((m) => ({ id: m.userId, label: `${m.name} <${m.email}>` }))}
       myUserId={ctx.userId}
       canWrite={canWrite}
+      renewalsDue={renewals.overdue + renewals.dueSoon}
     />
   );
 }

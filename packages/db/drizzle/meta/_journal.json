@@ -71,6 +71,13 @@
       "when": 1791222985888,
       "tag": "0009_vehicle_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791223525029,
+      "tag": "0010_renewal_reminders",
+      "breakpoints": true
     }
   ]
 }
