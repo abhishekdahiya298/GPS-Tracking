@@ -52,7 +52,7 @@ export interface CurrentDeviceLocation {
   model: string | null;
   name: string | null;
   deviceStatus: string;
-  vehicle: { id: string; name: string; licensePlate: string | null } | null;
+  vehicle: { id: string; name: string; licensePlate: string | null; type: string } | null;
   connectivity: ConnectivityStatus;
   lastSeenAt: string | null;
   location: (LocationPoint & { receivedAt: string }) | null;
@@ -74,6 +74,7 @@ export async function listCurrentLocations(
       vehicleId: schema.vehicles.id,
       vehicleName: schema.vehicles.name,
       licensePlate: schema.vehicles.licensePlate,
+      vehicleType: schema.vehicles.type,
       loc: schema.currentLocations
     })
     .from(schema.gpsDevices)
@@ -104,7 +105,7 @@ export async function listCurrentLocations(
     model: r.model,
     name: r.name,
     deviceStatus: r.deviceStatus,
-    vehicle: r.vehicleId ? { id: r.vehicleId, name: r.vehicleName!, licensePlate: r.licensePlate } : null,
+    vehicle: r.vehicleId ? { id: r.vehicleId, name: r.vehicleName!, licensePlate: r.licensePlate, type: r.vehicleType ?? "truck" } : null,
     connectivity: connectivityStatus(r.lastSeenAt, now, offlineThresholdSeconds),
     lastSeenAt: r.lastSeenAt?.toISOString() ?? null,
     location: r.loc

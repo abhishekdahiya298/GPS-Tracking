@@ -45,7 +45,7 @@ export async function PATCH(request: Request, { params }: Params) {
     const id = await vehicleId(params);
     const patch = parseOrThrow(VehiclePatchSchema, await readJson(request));
     const v = await updateVehicle(ctx, id, patch, requestMeta(request));
-    return NextResponse.json({ vehicle: { id: v.id, name: v.name, licensePlate: v.licensePlate, status: v.status } });
+    return NextResponse.json({ vehicle: { id: v.id, name: v.name, licensePlate: v.licensePlate, type: v.type, status: v.status } });
   } catch (err) {
     return errorResponse(err, { route: "vehicles.update" });
   }

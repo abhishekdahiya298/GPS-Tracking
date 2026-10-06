@@ -1,6 +1,7 @@
 import { contextHasPermission, units, type TenantContext, type Units } from "@rio-gps/core";
 import { Activity, AlertTriangle, CalendarClock, ArrowRight, Bell, Car, CircleOff, CircleParking, Hexagon, Map as MapIcon, MapPin, Plus, Route, Truck, Wrench } from "lucide-react";
 import Link from "next/link";
+import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
 import { redirect } from "next/navigation";
 import { cache, Suspense, type ReactNode } from "react";
 import { LocalTime } from "@/components/app/local-time";
@@ -96,7 +97,7 @@ export default async function DashboardPage() {
     <>
       <PageHeader title="Fleet overview" description="What's happening with your fleet right now." actions={actions} />
 
-      <section aria-label="Fleet summary" className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-7">
+      <section aria-label="Fleet summary" className="stagger-in mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-7">
         <Stat label="Vehicles" value={devices.length} icon={Truck} href="/vehicles" className="col-span-2 2xl:col-span-1" />
         <Stat label="Moving" value={count("moving")} icon={Car} tone="success" href="/vehicles?state=moving" />
         <Stat label="Idling" value={count("idle")} icon={Activity} tone={count("idle") > 0 ? "warning" : undefined} hint="engine on" href="/vehicles?state=idle" />
@@ -171,8 +172,8 @@ export default async function DashboardPage() {
               .map(({ d, s }) => (
                 <li key={d.deviceId}>
                   <Link href={`/map?focus=${d.deviceId}`} className="flex items-center gap-3 px-4 py-3 text-foreground no-underline hover:bg-canvas sm:px-5">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted">
-                      <Truck className="size-4 text-muted-foreground" aria-hidden="true" />
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground [--vehicle-icon-gap:var(--color-muted)]">
+                      <VehicleTypeIcon type={d.vehicle?.type ?? "other"} className="size-5" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? d.name ?? d.model ?? "Device"}</span>
@@ -268,7 +269,7 @@ function StatusBar({ total, parts }: { total: number; parts: { key: string; labe
         {parts
           .filter((p) => p.value > 0)
           .map((p) => (
-            <span key={p.key} style={{ width: `${(p.value / total) * 100}%`, background: p.color }} />
+            <span key={p.key} className="origin-left animate-grow-x" style={{ width: `${(p.value / total) * 100}%`, background: p.color }} />
           ))}
       </div>
       <ul className="m-0 mt-3 flex list-none flex-wrap gap-x-5 gap-y-1 p-0 text-xs text-muted-foreground">

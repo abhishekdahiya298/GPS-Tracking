@@ -106,6 +106,15 @@ describe("vehicles", () => {
   it("validates input", async () => {
     expect((await vehiclesPOST(req("POST", "/api/vehicles", "admin", { name: "" }))).status).toBe(400);
     expect((await vehiclesPOST(req("POST", "/api/vehicles", "admin", { name: "x".repeat(121) }))).status).toBe(400);
+    expect((await vehiclesPOST(req("POST", "/api/vehicles", "admin", { name: "Bad type", type: "spaceship" }))).status).toBe(400);
+  });
+
+  it("stores the vehicle type and defaults it to truck", async () => {
+    const plain = await (await vehiclesPOST(req("POST", "/api/vehicles", "fleet", { name: "Type default" }))).json();
+    expect(plain.vehicle.type).toBe("truck");
+    const res = await vehiclesPOST(req("POST", "/api/vehicles", "fleet", { name: "Type trailer", type: "trailer" }));
+    expect(res.status).toBe(201);
+    expect((await res.json()).vehicle.type).toBe("trailer");
     expect((await vehiclePATCH(req("PATCH", `/api/vehicles/${rr}`, "admin", {}), p(rr))).status).toBe(400);
     expect((await vehiclePATCH(req("PATCH", `/api/vehicles/${rr}`, "admin", { status: "stolen" }), p(rr))).status).toBe(400);
     expect((await vehiclePATCH(req("PATCH", "/api/vehicles/not-a-uuid", "admin", { name: "x" }), p("not-a-uuid"))).status).toBe(404);

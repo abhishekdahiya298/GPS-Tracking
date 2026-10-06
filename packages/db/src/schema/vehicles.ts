@@ -10,6 +10,8 @@ export const vehicles = pgTable("vehicles", {
     .references(() => organizations.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   licensePlate: text("license_plate"),
+  /** Kind of vehicle (drives the map icon). Validated by the API; plain text so new kinds need no migration. */
+  type: text("type").notNull().default("truck"),
   status: vehicleStatusEnum("status").notNull().default("active"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()

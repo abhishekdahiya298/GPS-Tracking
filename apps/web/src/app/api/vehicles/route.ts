@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     requirePermission(ctx, "vehicles.create");
     const input = parseOrThrow(VehicleInputSchema, await readJson(request));
     const v = await createVehicle(ctx, input, requestMeta(request));
-    return NextResponse.json({ vehicle: { id: v.id, name: v.name, licensePlate: v.licensePlate, status: v.status } }, { status: 201 });
+    return NextResponse.json({ vehicle: { id: v.id, name: v.name, licensePlate: v.licensePlate, type: v.type, status: v.status } }, { status: 201 });
   } catch (err) {
     return errorResponse(err, { route: "vehicles.create" });
   }

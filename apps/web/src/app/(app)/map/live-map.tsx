@@ -9,6 +9,8 @@ import { shapeRing } from "@rio-gps/core/geo";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
 import { Select } from "@/components/ui/input";
+import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
+import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
 import { Alert } from "@/components/ui/alert";
@@ -53,6 +55,7 @@ function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number):
     id: d.deviceId,
     name: deviceLabel(d),
     state: mapState(d, now, offlineSeconds),
+    type: d.vehicle ? asVehicleType(d.vehicle.type) : "other",
     lngLat: [d.location.longitude, d.location.latitude],
     heading: d.location.headingDeg
   };
@@ -383,7 +386,7 @@ export function LiveMap({
           </p>
         </div>
         <span role="status" className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium", conn === "live" ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
-          <Radio className="size-3.5" aria-hidden="true" /> {connLabel}
+          {conn === "live" ? <span aria-hidden="true" className="live-ping inline-block size-2 rounded-full bg-current" /> : <Radio className="size-3.5" aria-hidden="true" />} {connLabel}
         </span>
       </div>
 
@@ -442,14 +445,14 @@ export function LiveMap({
           </div>
 
           {sel && (
-            <section aria-label="Selected vehicle" className="grid gap-3 border-b border-border bg-primary-soft/50 px-4 py-3">
+            <section key={sel.deviceId} aria-label="Selected vehicle" className="grid animate-in gap-3 border-b border-border bg-primary-soft/50 px-4 py-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <h2 className="m-0 truncate text-sm font-semibold">{deviceLabel(sel)}</h2>
                   <p className="m-0 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <StateDot state={selState} />
                     <span className="font-medium text-foreground">{STATE_LABEL[selState]}</span>
-                    {sel.vehicle?.licensePlate && <span className="truncate">· {sel.vehicle.licensePlate}</span>}
+                    {sel.vehicle && <span className="truncate">· {[VEHICLE_TYPE_LABEL[asVehicleType(sel.vehicle.type)], sel.vehicle.licensePlate].filter(Boolean).join(" · ")}</span>}
                   </p>
                 </div>
                 <button
@@ -570,13 +573,19 @@ export function LiveMap({
                         )}
                       >
                         <span className="flex items-center gap-2 text-sm font-medium">
-                          <StateDot state={r.state} />
+                          <span
+                            aria-hidden="true"
+                            className="-ml-1 grid size-6 shrink-0 place-items-center rounded-full text-white"
+                            style={{ background: STATE_COLORS[r.state], ["--vehicle-icon-gap" as string]: STATE_COLORS[r.state] }}
+                          >
+                            <VehicleTypeIcon type={d.vehicle?.type ?? "other"} className="size-3.5" />
+                          </span>
                           <span className="truncate">{r.name}</span>
                           <span className="ml-auto shrink-0 text-xs font-normal tabular-nums text-muted-foreground">
                             {r.state === "moving" && d.location ? u.fmtSpeed(d.location.speedKph) : STATE_LABEL[r.state]}
                           </span>
                         </span>
-                        <span className="flex gap-1.5 pl-4 text-xs text-muted-foreground">
+                        <span className="flex gap-1.5 pl-7 text-xs text-muted-foreground">
                           <span className="truncate">{d.location ? [d.vehicle?.licensePlate, r.state === "moving" ? "Moving" : STATE_HINT[r.state]].filter(Boolean).join(" · ") : "No position yet"}</span>
                           <span className="ml-auto shrink-0">{ago(d.lastSeenAt, now)}</span>
                         </span>
@@ -623,7 +632,7 @@ export function LiveMap({
         </div>
         {follow && sel && (
           <div className="pointer-events-none absolute inset-x-0 bottom-[160px] z-[1] flex justify-center md:bottom-4">
-            <span role="status" className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-foreground px-3 py-1.5 text-xs font-medium text-background shadow-pop">
+            <span role="status" className="pointer-events-auto inline-flex animate-in items-center gap-2 rounded-full bg-foreground px-3 py-1.5 text-xs font-medium text-background shadow-pop">
               <LocateFixed className="size-3.5" aria-hidden="true" /> Following {deviceLabel(sel)}
               <button type="button" className="cursor-pointer border-0 bg-transparent p-0 text-xs font-medium text-background underline" onClick={() => setFollow(false)}>
                 Stop

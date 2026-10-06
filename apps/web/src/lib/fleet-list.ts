@@ -60,6 +60,7 @@ export interface VehicleRow {
   id: string;
   name: string;
   licensePlate: string | null;
+  type: string;
   vehicleStatus: string;
   state: VehicleState;
   device: { id: string; name: string | null; model: string | null } | null;
@@ -78,7 +79,7 @@ export interface Page<T, S extends string> {
 }
 
 const vehicleBase = (organizationId: string, offlineSeconds: number, now: Date) => sql`
-  select v.id, v.name, v.license_plate, v.status as vehicle_status,
+  select v.id, v.name, v.license_plate, v.type as vehicle_type, v.status as vehicle_status,
          d.id as device_id, d.name as device_name, d.model as device_model, d.last_seen_at,
          cl.latitude, cl.longitude, cl.speed_kph, cl.heading_deg, cl.ignition, cl.recorded_at,
          (select coalesce(array_agg(g.name order by lower(g.name)), '{}')
@@ -140,6 +141,7 @@ export async function listVehiclesPage(organizationId: string, q: VehicleListQue
       id: String(r.id),
       name: String(r.name),
       licensePlate: (r.license_plate as string | null) ?? null,
+      type: String(r.vehicle_type ?? "truck"),
       vehicleStatus: String(r.vehicle_status),
       state: r.state as VehicleState,
       groups: (r.group_names as string[] | null) ?? [],
@@ -245,7 +247,7 @@ export async function listDevicesPage(
 }
 
 export interface VehicleDetail {
-  vehicle: { id: string; name: string; licensePlate: string | null; status: string };
+  vehicle: { id: string; name: string; licensePlate: string | null; type: string; status: string };
   device: { id: string; name: string | null; model: string | null; status: string; imeiLast4?: string; assignedAt: string } | null;
   lastSeenAt: string | null;
   state: VehicleState;
@@ -263,7 +265,7 @@ export async function getVehicleDetail(organizationId: string, vehicleId: string
     left join device_assignments a on a.device_id = f.device_id and a.organization_id = ${organizationId} and a.unassigned_at is null`);
   if (!r) return null;
   return {
-    vehicle: { id: String(r.id), name: String(r.name), licensePlate: (r.license_plate as string | null) ?? null, status: String(r.vehicle_status) },
+    vehicle: { id: String(r.id), name: String(r.name), licensePlate: (r.license_plate as string | null) ?? null, type: String(r.vehicle_type ?? "truck"), status: String(r.vehicle_status) },
     device: r.device_id
       ? {
           id: String(r.device_id),

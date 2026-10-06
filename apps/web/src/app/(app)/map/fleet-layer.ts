@@ -4,12 +4,16 @@
  * frame, and moves are interpolated on screen only (the data is untouched).
  */
 import type { GeoJSONSource, Map as MlMap, MapLayerMouseEvent } from "maplibre-gl";
+import { VEHICLE_TYPES, type VehicleType } from "@/lib/schemas/vehicle";
+import { VEHICLE_GLYPHS, WHEEL_Y } from "@/lib/vehicle-glyphs";
 import { bearing, lerpLngLat, shouldAnimate, type MapState } from "./fleet-model";
 
 export interface FleetPoint {
   id: string;
   name: string;
   state: MapState;
+  /** Kind of vehicle: picks the pictogram inside the marker. */
+  type: VehicleType;
   lngLat: [number, number];
   heading: number | null;
 }
@@ -24,6 +28,7 @@ export const STATE_COLORS: Record<MapState, string> = { moving: "#15803d", idle:
 /** Below this zoom nearby vehicles merge into one counted bubble, so a large fleet stays readable. */
 const CLUSTER_MAX_ZOOM = 8;
 const NOT_CLUSTER = ["!", ["has", "point_count"]];
+const HALO_R = 23;
 
 interface Anim {
   from: [number, number];
@@ -31,7 +36,74 @@ interface Anim {
   start: number;
 }
 
-/** Circle with a white direction arrow, drawn once per state at device pixel ratio. */
+const pixelRatio = () => Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
+const BADGE_PX = 32;
+const POINTER_PX = 50;
+
+/**
+ * Marker badge: a status-coloured disc with the vehicle's pictogram in white. The badge
+ * stays upright so the pictogram is always readable; direction is shown by a separate
+ * pointer that orbits it (see pointerIcon).
+ */
+function badgeIcon(type: VehicleType, color: string) {
+  const ratio = pixelRatio();
+  const size = Math.round(BADGE_PX * ratio);
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d")!;
+  const r = size / 2;
+  g.beginPath();
+  g.arc(r, r, r - 2 * ratio, 0, Math.PI * 2);
+  g.fillStyle = color;
+  g.fill();
+  g.lineWidth = 2 * ratio;
+  g.strokeStyle = "#ffffff";
+  g.stroke();
+  // Pictogram: 24-unit grid scaled to ~58% of the badge, optically centred on its body.
+  const k = (size * 0.58) / 24;
+  g.save();
+  g.translate(r - 12 * k, r - 11.6 * k);
+  g.scale(k, k);
+  const glyph = VEHICLE_GLYPHS[type];
+  g.fillStyle = "#ffffff";
+  g.fill(new Path2D(glyph.body));
+  for (const [x, wr] of glyph.wheels) {
+    g.beginPath();
+    g.arc(x, WHEEL_Y, wr + 0.9, 0, Math.PI * 2);
+    g.fillStyle = color;
+    g.fill();
+    g.beginPath();
+    g.arc(x, WHEEL_Y, wr, 0, Math.PI * 2);
+    g.fillStyle = "#ffffff";
+    g.fill();
+  }
+  g.restore();
+  return { img: g.getImageData(0, 0, size, size), ratio };
+}
+
+/** Direction pointer: a small wedge at the top of a transparent square, rotated to the heading around the marker. */
+function pointerIcon(color: string) {
+  const ratio = pixelRatio();
+  const size = Math.round(POINTER_PX * ratio);
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d")!;
+  const mid = size / 2;
+  g.beginPath();
+  g.moveTo(mid, 1.5 * ratio);
+  g.lineTo(mid + 7 * ratio, 13 * ratio);
+  g.lineTo(mid - 7 * ratio, 13 * ratio);
+  g.closePath();
+  g.fillStyle = color;
+  g.fill();
+  g.lineWidth = 2 * ratio;
+  g.lineJoin = "round";
+  g.strokeStyle = "#ffffff";
+  g.stroke();
+  return { img: g.getImageData(0, 0, size, size), ratio };
+}
+
+/** Circle with a white direction arrow (used for the history playback marker). */
 function arrowIcon(color: string, withArrow: boolean) {
   const ratio = Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
   const size = Math.round(28 * ratio);
@@ -92,11 +164,22 @@ export class FleetLayer {
   install() {
     const m = this.map;
     for (const s of ["moving", "idle", "stopped", "offline"] as MapState[]) {
-      const id = `veh-${s}`;
-      if (!m.hasImage(id)) {
-        const { img, ratio } = arrowIcon(STATE_COLORS[s], s === "moving" || s === "idle");
-        m.addImage(id, img, { pixelRatio: ratio });
+      for (const t of VEHICLE_TYPES) {
+        const id = `veh-${t}-${s}`;
+        if (!m.hasImage(id)) {
+          const { img, ratio } = badgeIcon(t, STATE_COLORS[s]);
+          m.addImage(id, img, { pixelRatio: ratio });
+        }
       }
+    }
+    if (!m.hasImage("veh-pointer")) {
+      const { img, ratio } = pointerIcon(STATE_COLORS.moving);
+      m.addImage("veh-pointer", img, { pixelRatio: ratio });
+    }
+    // History playback marker.
+    if (!m.hasImage("veh-moving")) {
+      const { img, ratio } = arrowIcon(STATE_COLORS.moving, true);
+      m.addImage("veh-moving", img, { pixelRatio: ratio });
     }
     // promoteId lets live updates send only the vehicles that changed (updateData diff).
     if (!m.getSource(SRC)) m.addSource(SRC, { type: "geojson", data: this.collection(), promoteId: "id", cluster: true, clusterMaxZoom: CLUSTER_MAX_ZOOM, clusterRadius: 48 });
@@ -130,7 +213,21 @@ export class FleetLayer {
         type: "circle",
         source: SRC,
         filter: ["==", ["get", "id"], ""],
-        paint: { "circle-radius": 21, "circle-color": "#2f5bea", "circle-opacity": 0.18, "circle-stroke-color": "#2f5bea", "circle-stroke-width": 2 }
+        paint: { "circle-radius": HALO_R, "circle-radius-transition": { duration: 320, delay: 0 }, "circle-color": "#2f5bea", "circle-opacity": 0.18, "circle-stroke-color": "#2f5bea", "circle-stroke-width": 2 }
+      });
+      // Heading pointer, under the badge so only its tip shows. Only moving vehicles have a meaningful heading.
+      m.addLayer({
+        id: "fleet-pointer",
+        type: "symbol",
+        source: SRC,
+        filter: ["all", NOT_CLUSTER, ["==", ["get", "state"], "moving"]] as never,
+        layout: {
+          "icon-image": "veh-pointer",
+          "icon-rotate": ["to-number", ["coalesce", ["get", "heading"], 0]],
+          "icon-rotation-alignment": "map",
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true
+        }
       });
       m.addLayer({
         id: "fleet-icons",
@@ -138,9 +235,7 @@ export class FleetLayer {
         source: SRC,
         filter: NOT_CLUSTER as never,
         layout: {
-          "icon-image": ["concat", "veh-", ["get", "state"]],
-          "icon-rotate": ["to-number", ["coalesce", ["get", "heading"], 0]],
-          "icon-rotation-alignment": "map",
+          "icon-image": ["concat", "veh-", ["get", "type"], "-", ["get", "state"]],
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
           "symbol-sort-key": ["match", ["get", "state"], "moving", 4, "idle", 3, "stopped", 2, 1]
@@ -158,7 +253,7 @@ export class FleetLayer {
             "text-field": ["get", "name"],
             "text-font": ["Noto Sans Regular"],
             "text-size": 12,
-            "text-offset": [0, 1.5],
+            "text-offset": [0, 1.7],
             "text-anchor": "top",
             "text-optional": true
           },
@@ -295,6 +390,16 @@ export class FleetLayer {
   private applySelection() {
     if (!this.ready || !this.map.getLayer("fleet-halo")) return;
     this.map.setFilter("fleet-halo", ["==", ["get", "id"], this.selected ?? ""]);
+    if (this.selected && !this.reduceMotion) {
+      // A short "ping": the ring grows out from the marker so the eye finds the selection.
+      this.map.setPaintProperty("fleet-halo", "circle-radius-transition", { duration: 0, delay: 0 });
+      this.map.setPaintProperty("fleet-halo", "circle-radius", 13);
+      requestAnimationFrame(() => {
+        if (!this.ready || !this.map.getLayer("fleet-halo")) return;
+        this.map.setPaintProperty("fleet-halo", "circle-radius-transition", { duration: 320, delay: 0 });
+        this.map.setPaintProperty("fleet-halo", "circle-radius", HALO_R);
+      });
+    }
   }
 
   private applyLabels() {
@@ -351,6 +456,7 @@ export class FleetLayer {
                 newGeometry: { type: "Point", coordinates: this.display.get(id) ?? p.lngLat },
                 addOrUpdateProperties: [
                   { key: "state", value: p.state },
+                  { key: "type", value: p.type },
                   { key: "heading", value: p.heading ?? 0 },
                   { key: "name", value: p.name }
                 ]
@@ -376,7 +482,7 @@ export class FleetLayer {
       features.push({
         type: "Feature",
         geometry: { type: "Point", coordinates: this.display.get(p.id) ?? p.lngLat },
-        properties: { id: p.id, name: p.name, state: p.state, heading: p.heading ?? 0 }
+        properties: { id: p.id, name: p.name, state: p.state, type: p.type, heading: p.heading ?? 0 }
       });
     }
     return { type: "FeatureCollection", features };

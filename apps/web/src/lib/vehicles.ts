@@ -24,6 +24,7 @@ export interface VehicleDto {
   id: string;
   name: string;
   licensePlate: string | null;
+  type: string;
   status: string;
   devices: { id: string; model: string | null; name: string | null; assignedAt: string }[];
 }
@@ -53,6 +54,7 @@ export async function listVehicles(organizationId: string): Promise<VehicleDto[]
     id: v.id,
     name: v.name,
     licensePlate: v.licensePlate,
+    type: v.type,
     status: v.status,
     devices: assigned
       .filter((a) => a.vehicleId === v.id)
@@ -65,7 +67,7 @@ type Meta = { ipAddress: string | null; userAgent: string | null };
 export async function createVehicle(ctx: TenantContext, input: z.infer<typeof VehicleInputSchema>, meta: Meta) {
   const [v] = await getDb()
     .insert(schema.vehicles)
-    .values({ organizationId: ctx.organizationId, name: input.name, licensePlate: input.licensePlate ?? null, status: input.status ?? "active" })
+    .values({ organizationId: ctx.organizationId, name: input.name, licensePlate: input.licensePlate ?? null, status: input.status ?? "active", ...(input.type ? { type: input.type } : {}) })
     .returning();
   await writeAudit({ action: "vehicle.created", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "vehicle", targetId: v!.id, metadata: { name: v!.name }, ...meta });
   return v!;
@@ -77,6 +79,7 @@ export async function updateVehicle(ctx: TenantContext, id: string, patch: z.inf
     .set({
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.licensePlate !== undefined ? { licensePlate: patch.licensePlate } : {}),
+      ...(patch.type !== undefined ? { type: patch.type } : {}),
       ...(patch.status !== undefined ? { status: patch.status } : {}),
       updatedAt: new Date()
     })

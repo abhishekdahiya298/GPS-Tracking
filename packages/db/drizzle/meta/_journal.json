@@ -85,6 +85,13 @@
       "when": 1791224249028,
       "tag": "0011_share_links",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791255114507,
+      "tag": "0012_vehicle_type",
+      "breakpoints": true
     }
   ]
 }

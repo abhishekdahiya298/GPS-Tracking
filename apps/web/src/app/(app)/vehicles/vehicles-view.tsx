@@ -23,6 +23,8 @@ import { relativeTime } from "@/lib/format";
 import { RelativeTime } from "@/components/app/local-time";
 import { useTime } from "@/components/app/time-context";
 import dynamic from "next/dynamic";
+import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
+import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 import type { EditableVehicle } from "../_fleet/vehicle-form-dialog";
 
 // Drawer and dialogs (with their form/validation code) load on first use, not with the page.
@@ -51,7 +53,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
   const filtered = query.search !== "" || query.state !== "all" || !!query.group;
 
   const openEdit = (v: VehicleRow) => {
-    setEditing({ id: v.id, name: v.name, licensePlate: v.licensePlate, vehicleStatus: v.vehicleStatus });
+    setEditing({ id: v.id, name: v.name, licensePlate: v.licensePlate, type: v.type, vehicleStatus: v.vehicleStatus });
     setFormOpen(true);
   };
 
@@ -112,9 +114,14 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         header: "Vehicle",
         meta: { sortKey: "name" } satisfies ColumnMeta,
         cell: ({ row: { original: v } }) => (
-          <div className="min-w-0">
-            <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
-            {(v.licensePlate || v.groups.length > 0) && <p className="m-0 truncate text-xs text-muted-foreground">{[v.licensePlate, ...v.groups].filter(Boolean).join(" · ")}</p>}
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground [--vehicle-icon-gap:var(--color-muted)]" title={VEHICLE_TYPE_LABEL[asVehicleType(v.type)]}>
+              <VehicleTypeIcon type={v.type} className="size-[18px]" />
+            </span>
+            <div className="min-w-0">
+              <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
+              <p className="m-0 truncate text-xs text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(v.type)], v.licensePlate, ...v.groups].filter(Boolean).join(" · ")}</p>
+            </div>
           </div>
         )
       },
@@ -222,6 +229,9 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
           }
           mobileRow={(v) => (
             <div className="flex items-start gap-3">
+              <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground [--vehicle-icon-gap:var(--color-muted)]">
+                <VehicleTypeIcon type={v.type} className="size-[18px]" />
+              </span>
               <div className="min-w-0 flex-1">
                 <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
                 <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground">
@@ -254,7 +264,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         onOpenChange={(o) => !o && setDetailId(null)}
         actions={(d) =>
           can.update ? (
-            <Button size="sm" variant="secondary" onClick={() => { setDetailId(null); openEdit({ id: d.vehicle.id, name: d.vehicle.name, licensePlate: d.vehicle.licensePlate, vehicleStatus: d.vehicle.status } as VehicleRow); }}>
+            <Button size="sm" variant="secondary" onClick={() => { setDetailId(null); openEdit({ id: d.vehicle.id, name: d.vehicle.name, licensePlate: d.vehicle.licensePlate, type: d.vehicle.type, vehicleStatus: d.vehicle.status } as VehicleRow); }}>
               <Pencil aria-hidden="true" /> Edit
             </Button>
           ) : null

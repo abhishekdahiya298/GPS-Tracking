@@ -1,0 +1,1 @@
+ALTER TABLE "vehicles" ADD COLUMN "type" text DEFAULT 'truck' NOT NULL;
