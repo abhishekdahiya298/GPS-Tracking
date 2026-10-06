@@ -3,7 +3,8 @@ import type { VehicleState } from "@/lib/fleet-list";
 
 export const VEHICLE_STATE_META: Record<VehicleState, { label: string; tone: "success" | "warning" | "neutral" | "info" }> = {
   moving: { label: "Moving", tone: "success" },
-  idle: { label: "Idle", tone: "warning" },
+  idle: { label: "Idling", tone: "warning" },
+  stopped: { label: "Stopped", tone: "info" },
   offline: { label: "Offline", tone: "neutral" },
   never_seen: { label: "No data yet", tone: "neutral" },
   inactive: { label: "Tracker off", tone: "neutral" },

@@ -21,13 +21,13 @@ const base = {
   direction: z.enum(["asc", "desc"]).default("asc")
 };
 
-export const VEHICLE_STATES = ["moving", "idle", "offline", "never_seen", "inactive", "no_device"] as const;
+export const VEHICLE_STATES = ["moving", "idle", "stopped", "offline", "never_seen", "inactive", "no_device"] as const;
 export type VehicleState = (typeof VEHICLE_STATES)[number];
 
 export const VehicleListQuery = z.object({
   ...base,
   sort: z.enum(["name", "plate", "state", "speed", "lastSeen"]).default("state"),
-  state: z.enum(["all", "moving", "idle", "offline", "no_device"]).default("all"),
+  state: z.enum(["all", "moving", "idle", "stopped", "offline", "no_device"]).default("all"),
   /** Only vehicles in this group (of the caller's organization). */
   group: z.string().uuid().optional()
 });
@@ -90,7 +90,8 @@ const vehicleBase = (organizationId: string, offlineSeconds: number, now: Date) 
            when d.last_seen_at is null then 'never_seen'
            when d.last_seen_at < ${now.toISOString()}::timestamptz - make_interval(secs => ${offlineSeconds}) then 'offline'
            when coalesce(cl.speed_kph, 0) >= 5 then 'moving'
-           else 'idle'
+           when cl.ignition is true then 'idle'
+           else 'stopped'
          end as state
   from vehicles v
   left join lateral (
@@ -103,7 +104,7 @@ const vehicleBase = (organizationId: string, offlineSeconds: number, now: Date) 
   left join current_locations cl on cl.device_id = d.id and cl.organization_id = ${organizationId}
   where v.organization_id = ${organizationId}`;
 
-const STATE_RANK = sql`case state when 'moving' then 0 when 'idle' then 1 when 'offline' then 2 when 'never_seen' then 3 when 'inactive' then 4 else 5 end`;
+const STATE_RANK = sql`case state when 'moving' then 0 when 'idle' then 1 when 'stopped' then 2 when 'offline' then 3 when 'never_seen' then 4 when 'inactive' then 5 else 6 end`;
 
 export async function listVehiclesPage(organizationId: string, q: VehicleListQuery, now: Date, offlineSeconds: number): Promise<Page<VehicleRow, VehicleState>> {
   const db = getDb();

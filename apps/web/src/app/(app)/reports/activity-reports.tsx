@@ -319,7 +319,7 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
               </Button>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-3 md:col-span-2">
             <SegmentedFilter<Preset>
               label="Quick range"
               value={preset}

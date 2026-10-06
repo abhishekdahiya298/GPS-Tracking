@@ -9,7 +9,7 @@ export function FilterBar({ children, className }: { children: ReactNode; classN
 /** Segmented filter (e.g. All / Moving / Idle / Offline) with counts. */
 export function SegmentedFilter<T extends string>({ value, onChange, options, label }: { value: T; onChange: (v: T) => void; options: { value: T; label: string; count?: number }[]; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex flex-wrap gap-1 rounded-lg bg-muted p-1">
+    <div role="radiogroup" aria-label={label} className="inline-flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {options.map((o) => (
         <button
           key={o.value}
@@ -18,7 +18,7 @@ export function SegmentedFilter<T extends string>({ value, onChange, options, la
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border-0 px-2.5 text-[13px] font-medium",
+            "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border-0 px-2.5 text-[13px] font-medium",
             value === o.value ? "bg-background text-foreground shadow-card" : "bg-transparent text-muted-foreground hover:text-foreground"
           )}
         >

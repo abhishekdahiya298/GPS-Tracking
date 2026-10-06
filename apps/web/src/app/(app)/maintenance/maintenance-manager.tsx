@@ -73,7 +73,11 @@ export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[];
     const s = i.status;
     const parts: string[] = [];
     if (s.kmRemaining !== null) parts.push(s.kmRemaining <= 0 ? `${u.fmtDist(Math.abs(s.kmRemaining), 0)} over` : `${u.fmtDist(s.kmRemaining, 0)} left`);
-    if (s.daysRemaining !== null) parts.push(s.daysRemaining <= 0 ? `due ${s.dueDate}` : `${s.daysRemaining} days left`);
+    if (s.daysRemaining !== null) parts.push(
+        s.daysRemaining <= 0
+          ? `${s.daysRemaining === 0 ? "due today" : `${-s.daysRemaining} day${s.daysRemaining === -1 ? "" : "s"} overdue`}${s.dueDate ? ` (${time.day(s.dueDate)}, ${s.dueDate.slice(0, 4)})` : ""}`
+          : `${s.daysRemaining} day${s.daysRemaining === 1 ? "" : "s"} left`
+      );
     return parts.join(" · ");
   };
 

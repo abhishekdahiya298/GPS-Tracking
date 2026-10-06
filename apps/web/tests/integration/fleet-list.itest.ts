@@ -39,7 +39,7 @@ beforeAll(async () => {
   const names = [...Array.from({ length: 30 }, (_, i) => `Truck ${String(i + 1).padStart(2, "0")}`), "100% Diesel", "Van_X"];
   for (const n of names) vid[n] = (await db.insert(schema.vehicles).values({ organizationId: a!.id, name: n, licensePlate: n === "Van_X" ? "CA-777" : null }).returning())[0]!.id;
   vid.secret = (await db.insert(schema.vehicles).values({ organizationId: b!.id, name: "Truck B secret" }).returning())[0]!.id;
-  // Devices: Truck 01 moving, Truck 02 idle, Truck 03 never seen; one unassigned device.
+  // Devices: Truck 01 moving, Truck 02 stopped (engine off), Truck 03 never seen; one unassigned device.
   const mkDev = async (org: string, prov: string, imei: string, name: string | null) =>
     (await db.insert(schema.gpsDevices).values({ organizationId: org, providerId: prov, externalDeviceId: imei, imei, model: "FTM880", name }).returning())[0]!.id;
   const d1 = await mkDev(a!.id, pa.id, "860000000000011", "Tracker one");
@@ -73,18 +73,18 @@ describe("vehicles list (server-side)", () => {
     const p1 = await json(await get(vehiclesGET, "/api/vehicles?page=1&pageSize=10&sort=name", "viewer"));
     expect(p1.items).toHaveLength(10);
     expect(p1.total).toBe(32);
-    expect(p1.counts).toMatchObject({ all: 32, moving: 1, idle: 1, never_seen: 1, no_device: 29 });
+    expect(p1.counts).toMatchObject({ all: 32, moving: 1, stopped: 1, never_seen: 1, no_device: 29 });
     const p4 = await json(await get(vehiclesGET, "/api/vehicles?page=4&pageSize=10&sort=name", "viewer"));
     expect(p4.items).toHaveLength(2);
     const bob = await json(await get(vehiclesGET, "/api/vehicles?page=1&search=Truck", "bob"));
     expect(bob.items.map((v: { name: string }) => v.name)).toEqual(["Truck B secret"]);
   });
 
-  it("default sort puts moving then idle vehicles first, with live status", async () => {
+  it("default sort puts moving then standing vehicles first, with live status", async () => {
     const r = await json(await get(vehiclesGET, "/api/vehicles?page=1&pageSize=10", "viewer"));
     expect(r.items[0]).toMatchObject({ name: "Truck 01", state: "moving", device: { name: "Tracker one" } });
     expect(r.items[0].location.speedKph).toBe(60);
-    expect(r.items[1]).toMatchObject({ name: "Truck 02", state: "idle" });
+    expect(r.items[1]).toMatchObject({ name: "Truck 02", state: "stopped" });
   });
 
   it("search treats % and _ literally and matches plates", async () => {

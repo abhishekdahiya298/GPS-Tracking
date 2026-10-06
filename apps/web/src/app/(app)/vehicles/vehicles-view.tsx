@@ -202,7 +202,8 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
                 options={[
                   { value: "all", label: "All", count: c.all ?? 0 },
                   { value: "moving", label: "Moving", count: c.moving ?? 0 },
-                  { value: "idle", label: "Idle", count: c.idle ?? 0 },
+                  { value: "idle", label: "Idling", count: c.idle ?? 0 },
+                  { value: "stopped", label: "Stopped", count: c.stopped ?? 0 },
                   { value: "offline", label: "Offline", count: (c.offline ?? 0) + (c.never_seen ?? 0) + (c.inactive ?? 0) },
                   { value: "no_device", label: "No device", count: c.no_device ?? 0 }
                 ]}

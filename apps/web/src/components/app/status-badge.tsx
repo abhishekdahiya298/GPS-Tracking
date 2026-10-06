@@ -19,7 +19,8 @@ export function StatusBadge({ tone, label, className, pulse }: { tone: StatusTon
 export const CONNECTIVITY: Record<string, { tone: StatusTone; label: string }> = {
   online: { tone: "success", label: "Online" },
   moving: { tone: "success", label: "Moving" },
-  idle: { tone: "warning", label: "Idle" },
+  idle: { tone: "warning", label: "Idling" },
+  stopped: { tone: "info", label: "Stopped" },
   offline: { tone: "neutral", label: "Offline" },
   never_seen: { tone: "neutral", label: "No data yet" },
   inactive: { tone: "neutral", label: "Deactivated" }

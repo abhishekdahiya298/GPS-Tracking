@@ -209,6 +209,7 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
                     <div className={e.acknowledgedAt ? "" : "font-medium"}>{describeAlert(e, u)}</div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       {e.acknowledgedAt ? <StatusBadge tone="neutral" label="Acknowledged" /> : <StatusBadge tone="primary" label="New" />}
+                      <StatusBadge tone={(SEVERITY[e.type] ?? SEVERITY.ignition_on!).tone} label={(SEVERITY[e.type] ?? SEVERITY.ignition_on!).label} />
                       <LocalTime iso={e.occurredAt} />
                     </div>
                   </div>

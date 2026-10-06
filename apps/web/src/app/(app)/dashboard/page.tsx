@@ -1,5 +1,5 @@
 import { contextHasPermission, units, type TenantContext, type Units } from "@rio-gps/core";
-import { Activity, AlertTriangle, CalendarClock, ArrowRight, Bell, Car, CircleOff, Hexagon, Map as MapIcon, MapPin, Plus, Route, Truck, Wrench } from "lucide-react";
+import { Activity, AlertTriangle, CalendarClock, ArrowRight, Bell, Car, CircleOff, CircleParking, Hexagon, Map as MapIcon, MapPin, Plus, Route, Truck, Wrench } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cache, Suspense, type ReactNode } from "react";
@@ -47,7 +47,6 @@ export default async function DashboardPage() {
 
   const states = devices.map((d) => ({ d, s: fleetState(d) }));
   const count = (s: FleetState) => states.filter((x) => x.s === s).length;
-  const online = count("moving") + count("idle");
   const firstName = (user.name || "").split(" ")[0];
 
   const actions = (
@@ -97,11 +96,12 @@ export default async function DashboardPage() {
     <>
       <PageHeader title="Fleet overview" description="What's happening with your fleet right now." actions={actions} />
 
-      <section aria-label="Fleet summary" className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        <Stat label="Vehicles" value={devices.length} icon={Truck} href="/vehicles" />
-        <Stat label="Online" value={online} icon={Activity} tone="success" hint={`of ${devices.length}`} />
-        <Stat label="Moving" value={count("moving")} icon={Car} tone="success" href="/map" />
-        <Stat label="Offline" value={count("offline") + count("never_seen")} icon={CircleOff} tone={count("offline") > 0 ? "neutral" : undefined} />
+      <section aria-label="Fleet summary" className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-7">
+        <Stat label="Vehicles" value={devices.length} icon={Truck} href="/vehicles" className="col-span-2 2xl:col-span-1" />
+        <Stat label="Moving" value={count("moving")} icon={Car} tone="success" href="/vehicles?state=moving" />
+        <Stat label="Idling" value={count("idle")} icon={Activity} tone={count("idle") > 0 ? "warning" : undefined} hint="engine on" href="/vehicles?state=idle" />
+        <Stat label="Stopped" value={count("stopped")} icon={CircleParking} tone="info" href="/vehicles?state=stopped" />
+        <Stat label="Offline" value={count("offline") + count("never_seen")} icon={CircleOff} href="/vehicles?state=offline" />
         {can("alerts.read") && <Stat label="Unread alerts" value={unack} icon={Bell} tone={unack > 0 ? "danger" : undefined} href="/alerts" />}
         {can("history.read") && (
           <Suspense fallback={<StatSkeleton label="Trips · 24 h" />}>
@@ -110,8 +110,10 @@ export default async function DashboardPage() {
         )}
       </section>
 
+      {/* Things that need attention sit side by side on wide screens instead of stacking. */}
+      <div className="mb-5 grid gap-3 empty:hidden md:grid-flow-col md:auto-cols-fr">
       {maint && maint.overdue > 0 && (
-        <Link href="/maintenance" className="mb-5 flex items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-foreground no-underline hover:border-danger/50">
+        <Link href="/maintenance" className="flex items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-foreground no-underline hover:border-danger/50">
           <Wrench className="size-4 shrink-0 text-danger" aria-hidden="true" />
           <span className="flex-1">
             <strong>{maint.overdue}</strong> maintenance item{maint.overdue === 1 ? " is" : "s are"} overdue{maint.dueSoon ? `, ${maint.dueSoon} due soon` : ""}.
@@ -124,7 +126,7 @@ export default async function DashboardPage() {
         <Link
           href="/maintenance/renewals"
           className={cn(
-            "mb-5 flex items-center gap-3 rounded-lg border px-4 py-3 text-sm text-foreground no-underline",
+            "flex items-center gap-3 rounded-lg border px-4 py-3 text-sm text-foreground no-underline",
             renewals.overdue > 0 ? "border-danger/30 bg-danger-soft hover:border-danger/50" : "border-warning/30 bg-warning-soft hover:border-warning/50"
           )}
         >
@@ -143,6 +145,7 @@ export default async function DashboardPage() {
           <span className={cn("font-medium", renewals.overdue > 0 ? "text-danger" : "text-warning")}>Review</span>
         </Link>
       )}
+      </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
         <Card className="min-w-0 lg:col-span-3">
@@ -152,7 +155,16 @@ export default async function DashboardPage() {
               All vehicles
             </Link>
           </CardHeader>
-          <ul className="m-0 list-none divide-y divide-border p-0">
+          <StatusBar
+            total={devices.length}
+            parts={(["moving", "idle", "stopped", "offline"] as const).map((k) => ({
+              key: k,
+              label: FLEET_STATE_META[k].label,
+              color: FLEET_STATE_META[k].color,
+              value: k === "offline" ? count("offline") + count("never_seen") : count(k)
+            }))}
+          />
+          <ul className="m-0 list-none divide-y divide-border border-t border-border p-0">
             {states
               .sort((a, b) => rank(a.s) - rank(b.s))
               .slice(0, 8)
@@ -244,15 +256,42 @@ export default async function DashboardPage() {
 }
 
 function rank(s: FleetState) {
-  return { moving: 0, idle: 1, offline: 2, never_seen: 3 }[s];
+  return { moving: 0, idle: 1, stopped: 2, offline: 3, never_seen: 4 }[s];
 }
 
-function Stat({ label, value, icon: Icon, tone, hint, href }: { label: string; value: ReactNode; icon: typeof Truck; tone?: "success" | "danger" | "neutral"; hint?: string; href?: string }) {
+/** Share of the fleet in each status: one proportional bar with a labelled legend (no colour-only meaning). */
+function StatusBar({ total, parts }: { total: number; parts: { key: string; label: string; color: string; value: number }[] }) {
+  if (total === 0) return null;
+  return (
+    <div className="px-5 pb-4">
+      <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+        {parts
+          .filter((p) => p.value > 0)
+          .map((p) => (
+            <span key={p.key} style={{ width: `${(p.value / total) * 100}%`, background: p.color }} />
+          ))}
+      </div>
+      <ul className="m-0 mt-3 flex list-none flex-wrap gap-x-5 gap-y-1 p-0 text-xs text-muted-foreground">
+        {parts.map((p) => (
+          <li key={p.key} className="flex items-center gap-1.5">
+            <span aria-hidden="true" className="inline-block size-2 rounded-full" style={{ background: p.color }} />
+            <Link href={`/vehicles?state=${p.key}`} className="text-inherit no-underline hover:underline">
+              {p.label} <strong className="font-semibold tabular-nums text-foreground">{p.value}</strong>{" "}
+              <span className="tabular-nums">({Math.round((p.value / total) * 100)}%)</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Stat({ label, value, icon: Icon, tone, hint, href, className }: { label: string; value: ReactNode; icon: typeof Truck; tone?: "success" | "danger" | "warning" | "info" | "neutral"; hint?: string; href?: string; className?: string }) {
   const body = (
     <Card className={cn("h-full p-4", href && "transition-colors hover:border-primary/40")}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <Icon className={cn("size-4", tone === "success" ? "text-success" : tone === "danger" ? "text-danger" : "text-muted-foreground")} aria-hidden="true" />
+        <Icon className={cn("size-4", tone === "success" ? "text-success" : tone === "danger" ? "text-danger" : tone === "warning" ? "text-warning" : tone === "info" ? "text-info" : "text-muted-foreground")} aria-hidden="true" />
       </div>
       <p className="m-0 mt-2 text-2xl font-semibold tabular-nums text-foreground">
         {value}
@@ -261,11 +300,11 @@ function Stat({ label, value, icon: Icon, tone, hint, href }: { label: string; v
     </Card>
   );
   return href ? (
-    <Link href={href} className="block text-inherit no-underline">
+    <Link href={href} className={cn("block text-inherit no-underline", className)}>
       {body}
     </Link>
   ) : (
-    body
+    <div className={className}>{body}</div>
   );
 }
 

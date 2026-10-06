@@ -17,7 +17,9 @@ describe("format", () => {
   });
   it("fleet state", () => {
     expect(fleetState({ connectivity: "online", location: { speedKph: 40, ignition: true } })).toBe("moving");
-    expect(fleetState({ connectivity: "online", location: { speedKph: 0, ignition: false } })).toBe("idle");
+    expect(fleetState({ connectivity: "online", location: { speedKph: 0, ignition: false } })).toBe("stopped");
+    expect(fleetState({ connectivity: "online", location: { speedKph: 0, ignition: null } })).toBe("stopped");
+    expect(fleetState({ connectivity: "online", location: { speedKph: 0, ignition: true } })).toBe("idle");
     expect(fleetState({ connectivity: "offline", location: { speedKph: 50, ignition: true } })).toBe("offline");
     expect(fleetState({ connectivity: "never_seen", location: null })).toBe("never_seen");
   });
