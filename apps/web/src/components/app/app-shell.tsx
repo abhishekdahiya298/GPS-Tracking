@@ -102,7 +102,7 @@ export function AppShell({
         Skip to content
       </a>
 
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-border bg-background lg:flex" aria-label="Main navigation">
+      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col lg:flex" aria-label="Main navigation">
         <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} />
       </aside>
 
@@ -155,17 +155,31 @@ function Brand() {
 }
 
 function SidebarContent({ nav, pathname, orgName, user, hideBrand }: { nav: NavSection[]; pathname: string; orgName: string; user: ShellUser; hideBrand?: boolean }) {
+  const initials = user.name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,#0a2463_0%,#0b2a72_55%,#123a8f_100%)] text-white">
+      {/* The logo's stripes, faint, behind the menu. */}
+      <svg aria-hidden="true" viewBox="0 0 240 300" preserveAspectRatio="xMaxYMax slice" className="pointer-events-none absolute bottom-0 right-0 h-72 w-full">
+        <path d="M70 300 190 60h26L96 300z" fill="#ffffff" opacity="0.05" />
+        <path d="M118 300 238 60h12L130 300z" fill="#d81e2c" opacity="0.5" />
+        <path d="M150 300 270 60h26L176 300z" fill="#ffffff" opacity="0.05" />
+      </svg>
       {!hideBrand && (
-        <Link href="/dashboard" className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4 text-[15px] font-semibold text-foreground no-underline">
-          <Brand />
-        </Link>
+        <div className="relative shrink-0 px-3 pb-2 pt-3">
+          <Link href="/dashboard" className="flex h-12 items-center justify-center rounded-lg bg-white px-3 text-[15px] no-underline shadow-card focus-visible:outline-white">
+            <Brand />
+          </Link>
+        </div>
       )}
-      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-3" aria-label="Primary">
+      <nav className="relative min-h-0 flex-1 overflow-y-auto px-3 py-3 [scrollbar-color:rgb(255_255_255/0.3)_transparent]" aria-label="Primary">
         {nav.map((section, si) => (
           <div key={section.title ?? si} className={cn(si > 0 && "mt-5")}>
-            {section.title && <p className="m-0 mb-1 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{section.title}</p>}
+            {section.title && <p className="m-0 mb-1.5 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-white/60">{section.title}</p>}
             <ul className="m-0 list-none space-y-0.5 p-0">
               {section.items.map((item) => {
                 const Icon = ICONS[item.icon];
@@ -176,11 +190,12 @@ function SidebarContent({ nav, pathname, orgName, user, hideBrand }: { nav: NavS
                       href={item.href}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex h-9 items-center gap-2.5 rounded-md px-2 text-sm no-underline transition-colors",
-                        active ? "bg-primary-soft font-medium text-primary" : "text-foreground hover:bg-muted"
+                        "group relative flex h-10 items-center gap-3 rounded-lg px-2.5 text-sm no-underline transition-colors focus-visible:outline-white",
+                        active ? "bg-white font-semibold text-[#0a2463] shadow-card" : "text-white/85 hover:bg-white/10 hover:text-white"
                       )}
                     >
-                      <Icon className={cn("size-4 shrink-0", active ? "text-primary" : "text-muted-foreground")} aria-hidden="true" />
+                      {active && <span aria-hidden="true" className="absolute -left-3 top-2 h-6 w-1 rounded-r-full bg-[#ff4b57]" />}
+                      <Icon className={cn("size-[18px] shrink-0 transition-transform duration-200 group-hover:scale-110", active ? "text-[#d81e2c]" : "text-white/70 group-hover:text-white")} aria-hidden="true" />
                       {item.label}
                     </Link>
                   </li>
@@ -190,11 +205,16 @@ function SidebarContent({ nav, pathname, orgName, user, hideBrand }: { nav: NavS
           </div>
         ))}
       </nav>
-      <div className="shrink-0 border-t border-border px-4 py-3">
-        <p className="m-0 truncate text-sm font-medium text-foreground">{orgName}</p>
-        <p className="m-0 truncate text-xs text-muted-foreground">
-          {user.name} · {user.roleLabel}
-        </p>
+      <div className="relative m-3 flex shrink-0 items-center gap-2.5 rounded-lg bg-white/10 px-3 py-2.5 backdrop-blur">
+        <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-xs font-semibold text-[#0a2463]">
+          {initials || "?"}
+        </span>
+        <div className="min-w-0">
+          <p className="m-0 truncate text-sm font-medium text-white">{orgName}</p>
+          <p className="m-0 truncate text-xs text-white/70">
+            {user.name} · {user.roleLabel}
+          </p>
+        </div>
       </div>
     </div>
   );
