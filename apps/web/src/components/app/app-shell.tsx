@@ -15,8 +15,7 @@ import {
   UserCircle,
   Users,
   Wrench,
-  type LucideIcon
-} from "lucide-react";
+  type LucideIcon, Inbox } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -232,6 +231,13 @@ function UserMenu({ user, orgName, viewingAs }: { user: ShellUser; orgName: stri
           <DropdownMenuItem asChild>
             <Link href="/admin/customers">
               <Building2 aria-hidden="true" /> Customers
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {user.isSuperAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href="/admin/leads">
+              <Inbox aria-hidden="true" /> Leads
             </Link>
           </DropdownMenuItem>
         )}

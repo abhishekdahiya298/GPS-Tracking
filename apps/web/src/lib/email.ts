@@ -106,6 +106,26 @@ export function passwordResetEmail(to: string, name: string, url: string, expire
   };
 }
 
+/** To platform admins: someone asked for pricing on the public site. Every value is escaped. */
+export function leadEmail(to: string, lead: { name: string; company: string; email: string; phone: string | null; fleetSize: string; country: string; message: string | null }): EmailMessage {
+  const rows: [string, string][] = [
+    ["Name", lead.name],
+    ["Company", lead.company],
+    ["Email", lead.email],
+    ["Phone", lead.phone ?? "-"],
+    ["Fleet size", `${lead.fleetSize} vehicles`],
+    ["Country", lead.country === "CA" ? "Canada" : "United States"],
+    ["Message", lead.message ?? "-"]
+  ];
+  return {
+    to,
+    template: "lead",
+    subject: `Pricing request: ${lead.company.slice(0, 80)}`,
+    html: layout("New pricing request", `<table cellpadding="4">${rows.map(([k, v]) => `<tr><td style="color:#5b6472;vertical-align:top">${k}</td><td>${esc(v)}</td></tr>`).join("")}</table><p>Open Leads in RIO GPS to mark it contacted.</p>`),
+    text: `New pricing request\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}`
+  };
+}
+
 export function inviteEmail(to: string, name: string, orgName: string, url: string, expiresHours: number): EmailMessage {
   return {
     to,
