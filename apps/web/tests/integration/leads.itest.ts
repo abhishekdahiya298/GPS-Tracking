@@ -7,7 +7,7 @@ import { getAuth } from "@/lib/auth";
 import { setEmailTransportForTests, type EmailMessage } from "@/lib/email";
 import { listLeads } from "@/lib/leads";
 import { PATCH as leadPATCH } from "@/app/api/admin/leads/[id]/route";
-import { POST as leadsPOST } from "@/app/api/leads/route";
+import { OPTIONS as leadsOPTIONS, POST as leadsPOST } from "@/app/api/leads/route";
 
 const BASE = "http://localhost:3000";
 const PASSWORD = "correct-horse-battery-staple";
@@ -88,6 +88,34 @@ describe("public pricing requests", () => {
     for (let i = 0; i < 7; i++) codes.push((await leadsPOST(pub({ ...GOOD, company: `Co ${i}` }, ip(77)))).status);
     expect(codes.slice(0, 5)).toEqual([201, 201, 201, 201, 201]);
     expect(codes.slice(5)).toEqual([429, 429]);
+  });
+});
+
+describe("marketing site (cross-origin)", () => {
+  const SITE = "https://site.example.test";
+  it("is accepted only from a listed origin, with CORS headers for that origin alone", async () => {
+    process.env.PUBLIC_SITE_ORIGINS = `${SITE}, not a url, http://insecure.test`;
+    try {
+      const pre = leadsOPTIONS(new Request(`${BASE}/api/leads`, { method: "OPTIONS", headers: { origin: SITE } }));
+      expect(pre.status).toBe(204);
+      expect(pre.headers.get("access-control-allow-origin")).toBe(SITE);
+      expect(pre.headers.get("access-control-allow-credentials")).toBeNull();
+      expect(leadsOPTIONS(new Request(`${BASE}/api/leads`, { method: "OPTIONS", headers: { origin: "https://evil.test" } })).headers.get("access-control-allow-origin")).toBeNull();
+
+      const ok = await leadsPOST(pub({ ...GOOD, company: "From The Site" }, ip(40), SITE));
+      expect(ok.status).toBe(201);
+      expect(ok.headers.get("access-control-allow-origin")).toBe(SITE);
+      const bad = await leadsPOST(pub({ ...GOOD, email: "nope" }, ip(40), SITE));
+      expect(bad.status).toBe(400);
+      expect(bad.headers.get("access-control-allow-origin")).toBe(SITE);
+      // http (non-localhost) entries are ignored even when listed.
+      expect((await leadsPOST(pub(GOOD, ip(41), "http://insecure.test"))).status).toBe(403);
+      expect((await leadsPOST(pub(GOOD, ip(41), "https://evil.test"))).status).toBe(403);
+    } finally {
+      delete process.env.PUBLIC_SITE_ORIGINS;
+    }
+    // Without configuration the site origin is rejected too.
+    expect((await leadsPOST(pub(GOOD, ip(42), SITE))).status).toBe(403);
   });
 });
 
