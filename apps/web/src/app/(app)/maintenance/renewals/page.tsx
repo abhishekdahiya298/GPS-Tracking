@@ -7,7 +7,7 @@ import { listVehicles } from "@/lib/vehicles";
 import { RenewalsManager } from "./renewals-manager";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Renewals · RIO GPS" };
+export const metadata = { title: "Renewals · RIO Tracking" };
 
 export default async function RenewalsPage() {
   const rc = await getRequestContext();

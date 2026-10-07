@@ -5,7 +5,7 @@ import { getRequestContext } from "@/lib/request-context";
 import { CustomerDetailView } from "./customer-detail";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Customer · RIO GPS" };
+export const metadata = { title: "Customer · RIO Tracking" };
 
 export default async function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const rc = await getRequestContext();

@@ -7,7 +7,7 @@ import { AuthHeading } from "../auth-heading";
 import { LoginForm } from "./login-form";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Sign in · RIO GPS" };
+export const metadata = { title: "Sign in · RIO Tracking" };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
   const session = await getAuth().api.getSession({ headers: await headers() });

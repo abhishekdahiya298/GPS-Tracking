@@ -13,7 +13,7 @@ import { z } from "zod";
 export const CreateUserInputSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   name: z.string().trim().min(1).max(200),
-  password: z.string().min(12).max(128),
+  password: z.string().min(6).max(128),
   organizationSlug: z.string().trim().min(1),
   role: z.enum(ORG_ROLES),
   superAdmin: z.boolean().default(false)

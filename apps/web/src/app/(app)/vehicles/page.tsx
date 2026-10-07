@@ -7,7 +7,7 @@ import { listGroups } from "@/lib/vehicle-groups";
 import { VehiclesView } from "./vehicles-view";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Vehicles · RIO GPS" };
+export const metadata = { title: "Vehicles · RIO Tracking" };
 
 export default async function VehiclesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const rc = await getRequestContext();

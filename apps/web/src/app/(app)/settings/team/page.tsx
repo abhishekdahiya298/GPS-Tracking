@@ -6,7 +6,7 @@ import { listMembersPage, TeamListQuery } from "@/lib/team-list";
 import { TeamView } from "./team-view";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Team · RIO GPS" };
+export const metadata = { title: "Team · RIO Tracking" };
 
 export default async function TeamPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const rc = await getRequestContext();

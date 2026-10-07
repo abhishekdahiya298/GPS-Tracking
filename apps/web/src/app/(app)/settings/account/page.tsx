@@ -9,7 +9,7 @@ import { getRequestContext } from "@/lib/request-context";
 import { AccountForm } from "./account-form";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "My account · RIO GPS" };
+export const metadata = { title: "My account · RIO Tracking" };
 
 export default async function AccountPage() {
   let user;

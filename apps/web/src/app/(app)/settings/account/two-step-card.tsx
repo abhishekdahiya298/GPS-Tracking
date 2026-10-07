@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { toast } from "@/components/ui/toaster";
 import { authClient } from "@/lib/client/auth-client";
 
@@ -119,7 +120,7 @@ export function TwoStepCard({ enabled }: { enabled: boolean }) {
               {step.purpose === "codes" && "Confirm your password to create new backup codes. Your old codes stop working."}
             </p>
             <Field id="tsv-pw" label="Password" required>
-              <Input id="tsv-pw" name="password" type="password" autoComplete="current-password" required autoFocus />
+              <PasswordInput id="tsv-pw" name="password" autoComplete="current-password" required autoFocus />
             </Field>
             {error && <Alert tone="danger">{error}</Alert>}
             <div className="flex flex-wrap gap-2">

@@ -68,7 +68,7 @@ describe("turning two-step verification on", () => {
     const body = await res.json();
     const uri = new URL(body.totpURI);
     expect(uri.protocol).toBe("otpauth:");
-    expect(uri.searchParams.get("issuer")).toBe("RIO GPS");
+    expect(uri.searchParams.get("issuer")).toBe("RIO Tracking");
     secret = uri.searchParams.get("secret")!;
     backupCodes = body.backupCodes;
     expect(backupCodes.length).toBeGreaterThanOrEqual(8);

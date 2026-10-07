@@ -5,6 +5,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
+import { MIN_PASSWORD_LENGTH, PasswordInput } from "@/components/ui/password-input";
 import { authClient } from "@/lib/client/auth-client";
 
 export function ResetForm({ token }: { token: string }) {
@@ -42,11 +43,11 @@ export function ResetForm({ token }: { token: string }) {
   }
   return (
     <form method="post" onSubmit={onSubmit} className="grid gap-4">
-      <Field id="newPassword" label="New password" description="At least 12 characters.">
-        <Input id="newPassword" name="newPassword" type="password" autoComplete="new-password" required minLength={12} maxLength={128} className="h-10 text-base sm:text-sm" />
+      <Field id="newPassword" label="New password" description="At least 6 characters.">
+        <PasswordInput id="newPassword" name="newPassword" autoComplete="new-password" required minLength={MIN_PASSWORD_LENGTH} maxLength={128} className="h-10 text-base sm:text-sm" />
       </Field>
       <Field id="confirm" label="Confirm password">
-        <Input id="confirm" name="confirm" type="password" autoComplete="new-password" required minLength={12} maxLength={128} className="h-10 text-base sm:text-sm" />
+        <PasswordInput id="confirm" name="confirm" autoComplete="new-password" required minLength={MIN_PASSWORD_LENGTH} maxLength={128} className="h-10 text-base sm:text-sm" />
       </Field>
       {msg && <Alert tone="danger" title={msg} />}
       <Button type="submit" size="lg" loading={busy} className="w-full">

@@ -2,6 +2,7 @@
 import {
   Bell,
   Building2,
+  Check,
   ChevronsUpDown,
   Cpu,
   FileBarChart,
@@ -21,6 +22,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
+import { BrandMark } from "./brand-mark";
 import { Button } from "../ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Sheet, SheetContent } from "../ui/dialog";
@@ -55,10 +57,19 @@ export interface ShellUser {
   isSuperAdmin: boolean;
 }
 
+/** A company the signed-in person belongs to (for the switcher). */
+export interface ShellOrganization {
+  id: string;
+  name: string;
+  roleLabel: string;
+  current: boolean;
+}
+
 export function AppShell({
   nav,
   user,
   orgName,
+  organizations,
   viewingAs,
   unackAlerts,
   canSeeAlerts,
@@ -70,6 +81,7 @@ export function AppShell({
   nav: NavSection[];
   user: ShellUser;
   orgName: string;
+  organizations: ShellOrganization[];
   viewingAs: boolean;
   unackAlerts: number;
   canSeeAlerts: boolean;
@@ -95,7 +107,7 @@ export function AppShell({
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" title="RIO GPS" className="w-72 p-0 lg:hidden">
+        <SheetContent side="left" title="RIO Tracking" className="w-72 p-0 lg:hidden">
           <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} hideBrand />
         </SheetContent>
       </Sheet>
@@ -123,7 +135,7 @@ export function AppShell({
                 </Link>
               </Button>
             )}
-            <UserMenu user={user} orgName={orgName} viewingAs={viewingAs} />
+            <UserMenu user={user} orgName={orgName} organizations={organizations} viewingAs={viewingAs} />
           </div>
         </header>
 
@@ -139,14 +151,7 @@ export function AppShell({
 }
 
 function Brand() {
-  return (
-    <>
-      <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-md bg-primary text-xs font-bold text-white">
-        R
-      </span>
-      <span>RIO GPS</span>
-    </>
-  );
+  return <BrandMark className="h-8" />;
 }
 
 function SidebarContent({ nav, pathname, orgName, user, hideBrand }: { nav: NavSection[]; pathname: string; orgName: string; user: ShellUser; hideBrand?: boolean }) {
@@ -195,7 +200,7 @@ function SidebarContent({ nav, pathname, orgName, user, hideBrand }: { nav: NavS
   );
 }
 
-function UserMenu({ user, orgName, viewingAs }: { user: ShellUser; orgName: string; viewingAs: boolean }) {
+function UserMenu({ user, orgName, organizations, viewingAs }: { user: ShellUser; orgName: string; organizations: ShellOrganization[]; viewingAs: boolean }) {
   const initials = user.name
     .split(/\s+/)
     .map((p) => p[0])
@@ -221,6 +226,21 @@ function UserMenu({ user, orgName, viewingAs }: { user: ShellUser; orgName: stri
             {orgName} · {user.roleLabel}
           </span>
         </DropdownMenuLabel>
+        {organizations.length > 1 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="pb-0.5 text-xs font-medium">Switch company</DropdownMenuLabel>
+            {organizations.map((o) => (
+              <DropdownMenuItem key={o.id} onSelect={() => void switchCompany(o.id)} aria-current={o.current && !viewingAs ? "true" : undefined}>
+                {o.current && !viewingAs ? <Check aria-hidden="true" /> : <Building2 aria-hidden="true" />}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{o.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{o.roleLabel}</span>
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/settings/account">
@@ -256,6 +276,16 @@ function UserMenu({ user, orgName, viewingAs }: { user: ShellUser; orgName: stri
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+async function switchCompany(organizationId: string) {
+  try {
+    await api("/api/account/organization", { method: "POST", json: { organizationId } });
+    // A full load, so every page, list and live stream starts again in the other company.
+    window.location.assign("/dashboard");
+  } catch (err) {
+    toast.error(errorMessage(err));
+  }
 }
 
 async function exitViewAs() {

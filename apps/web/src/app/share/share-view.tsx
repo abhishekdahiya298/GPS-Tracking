@@ -148,7 +148,7 @@ export function ShareView() {
             <span aria-hidden="true" className="flex size-5 items-center justify-center rounded bg-primary text-[11px] font-bold text-white">
               R
             </span>
-            RIO GPS · shared location
+            RIO Tracking · shared location
           </p>
           <h1 className="m-0 mt-0.5 truncate text-lg font-semibold">{view.vehicleName}</h1>
         </div>
@@ -190,7 +190,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-md bg-primary text-sm font-bold text-white">
           R
         </span>
-        RIO GPS
+        RIO Tracking
       </div>
       <div className="w-full max-w-sm rounded-xl border border-border bg-background p-6 text-center shadow-card">{children}</div>
     </main>

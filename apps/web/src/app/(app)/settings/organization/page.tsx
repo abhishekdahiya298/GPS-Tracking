@@ -6,7 +6,7 @@ import { getRequestContext } from "@/lib/request-context";
 import { OrgSettingsForm } from "./org-settings-form";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Settings · RIO GPS" };
+export const metadata = { title: "Settings · RIO Tracking" };
 
 export default async function OrganizationSettingsPage() {
   const rc = await getRequestContext();

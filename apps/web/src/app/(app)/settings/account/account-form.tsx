@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
+import { MIN_PASSWORD_LENGTH, PasswordInput } from "@/components/ui/password-input";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { authClient } from "@/lib/client/auth-client";
@@ -66,13 +67,13 @@ export function AccountForm({ name, email, prefs, orgDefaults, twoStep }: { name
           </CardHeader>
           <form method="post" onSubmit={onSubmit} className="grid gap-4 p-4 pt-0">
             <Field id="acc-cur" label="Current password" required>
-              <Input id="acc-cur" name="currentPassword" type="password" autoComplete="current-password" required />
+              <PasswordInput id="acc-cur" name="currentPassword" autoComplete="current-password" required />
             </Field>
-            <Field id="acc-new" label="New password" description="At least 12 characters." required>
-              <Input id="acc-new" name="newPassword" type="password" autoComplete="new-password" required minLength={12} maxLength={128} />
+            <Field id="acc-new" label="New password" description="At least 6 characters." required>
+              <PasswordInput id="acc-new" name="newPassword" autoComplete="new-password" required minLength={MIN_PASSWORD_LENGTH} maxLength={128} />
             </Field>
             <Field id="acc-conf" label="Confirm new password" required>
-              <Input id="acc-conf" name="confirm" type="password" autoComplete="new-password" required minLength={12} maxLength={128} />
+              <PasswordInput id="acc-conf" name="confirm" autoComplete="new-password" required minLength={MIN_PASSWORD_LENGTH} maxLength={128} />
             </Field>
             {error && <Alert tone="danger">{error}</Alert>}
             <div>

@@ -81,7 +81,7 @@ function layout(title: string, bodyHtml: string) {
   return `<!doctype html><html><body style="margin:0;background:#f4f5f7;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1b1f24">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" style="max-width:520px;background:#fff;border-radius:10px;padding:28px" cellpadding="0" cellspacing="0"><tr><td>
-<p style="margin:0 0 4px;font-weight:600;color:#3056d3">RIO GPS</p>
+<p style="margin:0 0 4px;font-weight:600;color:#3056d3">RIO Tracking</p>
 <h1 style="font-size:20px;margin:0 0 16px">${esc(title)}</h1>
 ${bodyHtml}
 <p style="margin:24px 0 0;font-size:12px;color:#6b7280">If you didn't expect this email, you can ignore it.</p>
@@ -97,12 +97,12 @@ export function passwordResetEmail(to: string, name: string, url: string, expire
   return {
     to,
     template: "password_reset",
-    subject: "Reset your RIO GPS password",
+    subject: "Reset your RIO Tracking password",
     html: layout(
       "Reset your password",
-      `<p>Hi ${esc(name || "there")},</p><p>Someone asked to reset the password for your RIO GPS account. The link works once and expires in ${expiresMinutes} minutes.</p>${button(url, "Choose a new password")}`
+      `<p>Hi ${esc(name || "there")},</p><p>Someone asked to reset the password for your RIO Tracking account. The link works once and expires in ${expiresMinutes} minutes.</p>${button(url, "Choose a new password")}`
     ),
-    text: `Hi ${name || "there"},\n\nReset your RIO GPS password (link works once, expires in ${expiresMinutes} minutes):\n${url}\n\nIf you didn't ask for this, ignore this email.`
+    text: `Hi ${name || "there"},\n\nReset your RIO Tracking password (link works once, expires in ${expiresMinutes} minutes):\n${url}\n\nIf you didn't ask for this, ignore this email.`
   };
 }
 
@@ -121,7 +121,7 @@ export function leadEmail(to: string, lead: { name: string; company: string; ema
     to,
     template: "lead",
     subject: `Pricing request: ${lead.company.slice(0, 80)}`,
-    html: layout("New pricing request", `<table cellpadding="4">${rows.map(([k, v]) => `<tr><td style="color:#5b6472;vertical-align:top">${k}</td><td>${esc(v)}</td></tr>`).join("")}</table><p>Open Leads in RIO GPS to mark it contacted.</p>`),
+    html: layout("New pricing request", `<table cellpadding="4">${rows.map(([k, v]) => `<tr><td style="color:#5b6472;vertical-align:top">${k}</td><td>${esc(v)}</td></tr>`).join("")}</table><p>Open Leads in RIO Tracking to mark it contacted.</p>`),
     text: `New pricing request\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}`
   };
 }
@@ -130,12 +130,12 @@ export function inviteEmail(to: string, name: string, orgName: string, url: stri
   return {
     to,
     template: "invite",
-    subject: `You've been invited to ${orgName} on RIO GPS`,
+    subject: `You've been invited to ${orgName} on RIO Tracking`,
     html: layout(
-      `Join ${orgName} on RIO GPS`,
-      `<p>Hi ${esc(name || "there")},</p><p>You've been given access to <strong>${esc(orgName)}</strong> on RIO GPS. Set your password to sign in. The link expires in ${expiresHours} hours.</p>${button(url, "Set your password")}`
+      `Join ${orgName} on RIO Tracking`,
+      `<p>Hi ${esc(name || "there")},</p><p>You've been given access to <strong>${esc(orgName)}</strong> on RIO Tracking. Set your password to sign in. The link expires in ${expiresHours} hours.</p>${button(url, "Set your password")}`
     ),
-    text: `Hi ${name || "there"},\n\nYou've been given access to ${orgName} on RIO GPS. Set your password (link expires in ${expiresHours} hours):\n${url}`
+    text: `Hi ${name || "there"},\n\nYou've been given access to ${orgName} on RIO Tracking. Set your password (link expires in ${expiresHours} hours):\n${url}`
   };
 }
 
@@ -143,9 +143,9 @@ export function accessGrantedEmail(to: string, name: string, orgName: string, lo
   return {
     to,
     template: "access_granted",
-    subject: `You now have access to ${orgName} on RIO GPS`,
-    html: layout(`Access to ${orgName}`, `<p>Hi ${esc(name || "there")},</p><p>You've been added to <strong>${esc(orgName)}</strong>. Sign in with your existing RIO GPS account.</p>${button(loginUrl, "Sign in")}`),
-    text: `Hi ${name || "there"},\n\nYou've been added to ${orgName} on RIO GPS. Sign in with your existing account: ${loginUrl}`
+    subject: `You now have access to ${orgName} on RIO Tracking`,
+    html: layout(`Access to ${orgName}`, `<p>Hi ${esc(name || "there")},</p><p>You've been added to <strong>${esc(orgName)}</strong>. Sign in with your existing RIO Tracking account.</p>${button(loginUrl, "Sign in")}`),
+    text: `Hi ${name || "there"},\n\nYou've been added to ${orgName} on RIO Tracking. Sign in with your existing account: ${loginUrl}`
   };
 }
 
@@ -178,7 +178,7 @@ export function alertEmail(
   return {
     to,
     template: `alert_${ev.type}`,
-    subject: `RIO GPS alert: ${who} ${what}`,
+    subject: `RIO Tracking alert: ${who} ${what}`,
     html: layout(
       `${who} ${what}`,
       `<p>Hi ${esc(name || "there")},</p><p>Rule <strong>${esc(ev.ruleName)}</strong> fired at ${esc(when)}.</p>${extra.map((e) => `<p>${esc(e)}</p>`).join("")}${map ? `<p><a href="${esc(map)}">View location</a></p>` : ""}${button(alertsUrl, "Open alerts")}`
@@ -218,7 +218,7 @@ ${r.rows.map((x) => `<tr><td ${tdl}>${esc(x.vehicle)}</td><td ${td}>${x.trips}</
   return {
     to,
     template: "trip_summary",
-    subject: `RIO GPS report · ${r.orgName} · ${r.periodLabel}`,
+    subject: `RIO Tracking report · ${r.orgName} · ${r.periodLabel}`,
     html: layout(
       title,
       `<p>Hi ${esc(name || "there")},</p><p>Trip summary for <strong>${esc(r.orgName)}</strong>, ${esc(r.periodLabel)} (${esc(zoneLabel(r.timeZone))}).</p>${table}${r.csv ? "<p style=\"font-size:13px;color:#6b7280\">Every trip is in the attached CSV.</p>" : ""}${button(r.reportsUrl, "Open reports")}`
@@ -247,7 +247,7 @@ export function maintenanceEmail(
   return {
     to,
     template: `maintenance_${m.state}`,
-    subject: `RIO GPS maintenance: ${title}`,
+    subject: `RIO Tracking maintenance: ${title}`,
     html: layout(title, `<p>Hi ${esc(name || "there")},</p><p>${esc(m.orgName)}</p>${facts.map((f) => `<p>${esc(f)}</p>`).join("")}${button(url, "Open maintenance")}`),
     text: `${title}\n${m.orgName}\n${facts.join("\n")}\n\n${url}`
   };
@@ -267,7 +267,7 @@ export function renewalEmail(
   return {
     to,
     template: `renewal_${m.state}`,
-    subject: `RIO GPS renewal: ${title}`,
+    subject: `RIO Tracking renewal: ${title}`,
     html: layout(title, `<p>Hi ${esc(name || "there")},</p><p>${esc(m.orgName)}</p>${facts.map((f) => `<p>${esc(f)}</p>`).join("")}${button(url, "Open renewals")}`),
     text: `${title}\n${m.orgName}\n${facts.join("\n")}\n\n${url}`
   };

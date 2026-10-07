@@ -1,10 +1,10 @@
 import { contextHasPermission, units, type TenantContext, type Units } from "@rio-gps/core";
-import { Activity, AlertTriangle, CheckCircle2, CalendarClock, ArrowRight, Bell, Car, CircleOff, CircleParking, Hexagon, Map as MapIcon, Plus, Route, Truck, Wrench } from "lucide-react";
+import { Activity, AlertTriangle, CheckCircle2, CalendarClock, ArrowRight, Bell, CircleOff, CircleParking, Hexagon, Map as MapIcon, Navigation, Plus, Route, Truck, Wrench } from "lucide-react";
 import Link from "next/link";
 import { CHART_RANGES, type ChartRange } from "@/lib/daily-stats";
 import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
 import { redirect } from "next/navigation";
-import { cache, Suspense, type ReactNode } from "react";
+import { cache, Suspense } from "react";
 import { LocalTime } from "@/components/app/local-time";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/app/states";
@@ -26,7 +26,7 @@ import { getRequestContext, getUnacknowledgedAlertCount } from "@/lib/request-co
 import { FleetTrends, TrendsSkeleton } from "./fleet-trends";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Dashboard · RIO GPS" };
+export const metadata = { title: "Dashboard · RIO Tracking" };
 
 /** Trip summary covers the vehicles most recently seen, to keep the page fast on big fleets. */
 const TRIP_SUMMARY_MAX_DEVICES = 25;
@@ -52,20 +52,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const states = devices.map((d) => ({ d, s: fleetState(d) }));
   const count = (s: FleetState) => states.filter((x) => x.s === s).length;
   const firstName = (user.name || "").split(" ")[0];
-  // Vehicles, Moving, Stopped, Offline, then Idling and Alerts when they apply.
-  const tileCount = 4 + (count("idle") > 0 ? 1 : 0) + (can("alerts.read") ? 1 : 0);
-
-  const actions = (
-    <>
-      {can("locations.read") && (
-        <Button asChild>
-          <Link href="/map">
-            <MapIcon aria-hidden="true" /> Live map
-          </Link>
-        </Button>
-      )}
-    </>
-  );
+  // Moving, Idling, Stopped, Offline, and Alerts for people who can see them.
+  const tileCount = 4 + (can("alerts.read") ? 1 : 0);
 
   if (devices.length === 0) {
     return (
@@ -100,16 +88,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <PageHeader title="Fleet overview" description="What's happening with your fleet right now." actions={actions} />
+      <Hero
+        greeting={`${greeting(now, rc.timeZone)}${firstName ? `, ${firstName}` : ""}`}
+        orgName={rc.orgName}
+        dateLabel={new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: rc.timeZone }).format(now)}
+        summary={`${count("moving")} of ${devices.length} vehicle${devices.length === 1 ? "" : "s"} on the road${unack > 0 ? ` · ${unack} unread alert${unack === 1 ? "" : "s"}` : ""}`}
+        showMap={can("locations.read")}
+      />
 
-      <section aria-label="Fleet summary" className={cn("stagger-in mb-5 grid grid-cols-2 gap-3", tileCount === 6 ? "md:grid-cols-3 xl:grid-cols-6" : tileCount === 5 ? "md:grid-cols-5" : "md:grid-cols-4")}>
-        <Stat label="Vehicles" value={devices.length} icon={Truck} href="/vehicles" className={cn(tileCount % 2 === 1 && "col-span-2 md:col-span-1")} />
-        <Stat label="Moving" value={count("moving")} icon={Car} tone="success" href="/vehicles?state=moving" />
-        <Stat label="Stopped" value={count("stopped")} icon={CircleParking} tone="info" href="/vehicles?state=stopped" />
-        <Stat label="Offline" value={count("offline") + count("never_seen")} icon={CircleOff} href="/vehicles?state=offline" />
-        {/* Idling only earns a tile when something is idling: engine running, going nowhere. */}
-        {count("idle") > 0 && <Stat label="Idling" value={count("idle")} icon={Activity} tone="warning" hint="engine on" href="/vehicles?state=idle" />}
-        {can("alerts.read") && <Stat label="Unread alerts" value={unack} icon={Bell} tone={unack > 0 ? "danger" : undefined} href="/alerts" />}
+      <section aria-label="Fleet summary" className={cn("stagger-in mb-5 grid grid-cols-2 gap-3", tileCount === 5 ? "md:grid-cols-5" : "md:grid-cols-4")}>
+        <Tile label="Moving" value={count("moving")} total={devices.length} icon={Navigation} look="moving" href="/vehicles?state=moving" />
+        <Tile label="Idling" value={count("idle")} total={devices.length} icon={Activity} look="idle" hint="engine on" href="/vehicles?state=idle" />
+        <Tile label="Stopped" value={count("stopped")} total={devices.length} icon={CircleParking} look="stopped" href="/vehicles?state=stopped" />
+        <Tile label="Offline" value={count("offline") + count("never_seen")} total={devices.length} icon={CircleOff} look="offline" href="/vehicles?state=offline" />
+        {can("alerts.read") && <Tile label="Unread alerts" value={unack} icon={Bell} look={unack > 0 ? "alert" : "calm"} href="/alerts" className="col-span-2 md:col-span-1" />}
       </section>
 
       {/* Things that need attention sit side by side on wide screens instead of stacking. */}
@@ -157,7 +149,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               All vehicles
             </Link>
           </CardHeader>
-          <StatusBar
+          <StatusDonut
             total={devices.length}
             parts={(["moving", "idle", "stopped", "offline"] as const).map((k) => ({
               key: k,
@@ -268,25 +260,108 @@ function rank(s: FleetState) {
   return { moving: 0, idle: 1, stopped: 2, offline: 3, never_seen: 4 }[s];
 }
 
-/** Share of the fleet in each status: one proportional bar with a labelled legend (no colour-only meaning). */
-function StatusBar({ total, parts }: { total: number; parts: { key: string; label: string; color: string; value: number }[] }) {
-  if (total === 0) return null;
+/** "Good morning" by the clock in the viewer's time zone. */
+function greeting(now: Date, timeZone: string): string {
+  const h = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone }).format(now));
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+
+/** Page banner in the brand colours: navy field, red and white stripes echoing the logo. */
+function Hero({ greeting, orgName, dateLabel, summary, showMap }: { greeting: string; orgName: string; dateLabel: string; summary: string; showMap: boolean }) {
   return (
-    <div className="px-5 pb-4">
-      <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-        {parts
-          .filter((p) => p.value > 0)
-          .map((p) => (
-            <span key={p.key} className="origin-left animate-grow-x" style={{ width: `${(p.value / total) * 100}%`, background: p.color }} />
-          ))}
+    <header className="relative mb-5 overflow-hidden rounded-xl bg-[linear-gradient(120deg,#0a2463_0%,#12357f_55%,#1d4fb8_100%)] px-5 py-5 text-white shadow-card sm:px-7 sm:py-6">
+      <svg aria-hidden="true" viewBox="0 0 400 160" preserveAspectRatio="xMaxYMid slice" className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-1/2 sm:block">
+        <path d="M150 160 230 0h34l-80 160z" fill="#ffffff" opacity="0.07" />
+        <path d="M214 160 294 0h22l-80 160z" fill="#d81e2c" opacity="0.85" />
+        <path d="M258 160 338 0h34l-80 160z" fill="#ffffff" opacity="0.1" />
+        <path d="M322 160 402 0h60v160z" fill="#ffffff" opacity="0.05" />
+      </svg>
+      <div className="relative flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="m-0 text-[13px] font-medium text-white/75">
+            {dateLabel} · {orgName}
+          </p>
+          <h1 className="m-0 mt-1 text-2xl font-semibold tracking-tight sm:text-[28px] sm:leading-9">{greeting}</h1>
+          <p className="m-0 mt-1.5 text-sm text-white/85">{summary}</p>
+        </div>
+        {showMap && (
+          <Link href="/map" className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md bg-white px-4 text-sm font-semibold text-[#0a2463] no-underline shadow-card transition-transform duration-150 hover:bg-white/90 active:scale-[0.97]">
+            <MapIcon className="size-4" aria-hidden="true" /> Open live map
+          </Link>
+        )}
       </div>
-      <ul className="m-0 mt-3 flex list-none flex-wrap gap-x-5 gap-y-1 p-0 text-xs text-muted-foreground">
+    </header>
+  );
+}
+
+/** Solid colour per status. Every pair is white text on a background of at least 4.5:1 contrast. */
+const TILE_LOOK = {
+  moving: "bg-[linear-gradient(135deg,#15803d,#166534)]",
+  idle: "bg-[linear-gradient(135deg,#b45309,#92400e)]",
+  stopped: "bg-[linear-gradient(135deg,#0369a1,#075985)]",
+  offline: "bg-[linear-gradient(135deg,#526079,#3b4558)]",
+  alert: "bg-[linear-gradient(135deg,#c81e2b,#991b1b)]",
+  calm: "bg-[linear-gradient(135deg,#0a2463,#12357f)]"
+} as const;
+
+function Tile({ label, value, total, icon: Icon, look, hint, href, className }: { label: string; value: number; total?: number; icon: typeof Truck; look: keyof typeof TILE_LOOK; hint?: string; href: string; className?: string }) {
+  const pct = total ? Math.round((value / total) * 100) : null;
+  return (
+    <Link
+      href={href}
+      className={cn("group relative block overflow-hidden rounded-xl p-4 text-white no-underline shadow-card transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-offset-2", TILE_LOOK[look], className)}
+    >
+      <Icon aria-hidden="true" className="pointer-events-none absolute -bottom-3 -right-2 size-20 text-white/15 transition-transform duration-300 group-hover:scale-110" strokeWidth={1.5} />
+      <p className="m-0 text-xs font-semibold uppercase tracking-wide text-white/85">{label}</p>
+      <p className="m-0 mt-1.5 text-[34px] font-semibold leading-10 tabular-nums">{value}</p>
+      <p className="m-0 mt-1 min-h-4 text-xs text-white/85">{pct !== null ? `${pct}% of fleet${hint ? ` · ${hint}` : ""}` : value === 0 ? "All caught up" : "Need a look"}</p>
+      {pct !== null && (
+        <span aria-hidden="true" className="relative mt-2.5 block h-1 overflow-hidden rounded-full bg-white/25">
+          <span className="block h-full origin-left animate-grow-x rounded-full bg-white" style={{ width: `${pct}%` }} />
+        </span>
+      )}
+    </Link>
+  );
+}
+
+/** Share of the fleet in each status: a ring with the total in the middle, and a labelled legend (no colour-only meaning). */
+function StatusDonut({ total, parts }: { total: number; parts: { key: string; label: string; color: string; value: number }[] }) {
+  if (total === 0) return null;
+  const R = 42;
+  const C = 2 * Math.PI * R;
+  let offset = 0;
+  const arcs = parts
+    .filter((p) => p.value > 0)
+    .map((p) => {
+      const len = (p.value / total) * C;
+      const arc = { key: p.key, color: p.color, len, offset };
+      offset += len;
+      return arc;
+    });
+  // A small gap between segments, unless one status is the whole ring.
+  const gap = arcs.length > 1 ? 2 : 0;
+  return (
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-4 px-5 pb-5">
+      <svg viewBox="0 0 100 100" className="size-32 shrink-0 -rotate-90" aria-hidden="true">
+        <circle cx="50" cy="50" r={R} fill="none" stroke="var(--color-muted)" strokeWidth="11" />
+        {arcs.map((a) => (
+          <circle key={a.key} cx="50" cy="50" r={R} fill="none" stroke={a.color} strokeWidth="11" strokeDasharray={`${Math.max(0, a.len - gap)} ${C}`} strokeDashoffset={-a.offset} className="animate-fade" />
+        ))}
+        <text x="50" y="50" transform="rotate(90 50 50)" textAnchor="middle" dominantBaseline="central" className="fill-foreground text-[22px] font-semibold tabular-nums">
+          {total}
+        </text>
+        <text x="50" y="66" transform="rotate(90 50 50)" textAnchor="middle" className="fill-muted-foreground text-[8px]">
+          vehicle{total === 1 ? "" : "s"}
+        </text>
+      </svg>
+      <ul className="m-0 grid min-w-48 flex-1 list-none grid-cols-2 gap-x-4 gap-y-2 p-0 text-sm">
         {parts.map((p) => (
-          <li key={p.key} className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="inline-block size-2 rounded-full" style={{ background: p.color }} />
-            <Link href={`/vehicles?state=${p.key}`} className="text-inherit no-underline hover:underline">
-              {p.label} <strong className="font-semibold tabular-nums text-foreground">{p.value}</strong>{" "}
-              <span className="tabular-nums">({Math.round((p.value / total) * 100)}%)</span>
+          <li key={p.key}>
+            <Link href={`/vehicles?state=${p.key}`} className="flex items-center gap-2 rounded-md px-1.5 py-1 text-foreground no-underline hover:bg-canvas">
+              <span aria-hidden="true" className="inline-block size-2.5 shrink-0 rounded-full" style={{ background: p.color }} />
+              <span className="flex-1 text-muted-foreground">{p.label}</span>
+              <strong className="font-semibold tabular-nums">{p.value}</strong>
+              <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">{Math.round((p.value / total) * 100)}%</span>
             </Link>
           </li>
         ))}
@@ -295,34 +370,14 @@ function StatusBar({ total, parts }: { total: number; parts: { key: string; labe
   );
 }
 
-function Stat({ label, value, icon: Icon, tone, hint, href, className }: { label: string; value: ReactNode; icon: typeof Truck; tone?: "success" | "danger" | "warning" | "info" | "neutral"; hint?: string; href?: string; className?: string }) {
-  const body = (
-    <Card className={cn("h-full p-4", href && "transition-colors hover:border-primary/40")}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <Icon className={cn("size-4", tone === "success" ? "text-success" : tone === "danger" ? "text-danger" : tone === "warning" ? "text-warning" : tone === "info" ? "text-info" : "text-muted-foreground")} aria-hidden="true" />
-      </div>
-      <p className="m-0 mt-2 text-[28px] font-semibold leading-8 tabular-nums text-foreground">
-        {value}
-        {hint && <span className="ml-1 text-sm font-normal text-muted-foreground">{hint}</span>}
-      </p>
-    </Card>
-  );
-  return href ? (
-    <Link href={href} className={cn("block text-inherit no-underline", className)}>
-      {body}
-    </Link>
-  ) : (
-    <div className={className}>{body}</div>
-  );
-}
-
 function QuickAction({ href, icon: Icon, label }: { href: string; icon: typeof Truck; label: string }) {
   return (
-    <Link href={href} className="flex items-center gap-2 rounded-md border border-border px-3 py-2.5 text-sm font-medium text-foreground no-underline hover:bg-canvas">
-      <Icon className="size-4 text-primary" aria-hidden="true" />
+    <Link href={href} className="group flex items-center gap-2.5 rounded-lg border border-border px-3 py-2.5 text-sm font-medium text-foreground no-underline transition-colors hover:border-primary/40 hover:bg-primary-soft">
+      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary-soft text-primary group-hover:bg-background">
+        <Icon className="size-4" aria-hidden="true" />
+      </span>
       <span className="truncate">{label}</span>
-      <ArrowRight className="ml-auto size-3.5 text-muted-foreground" aria-hidden="true" />
+      <ArrowRight className="ml-auto size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
     </Link>
   );
 }

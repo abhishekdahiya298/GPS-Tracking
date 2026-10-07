@@ -8,7 +8,7 @@ import { listGroups } from "@/lib/vehicle-groups";
 import { LiveMap } from "./live-map";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Live tracking · RIO GPS" };
+export const metadata = { title: "Live tracking · RIO Tracking" };
 
 export default async function MapPage() {
   let ctx;

@@ -8,7 +8,7 @@ import { listVehicles } from "@/lib/vehicles";
 import { AlertsView } from "./alerts-view";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Alerts · RIO GPS" };
+export const metadata = { title: "Alerts · RIO Tracking" };
 
 export default async function AlertsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const rc = await getRequestContext();

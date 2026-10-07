@@ -116,6 +116,10 @@ describe("admin: onboarding", () => {
     const res = await devicesPOST(req("POST", "/", "root", { imei: "864361078566116", model: "FTM880" }), p(customerId));
     expect(res.status).toBe(400);
     expect(traccarCalls).toHaveLength(0);
+    // Letters or the wrong length are never accepted, confirmed or not.
+    expect((await devicesPOST(req("POST", "/", "root", { imei: "86436107856611", model: "FTM880", allowUncheckedImei: true }), p(customerId))).status).toBe(400);
+    expect((await devicesPOST(req("POST", "/", "root", { imei: "86436107856611a", model: "FTM880", allowUncheckedImei: true }), p(customerId))).status).toBe(400);
+    expect(traccarCalls).toHaveLength(0);
   });
 
   it("saves nothing if Traccar registration fails", async () => {

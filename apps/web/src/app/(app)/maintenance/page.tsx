@@ -10,7 +10,7 @@ import { listVehicles } from "@/lib/vehicles";
 import { MaintenanceManager } from "./maintenance-manager";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Maintenance · RIO GPS" };
+export const metadata = { title: "Maintenance · RIO Tracking" };
 
 export default async function MaintenancePage() {
   let ctx;

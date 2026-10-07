@@ -6,7 +6,7 @@ import { getDb, schema } from "@rio-gps/db";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
-import { AppError, ConflictError, NotFoundError } from "./errors";
+import { AppError, ConflictError, NotFoundError, ValidationError } from "./errors";
 import { logger } from "./logger";
 import { addMember } from "./team";
 import { getTraccarAdmin } from "./traccar";
@@ -36,7 +36,12 @@ export const RegisterDeviceSchema = z.object({
   imei: z
     .string()
     .trim()
-    .refine(isValidImei, "IMEI must be 15 digits with a valid check digit"),
+    .regex(/^\d{15}$/, "The IMEI must be exactly 15 digits"),
+  /**
+   * A real IMEI ends in a check digit, which catches most typing mistakes. Some trackers ship
+   * with a non-standard number, so a platform admin may confirm one that fails the check.
+   */
+  allowUncheckedImei: z.boolean().default(false),
   model: z.string().trim().min(1).max(60),
   name: z.string().trim().min(1).max(80).optional()
 });
@@ -84,6 +89,9 @@ export async function registerDevice(actorUserId: string, organizationId: string
   const [provider] = await db.select({ id: schema.gpsProviders.id }).from(schema.gpsProviders).where(eq(schema.gpsProviders.organizationId, organizationId)).limit(1);
   const [org] = await db.select({ id: schema.organizations.id, slug: schema.organizations.slug }).from(schema.organizations).where(eq(schema.organizations.id, organizationId));
   if (!org) throw new NotFoundError("Customer not found");
+  if (!isValidImei(input.imei) && !input.allowUncheckedImei) {
+    throw new ValidationError("This number does not pass the IMEI check, which usually means one digit is mistyped. Compare it with the device label.", { code: "IMEI_CHECK_DIGIT" });
+  }
   const [existing] = await db.select({ organizationId: schema.gpsDevices.organizationId }).from(schema.gpsDevices).where(eq(schema.gpsDevices.imei, input.imei));
   if (existing) throw new ConflictError(existing.organizationId === organizationId ? "This device is already registered for this customer" : "This IMEI is already registered to another customer");
 
@@ -116,7 +124,7 @@ export async function registerDevice(actorUserId: string, organizationId: string
     organizationId,
     targetType: "device",
     targetId: dev!.id,
-    metadata: { model: input.model, imeiLast4: input.imei.slice(-4), traccarCreated: traccar.created },
+    metadata: { model: input.model, imeiLast4: input.imei.slice(-4), traccarCreated: traccar.created, ...(isValidImei(input.imei) ? {} : { uncheckedImei: true }) },
     ...meta
   });
   return { deviceId: dev!.id, traccarCreated: traccar.created };

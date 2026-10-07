@@ -13,7 +13,7 @@ const isType = (t: string): t is ActivityReportType => (ACTIVITY_REPORT_TYPES as
 
 export async function generateMetadata({ params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
-  return { title: `${isType(type) ? TITLE[type] : "Reports"} · RIO GPS` };
+  return { title: `${isType(type) ? TITLE[type] : "Reports"} · RIO Tracking` };
 }
 
 export default async function ActivityReportPage({ params }: { params: Promise<{ type: string }> }) {

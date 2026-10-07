@@ -10,7 +10,7 @@ import { listDevices } from "@/lib/vehicles";
 import { SchedulesManager } from "./schedules-manager";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Report emails · RIO GPS" };
+export const metadata = { title: "Report emails · RIO Tracking" };
 
 export default async function SchedulesPage() {
   let ctx;

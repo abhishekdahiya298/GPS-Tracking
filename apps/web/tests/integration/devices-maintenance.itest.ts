@@ -157,10 +157,10 @@ describe("maintenance", () => {
     expect(a + b).toBe(2);
     expect(outbox).toHaveLength(4); // 2 items × 2 recipients
     expect(outbox.map((m) => m.subject).sort()).toEqual([
-      "RIO GPS maintenance: Truck 7: Inspection is due soon",
-      "RIO GPS maintenance: Truck 7: Inspection is due soon",
-      "RIO GPS maintenance: Truck 7: Oil change is overdue",
-      "RIO GPS maintenance: Truck 7: Oil change is overdue"
+      "RIO Tracking maintenance: Truck 7: Inspection is due soon",
+      "RIO Tracking maintenance: Truck 7: Inspection is due soon",
+      "RIO Tracking maintenance: Truck 7: Oil change is overdue",
+      "RIO Tracking maintenance: Truck 7: Oil change is overdue"
     ]);
     outbox.length = 0;
     expect(await runMaintenanceCheck()).toBe(0);

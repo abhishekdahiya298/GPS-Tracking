@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 // Never indexed, and no Referer is sent from this page (map tiles are loaded from another
 // origin). The link's secret is in the URL fragment, which is not part of any request.
 export const metadata: Metadata = {
-  title: "Shared location · RIO GPS",
+  title: "Shared location · RIO Tracking",
   robots: { index: false, follow: false, nocache: true },
   referrer: "no-referrer"
 };

@@ -5,7 +5,7 @@ import { AuthHeading } from "../auth-heading";
 import { ForgotForm } from "./forgot-form";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Forgot password · RIO GPS" };
+export const metadata = { title: "Forgot password · RIO Tracking" };
 
 export default function ForgotPasswordPage() {
   if (!isEmailEnabled()) redirect("/login");

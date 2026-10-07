@@ -4,6 +4,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { authClient } from "@/lib/client/auth-client";
 
 export function LoginForm({ next }: { next: string }) {
@@ -98,7 +99,7 @@ export function LoginForm({ next }: { next: string }) {
         <Input id="email" name="email" type="email" autoComplete="username" required className="h-10 text-base sm:text-sm" />
       </Field>
       <Field id="password" label="Password">
-        <Input id="password" name="password" type="password" autoComplete="current-password" required minLength={12} className="h-10 text-base sm:text-sm" />
+        <PasswordInput id="password" name="password" autoComplete="current-password" required className="h-10 text-base sm:text-sm" />
       </Field>
       {error && <Alert tone="danger" title={error} />}
       <Button type="submit" size="lg" loading={pending} className="w-full">

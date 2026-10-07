@@ -125,7 +125,10 @@ function RegisterDeviceDialog({ open, onOpenChange, customerId, onDone }: { open
   const [imei, setImei] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
   const digits = imei.replace(/\D/g, "");
+  // A real IMEI ends in a check digit. Failing it nearly always means a typo, so ask before sending.
+  const unchecked = digits.length === 15 && !isValidImei(digits);
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
@@ -133,9 +136,13 @@ function RegisterDeviceDialog({ open, onOpenChange, customerId, onDone }: { open
     setError(null);
     try {
       const name = String(f.get("name") ?? "").trim();
-      const out = await api<{ traccarCreated: boolean }>(`/api/admin/customers/${customerId}/devices`, { method: "POST", json: { imei: digits, model: f.get("model"), ...(name ? { name } : {}) } });
+      const out = await api<{ traccarCreated: boolean }>(`/api/admin/customers/${customerId}/devices`, {
+        method: "POST",
+        json: { imei: digits, model: f.get("model"), ...(name ? { name } : {}), ...(unchecked && confirmed ? { allowUncheckedImei: true } : {}) }
+      });
       toast.success(out.traccarCreated ? "Device registered in Traccar and RIO." : "Device already existed in Traccar; linked to this customer.");
       setImei("");
+      setConfirmed(false);
       onOpenChange(false);
       onDone();
     } catch (err) {
@@ -149,7 +156,7 @@ function RegisterDeviceDialog({ open, onOpenChange, customerId, onDone }: { open
       <DialogContent title="Register a GPS device" description="Adds the IMEI to Traccar (if it isn't there) and assigns it to this customer. Nothing is saved if Traccar rejects it.">
         <form method="post" onSubmit={submit} className="grid gap-4">
           <Field id="rd-imei" label="IMEI" required description="15 digits, printed on the device label." error={digits.length > 0 && digits.length !== 15 ? `${digits.length} of 15 digits` : null}>
-            <Input id="rd-imei" value={imei} onChange={(e) => setImei(e.target.value)} inputMode="numeric" autoComplete="off" maxLength={20} aria-invalid={digits.length > 0 && digits.length !== 15} autoFocus />
+            <Input id="rd-imei" value={imei} onChange={(e) => { setImei(e.target.value); setConfirmed(false); setError(null); }} inputMode="numeric" autoComplete="off" maxLength={20} aria-invalid={digits.length > 0 && digits.length !== 15} autoFocus />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field id="rd-model" label="Model" required>
@@ -159,12 +166,21 @@ function RegisterDeviceDialog({ open, onOpenChange, customerId, onDone }: { open
               <Input id="rd-name" name="name" maxLength={80} />
             </Field>
           </div>
+          {unchecked && (
+            <Alert tone="warning" title="This number does not look like a valid IMEI">
+              <p className="m-0">One digit is probably mistyped. Compare all 15 digits with the label on the device. A tracker registered under the wrong number never shows on the map.</p>
+              <label className="mt-2 flex cursor-pointer items-start gap-2 text-sm font-medium">
+                <input type="checkbox" className="mt-0.5 size-4 shrink-0" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+                <span>I checked it against the label and it matches exactly. Register it anyway.</span>
+              </label>
+            </Alert>
+          )}
           {error && <Alert tone="danger">{error}</Alert>}
           <DialogFooter>
             <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>
               Cancel
             </Button>
-            <Button type="submit" loading={busy} disabled={digits.length !== 15}>
+            <Button type="submit" loading={busy} disabled={digits.length !== 15 || (unchecked && !confirmed)}>
               Register device
             </Button>
           </DialogFooter>
@@ -172,4 +188,19 @@ function RegisterDeviceDialog({ open, onOpenChange, customerId, onDone }: { open
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Luhn check on a 15-digit IMEI (same rule as the server's `isValidImei`). */
+function isValidImei(imei: string): boolean {
+  if (!/^\d{15}$/.test(imei)) return false;
+  let sum = 0;
+  for (let i = 0; i < 15; i++) {
+    let d = Number(imei[14 - i]);
+    if (i % 2 === 1) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return sum % 10 === 0;
 }

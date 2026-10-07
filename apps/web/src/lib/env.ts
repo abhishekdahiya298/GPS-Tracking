@@ -35,7 +35,7 @@ const ServerEnvSchema = z.object({
     .optional()
     .or(z.literal("").transform(() => undefined)),
   /** Sender; the domain must be verified in Resend. */
-  EMAIL_FROM: z.string().min(3).default("RIO GPS <no-reply@riocaliforniainc.com>"),
+  EMAIL_FROM: z.string().min(3).default("RIO Tracking <no-reply@riocaliforniainc.com>"),
   /** Runs the 60 s device-offline alert check in this process (single-runner via advisory lock). */
   ALERTS_SCHEDULER_ENABLED: z
     .enum(["true", "false"])

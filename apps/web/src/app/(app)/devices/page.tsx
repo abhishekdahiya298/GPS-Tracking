@@ -6,7 +6,7 @@ import { getRequestContext } from "@/lib/request-context";
 import { DevicesView } from "./devices-view";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Devices · RIO GPS" };
+export const metadata = { title: "Devices · RIO Tracking" };
 
 export default async function DevicesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const rc = await getRequestContext();

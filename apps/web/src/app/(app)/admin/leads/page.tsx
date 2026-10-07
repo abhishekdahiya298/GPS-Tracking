@@ -5,7 +5,7 @@ import { getRequestContext } from "@/lib/request-context";
 import { LeadsView } from "./leads-view";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Leads · RIO GPS" };
+export const metadata = { title: "Leads · RIO Tracking" };
 
 export default async function LeadsPage() {
   const rc = await getRequestContext();

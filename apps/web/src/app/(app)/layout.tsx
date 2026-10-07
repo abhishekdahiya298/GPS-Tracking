@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/app/app-shell";
 import { buildNav } from "@/components/app/nav-config";
 import { Card } from "@/components/ui/card";
+import { listMyOrganizations } from "@/lib/my-organizations";
 import { getRequestContext, getUnacknowledgedAlertCount } from "@/lib/request-context";
 import { SignOutButton } from "./sign-out-button";
 
@@ -29,13 +30,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   }
   const { user, ctx, orgName, unitSystem, timeZone, timeFormat } = rc;
   const canSeeAlerts = contextHasPermission(ctx, "alerts.read");
-  const unack = canSeeAlerts ? await getUnacknowledgedAlertCount(ctx.organizationId) : 0;
+  const [unack, mine] = await Promise.all([canSeeAlerts ? getUnacknowledgedAlertCount(ctx.organizationId) : 0, listMyOrganizations(user.userId)]);
   const viewingAs = ctx.isSuperAdmin && ctx.role === null;
   return (
     <AppShell
       nav={buildNav(ctx)}
       user={{ name: user.name || user.email, email: user.email, roleLabel: ctx.role ? ROLE_LABEL[ctx.role] ?? ctx.role : "Platform admin", isSuperAdmin: user.isSuperAdmin }}
       orgName={orgName}
+      organizations={mine.map((o) => ({ id: o.id, name: o.name, roleLabel: ROLE_LABEL[o.role] ?? o.role, current: o.id === ctx.organizationId }))}
       viewingAs={viewingAs}
       unackAlerts={unack}
       canSeeAlerts={canSeeAlerts}
