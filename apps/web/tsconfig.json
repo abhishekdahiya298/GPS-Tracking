@@ -6,6 +6,8 @@
     "jsx": "preserve",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
     "allowJs": true,
     "incremental": true,
     "plugins": [{ "name": "next" }],

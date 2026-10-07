@@ -23,6 +23,8 @@ export const users = pgTable(
     image: text("image"),
     /** Platform operator: bypasses tenant membership checks. Never settable through any API. */
     isSuperAdmin: boolean("is_super_admin").notNull().default(false),
+    /** Two-step verification is on for this account (managed by Better Auth's two-factor plugin). */
+    twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
     /** Personal display time zone; null = the organization's. */
     timeZone: text("time_zone"),
     /** Personal clock; null = the organization's. */

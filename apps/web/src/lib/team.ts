@@ -39,6 +39,8 @@ export interface MemberDto {
   memberSince: string;
   lastSignInAt: string | null;
   isSuperAdmin: boolean;
+  /** Two-step verification is on for this account. */
+  twoStep: boolean;
 }
 
 /** 20 chars from an unambiguous alphabet (~100 bits), shown once to the admin. */
@@ -64,6 +66,7 @@ export async function listMembers(organizationId: string): Promise<MemberDto[]> 
       name: schema.users.name,
       email: schema.users.email,
       isSuperAdmin: schema.users.isSuperAdmin,
+      twoStep: schema.users.twoFactorEnabled,
       role: schema.memberships.role,
       memberSince: schema.memberships.createdAt,
       lastSignInAt: lastSignIn.at
@@ -80,7 +83,8 @@ export async function listMembers(organizationId: string): Promise<MemberDto[]> 
     role: r.role as OrgRole,
     memberSince: r.memberSince.toISOString(),
     lastSignInAt: r.lastSignInAt ? new Date(r.lastSignInAt as unknown as string).toISOString() : null,
-    isSuperAdmin: r.isSuperAdmin
+    isSuperAdmin: r.isSuperAdmin,
+    twoStep: r.twoStep
   }));
 }
 
@@ -222,7 +226,8 @@ export async function removeMember(ctx: TenantContext, userId: string, meta: Met
   await writeAudit({ action: "member.removed", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "user", targetId: userId, ...meta });
 }
 
-export async function resetMemberPassword(ctx: TenantContext, userId: string, meta: Meta) {
+/** A member of this organization whose sign-in an admin here may reset. */
+async function assertResettableMember(ctx: TenantContext, userId: string, selfService: string) {
   const db = getDb();
   const [target] = await db
     .select({ id: schema.users.id, isSuperAdmin: schema.users.isSuperAdmin })
@@ -236,8 +241,30 @@ export async function resetMemberPassword(ctx: TenantContext, userId: string, me
     .from(schema.memberships)
     .where(and(eq(schema.memberships.userId, userId), ne(schema.memberships.organizationId, ctx.organizationId)));
   if ((others?.n ?? 0) > 0 && !ctx.isSuperAdmin) {
-    throw new ForbiddenError("This account also belongs to another organization; ask the person to change their own password");
+    throw new ForbiddenError(`This account also belongs to another organization; ${selfService}`);
   }
+}
+
+/**
+ * For a member who lost their phone and backup codes: turns two-step verification off and signs
+ * them out everywhere. Their password is unchanged, so this alone lets nobody in.
+ */
+export async function resetMemberTwoStep(ctx: TenantContext, userId: string, meta: Meta) {
+  if (userId === ctx.userId) throw new ConflictError("Turn your own two-step verification off under My account");
+  await assertResettableMember(ctx, userId, "ask a platform admin to reset it");
+  const wasOn = await getDb().transaction(async (tx) => {
+    const removed = await tx.delete(schema.twoFactors).where(eq(schema.twoFactors.userId, userId)).returning({ id: schema.twoFactors.id });
+    const updated = await tx.update(schema.users).set({ twoFactorEnabled: false, updatedAt: new Date() }).where(and(eq(schema.users.id, userId), eq(schema.users.twoFactorEnabled, true))).returning({ id: schema.users.id });
+    if (removed.length + updated.length > 0) await tx.delete(schema.sessions).where(eq(schema.sessions.userId, userId));
+    return removed.length + updated.length > 0;
+  });
+  if (!wasOn) throw new ConflictError("Two-step verification is not on for this member");
+  await writeAudit({ action: "member.two_step_reset", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "user", targetId: userId, ...meta });
+}
+
+export async function resetMemberPassword(ctx: TenantContext, userId: string, meta: Meta) {
+  const db = getDb();
+  await assertResettableMember(ctx, userId, "ask the person to change their own password");
 
   const temporaryPassword = generateTemporaryPassword();
   const hash = await hashPassword(temporaryPassword);

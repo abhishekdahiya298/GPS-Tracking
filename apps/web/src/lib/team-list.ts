@@ -34,7 +34,7 @@ export async function listMembersPage(organizationId: string, q: TeamListQuery):
   const db = getDb();
   const search = q.search ? sql` and (u.name ilike ${likePattern(q.search)} or u.email ilike ${likePattern(q.search)})` : sql``;
   const base = sql`
-    select u.id as user_id, u.name, u.email, u.is_super_admin, m.role, m.created_at as member_since,
+    select u.id as user_id, u.name, u.email, u.is_super_admin, u.two_factor_enabled, m.role, m.created_at as member_since,
            (select max(s.created_at) from sessions s where s.user_id = u.id) as last_sign_in
     from memberships m join users u on u.id = m.user_id
     where m.organization_id = ${organizationId}${search}`;
@@ -61,7 +61,8 @@ export async function listMembersPage(organizationId: string, q: TeamListQuery):
       role: r.role as OrgRole,
       memberSince: new Date(r.member_since as string).toISOString(),
       lastSignInAt: r.last_sign_in ? new Date(r.last_sign_in as string).toISOString() : null,
-      isSuperAdmin: Boolean(r.is_super_admin)
+      isSuperAdmin: Boolean(r.is_super_admin),
+      twoStep: Boolean(r.two_factor_enabled)
     })),
     total: rows.length ? Number(rows[0]!.total) : 0,
     page: q.page,

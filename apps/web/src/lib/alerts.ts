@@ -15,6 +15,7 @@ import { and, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
 import { alertEmail, isEmailEnabled, sendEmail } from "./email";
+import { pushAlerts } from "./push";
 import { getServerEnv } from "./env";
 import { NotFoundError, ValidationError } from "./errors";
 import { logger } from "./logger";
@@ -430,6 +431,12 @@ async function deliver(organizationId: string, fired: FiredEvent[]) {
   } catch (err) {
     logger.error("alerts.publish_failed", { organizationId }, err);
   }
+
+  // Phones that registered for this kind of alert (no-op when none are registered).
+  await pushAlerts(
+    organizationId,
+    fired.map((f) => ({ id: Number(f.row.id), type: f.row.type, vehicleName: f.row.vehicleId ? (names.get(f.row.vehicleId) ?? null) : null, ruleName: f.rule.name }))
+  );
 
   const toEmail = fired.filter((f) => f.rule.notifyEmail);
   if (toEmail.length === 0 || !isEmailEnabled()) return;

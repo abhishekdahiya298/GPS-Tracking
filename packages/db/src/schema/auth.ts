@@ -1,4 +1,4 @@
-import { bigint, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, boolean, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { organizations } from "./organizations";
 import { users } from "./users";
 
@@ -73,3 +73,25 @@ export const rateLimits = pgTable("rate_limits", {
   count: integer("count").notNull(),
   lastRequest: bigint("last_request", { mode: "number" }).notNull()
 });
+
+/**
+ * Two-step verification secrets (Better Auth two-factor plugin, model "twoFactors").
+ * `secret` and `backupCodes` are stored encrypted by Better Auth with AUTH_SECRET and
+ * are never returned by any endpoint.
+ */
+export const twoFactors = pgTable(
+  "two_factors",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    secret: text("secret").notNull(),
+    backupCodes: text("backup_codes").notNull(),
+    /** False until the first code from the authenticator app has been confirmed. */
+    verified: boolean("verified").default(true),
+    failedVerificationCount: integer("failed_verification_count").default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true })
+  },
+  (table) => [index("two_factors_user_id_idx").on(table.userId), index("two_factors_secret_idx").on(table.secret)]
+);

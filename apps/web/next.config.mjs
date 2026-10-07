@@ -10,6 +10,12 @@ const nextConfig = {
       { source: "/my-account", destination: "/settings/account", permanent: false }
     ];
   },
+  // Versioned API paths for the mobile app: /api/v1/... is today's API. When the API changes
+  // in a way that would break an installed app, the old shape stays reachable under /api/v1.
+  // Sign-in stays at /api/auth (the auth library serves it at that fixed path).
+  async rewrites() {
+    return [{ source: "/api/v1/:path((?!auth/).*)", destination: "/api/:path" }];
+  },
   webpack: (config) => {
     // Our workspace packages use TS-ESM-style ".js" extensions in relative
     // imports (correct for real Node ESM resolution) while shipping only

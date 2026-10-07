@@ -1,7 +1,7 @@
 "use client";
 import { useTime } from "@/components/app/time-context";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Copy, KeyRound, MoreHorizontal, ShieldCheck, UserMinus, UserPlus, Users } from "lucide-react";
+import { Copy, KeyRound, MoreHorizontal, ShieldCheck, ShieldOff, UserMinus, UserPlus, Users } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
@@ -53,6 +53,7 @@ export function TeamView({ data, query, you, canManage }: { data: TeamPage; quer
   const [roleFor, setRoleFor] = useState<MemberDto | null>(null);
   const [resetting, setResetting] = useState<MemberDto | null>(null);
   const [removing, setRemoving] = useState<MemberDto | null>(null);
+  const [twoStepFor, setTwoStepFor] = useState<MemberDto | null>(null);
   // One-time secret; kept only in memory until dismissed.
   const [secret, setSecret] = useState<{ email: string; password: string } | null>(null);
   const filtered = query.search !== "" || query.role !== "all";
@@ -90,7 +91,12 @@ export function TeamView({ data, query, you, canManage }: { data: TeamPage; quer
       {
         id: "status",
         header: "Status",
-        cell: ({ row }) => (row.original.lastSignInAt ? <StatusBadge tone="success" label="Active" /> : <StatusBadge tone="warning" label="Invited" />)
+        cell: ({ row }) => (
+          <span className="inline-flex flex-wrap items-center gap-1.5">
+            {row.original.lastSignInAt ? <StatusBadge tone="success" label="Active" /> : <StatusBadge tone="warning" label="Invited" />}
+            {row.original.twoStep && <StatusBadge tone="info" label="Two-step on" />}
+          </span>
+        )
       },
       {
         id: "actions",
@@ -119,6 +125,11 @@ export function TeamView({ data, query, you, canManage }: { data: TeamPage; quer
             <DropdownMenuItem onSelect={() => setResetting(m)}>
               <KeyRound aria-hidden="true" /> Reset password
             </DropdownMenuItem>
+            {m.twoStep && (
+              <DropdownMenuItem onSelect={() => setTwoStepFor(m)}>
+                <ShieldOff aria-hidden="true" /> Reset two-step verification
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem destructive onSelect={() => setRemoving(m)}>
               <UserMinus aria-hidden="true" /> Remove from team
@@ -225,6 +236,25 @@ export function TeamView({ data, query, you, canManage }: { data: TeamPage; quer
                 if (out.temporaryPassword) setSecret({ email: resetting.email, password: out.temporaryPassword });
                 else toast.success(`Password reset email sent to ${resetting.email}.`);
                 setResetting(null);
+              } catch (err) {
+                toast.error(errorMessage(err));
+              }
+            }}
+          />
+          <ConfirmDialog
+            open={twoStepFor !== null}
+            onOpenChange={(o) => !o && setTwoStepFor(null)}
+            title={`Reset two-step verification for ${twoStepFor?.name ?? ""}?`}
+            description="Use this when they have lost their phone and backup codes. Two-step verification is turned off and they are signed out everywhere. Their password stays the same, and they can turn it on again under My account."
+            confirmLabel="Reset two-step"
+            destructive
+            onConfirm={async () => {
+              if (!twoStepFor) return;
+              try {
+                await api(`/api/team/${twoStepFor.userId}/reset-two-step`, { method: "POST" });
+                toast.success(`Two-step verification reset for ${twoStepFor.name}.`);
+                setTwoStepFor(null);
+                refresh();
               } catch (err) {
                 toast.error(errorMessage(err));
               }

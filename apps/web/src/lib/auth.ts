@@ -2,6 +2,7 @@ import { getDb, schema } from "@rio-gps/db";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError, createAuthMiddleware } from "better-auth/api";
+import { bearer, twoFactor } from "better-auth/plugins";
 import { writeAudit } from "./audit";
 import { isEmailEnabled, passwordResetEmail, sendEmail } from "./email";
 import { logger } from "./logger";
@@ -26,9 +27,18 @@ function buildAuth() {
         sessions: schema.sessions,
         accounts: schema.accounts,
         verifications: schema.verifications,
-        rateLimits: schema.rateLimits
+        rateLimits: schema.rateLimits,
+        twoFactors: schema.twoFactors
       }
     }),
+    plugins: [
+      // Phones and other non-browser clients send the session token as "Authorization: Bearer …"
+      // instead of a cookie. Signed tokens only.
+      bearer({ requireSignature: true }),
+      // Two-step verification with an authenticator app (TOTP) and one-time backup codes.
+      // No "trust this device": every sign-in asks for a code.
+      twoFactor({ issuer: "RIO GPS", twoFactorTable: "twoFactors", trustDeviceMaxAge: 0 })
+    ],
     user: {
       modelName: "users",
       additionalFields: {
@@ -80,7 +90,9 @@ function buildAuth() {
       customRules: {
         "/sign-in/email": { window: 60, max: 5 },
         "/request-password-reset": { window: 300, max: 3 },
-        "/reset-password": { window: 300, max: 5 }
+        "/reset-password": { window: 300, max: 5 },
+        "/two-factor/verify-totp": { window: 60, max: 5 },
+        "/two-factor/verify-backup-code": { window: 60, max: 5 }
       }
     },
     advanced: {
@@ -132,6 +144,25 @@ function buildAuth() {
             ipAddress: ctx.request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
             userAgent: ctx.request?.headers.get("user-agent") ?? null
           });
+        }
+        // Two-step verification: record turning it on or off, and failed second steps.
+        if (ctx.path.startsWith("/two-factor/")) {
+          const failed = ctx.context.returned instanceof APIError;
+          const ipAddress = ctx.request?.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+          const userAgent = ctx.request?.headers.get("user-agent") ?? null;
+          const userId = ctx.context.session?.user.id ?? ctx.context.newSession?.user.id ?? null;
+          const verify = ctx.path === "/two-factor/verify-totp" || ctx.path === "/two-factor/verify-backup-code";
+          // A pending sign-in carries the short-lived two-factor cookie; setup from Settings does not.
+          const signingIn = /(^|;\s*)[^=;]*two_factor=/.test(ctx.request?.headers.get("cookie") ?? "");
+          let action: string | null = null;
+          if (verify && failed) action = "auth.two_step_failed";
+          else if (ctx.path === "/two-factor/verify-totp" && !failed && !signingIn) action = "auth.two_step_enabled";
+          else if (ctx.path === "/two-factor/disable" && !failed) action = "auth.two_step_disabled";
+          else if (ctx.path === "/two-factor/generate-backup-codes" && !failed) action = "auth.backup_codes_replaced";
+          else if (ctx.path === "/two-factor/verify-backup-code" && !failed) action = "auth.backup_code_used";
+          if (action) {
+            await writeAudit({ action, actorUserId: userId, targetType: "user", targetId: userId, ipAddress, userAgent, ...(failed && ctx.context.returned instanceof APIError ? { metadata: { status: ctx.context.returned.status } } : {}) });
+          }
         }
         if (ctx.path === "/sign-in/email" && ctx.context.returned instanceof APIError) {
           const email = typeof ctx.body?.email === "string" ? ctx.body.email.toLowerCase().slice(0, 254) : null;

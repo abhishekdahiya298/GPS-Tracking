@@ -14,10 +14,11 @@ import { Field } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { authClient } from "@/lib/client/auth-client";
+import { TwoStepCard } from "./two-step-card";
 
 type Prefs = { timeZone: string | null; timeFormat: TimeFormat | null };
 
-export function AccountForm({ name, email, prefs, orgDefaults }: { name: string; email: string; prefs: Prefs; orgDefaults: { timeZone: string; timeFormat: TimeFormat } }) {
+export function AccountForm({ name, email, prefs, orgDefaults, twoStep }: { name: string; email: string; prefs: Prefs; twoStep: boolean; orgDefaults: { timeZone: string; timeFormat: TimeFormat } }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -82,6 +83,7 @@ export function AccountForm({ name, email, prefs, orgDefaults }: { name: string;
             <p className="m-0 text-xs text-muted-foreground">Changing your password signs you out on your other devices.</p>
           </form>
         </Card>
+        <TwoStepCard enabled={twoStep} />
       </div>
     </>
   );
