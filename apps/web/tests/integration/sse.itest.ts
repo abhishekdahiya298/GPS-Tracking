@@ -27,11 +27,11 @@ async function signIn(email: string, ip: string) {
 }
 
 /** Opens a stream and collects parsed SSE events until the stream ends or `ms` elapses. */
-function open(cookie: string) {
+function open(cookie: string, extraHeaders: Record<string, string> = {}) {
   const ac = new AbortController();
   const events: { event: string; data: unknown }[] = [];
   let ended = false;
-  const ready = streamGET(new Request(`${BASE}/api/locations/stream`, { headers: { cookie }, signal: ac.signal })).then(async (res) => {
+  const ready = streamGET(new Request(`${BASE}/api/locations/stream`, { headers: cookie ? { cookie, ...extraHeaders } : extraHeaders, signal: ac.signal })).then(async (res) => {
     if (res.status !== 200) return res;
     const reader = res.body!.getReader();
     const dec = new TextDecoder();
@@ -154,5 +154,38 @@ describe("SSE", () => {
     await getDb().delete(schema.memberships).where(eq(schema.memberships.userId, u!.id));
     expect(await until(() => s.isEnded(), 6000)).toBe(true);
     expect((s.events.at(-1)!.data as { reason: string }).reason).toBe("session_ended");
+  });
+});
+
+describe("SSE for the phone app (bearer token, no cookie, no Origin)", () => {
+  async function phoneToken(email: string, ip: string) {
+    const res = await getAuth().handler(
+      new Request(`${BASE}/api/auth/sign-in/email`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": ip }, body: JSON.stringify({ email, password: PASSWORD }) })
+    );
+    expect(res.status).toBe(200);
+    const token = res.headers.get("set-auth-token");
+    expect(token).toBeTruthy();
+    return token!;
+  }
+
+  it("streams the caller's organization only, the same as the web app", async () => {
+    const token = await phoneToken("a@a.test", "192.0.2.221");
+    const s = open("", { authorization: `Bearer ${token}` });
+    expect((await s.ready).status).toBe(200);
+    expect(await until(() => s.events.some((e) => e.event === "snapshot"))).toBe(true);
+    const snap = s.events.find((e) => e.event === "snapshot")!.data as { devices: { deviceId: string }[] };
+    expect(snap.devices.map((d) => d.deviceId)).toEqual([devA]);
+    await publisher.publish(locationChannel(orgB), JSON.stringify({ deviceId: devB }));
+    await publisher.publish(locationChannel(orgA), JSON.stringify({ deviceId: devA }));
+    expect(await until(() => s.events.some((e) => e.event === "location"))).toBe(true);
+    await sleep(150);
+    expect(s.events.filter((e) => e.event === "location").map((e) => (e.data as { deviceId: string }).deviceId)).toEqual([devA]);
+    s.abort();
+  });
+
+  it("refuses a missing or tampered token", async () => {
+    const token = await phoneToken("a@a.test", "192.0.2.222");
+    expect((await open("", {}).ready).status).toBe(401);
+    expect((await open("", { authorization: `Bearer ${token.slice(0, -3)}abc` }).ready).status).toBe(401);
   });
 });
