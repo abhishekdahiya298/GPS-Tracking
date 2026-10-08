@@ -1,5 +1,5 @@
 import { contextHasPermission, units, type TenantContext, type Units } from "@rio-gps/core";
-import { Activity, AlertTriangle, CheckCircle2, CalendarClock, ArrowRight, Bell, CircleOff, CircleParking, Hexagon, Map as MapIcon, Navigation, Plus, Route, Truck, Wrench } from "lucide-react";
+import { Activity, AlertTriangle, PieChart, Zap, CheckCircle2, CalendarClock, ArrowRight, Bell, CircleOff, CircleParking, Hexagon, Map as MapIcon, Navigation, Plus, Route, Truck, Wrench } from "lucide-react";
 import Link from "next/link";
 import { CHART_RANGES, type ChartRange } from "@/lib/daily-stats";
 import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
@@ -23,7 +23,9 @@ import { dueCounts } from "@/lib/maintenance";
 import { renewalCounts } from "@/lib/renewals";
 import { buildTripReport } from "@/lib/reports";
 import { getRequestContext, getUnacknowledgedAlertCount } from "@/lib/request-context";
+import { FleetGlance } from "./fleet-glance";
 import { FleetTrends, TrendsSkeleton } from "./fleet-trends";
+import { IconTitle } from "@/components/app/icon-title";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard · RIO Tracking" };
@@ -141,10 +143,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       )}
       </div>
 
+      {can("locations.read") && <FleetGlance offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} />}
+
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
         <Card className="min-w-0 lg:col-span-3">
           <CardHeader>
-            <CardTitle>Fleet status</CardTitle>
+            <IconTitle icon={PieChart}>Fleet status</IconTitle>
             <Link href="/vehicles" className="text-sm text-primary no-underline hover:underline">
               All vehicles
             </Link>
@@ -187,7 +191,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           {can("alerts.read") && (
             <Card>
               <CardHeader>
-                <CardTitle>Recent alerts</CardTitle>
+                <IconTitle icon={Bell} tone="red">Recent alerts</IconTitle>
                 <Link href="/alerts" className="text-sm text-primary no-underline hover:underline">
                   View all
                 </Link>
@@ -207,8 +211,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   {recentAlerts.map((a) => {
                     const m = alertMeta(a.type);
                     return (
-                      <li key={a.id} className="flex items-start gap-3 px-4 py-3 sm:px-5">
-                        <AlertTriangle className={cn("mt-0.5 size-4 shrink-0", m.severity === "high" ? "text-danger" : m.severity === "medium" ? "text-warning" : "text-info")} aria-hidden="true" />
+                      <li key={a.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-primary-soft/40 sm:px-5">
+                        <span className={cn("grid size-8 shrink-0 place-items-center rounded-full", m.severity === "high" ? "bg-danger-soft text-danger" : m.severity === "medium" ? "bg-warning-soft text-warning" : "bg-info-soft text-info")}>
+                          <AlertTriangle className="size-4" aria-hidden="true" />
+                        </span>
                         <div className="min-w-0 flex-1 text-sm">
                           <p className="m-0 truncate">
                             <strong className="font-medium">{a.vehicleName ?? "A device"}</strong> {m.short}
@@ -228,7 +234,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
           <Card>
             <CardHeader>
-              <CardTitle>Quick actions</CardTitle>
+              <IconTitle icon={Zap}>Quick actions</IconTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">
               {can("locations.read") && <QuickAction href="/map" icon={MapIcon} label="Live map" />}
@@ -401,13 +407,18 @@ async function RecentTrips({ ctx, devices, now, u }: { ctx: TenantContext; devic
   return (
     <Card className="mt-5">
       <CardHeader>
-        <div>
-          <CardTitle>Recent trips</CardTitle>
-          <p className="m-0 text-sm text-muted-foreground">
-            Last 24 hours · {trips.length} trip{trips.length === 1 ? "" : "s"} · {u.fmtDist(km)}
-            {partial ? ` · ${TRIP_SUMMARY_MAX_DEVICES} most recently active vehicles` : ""}
-          </p>
-        </div>
+        <IconTitle
+          icon={Route}
+          tone="green"
+          sub={
+            <>
+              Last 24 hours · {trips.length} trip{trips.length === 1 ? "" : "s"} · {u.fmtDist(km)}
+              {partial ? ` · ${TRIP_SUMMARY_MAX_DEVICES} most recently active vehicles` : ""}
+            </>
+          }
+        >
+          Recent trips
+        </IconTitle>
         <Link href="/reports" className="text-sm text-primary no-underline hover:underline">
           Trip reports
         </Link>
@@ -420,13 +431,23 @@ async function RecentTrips({ ctx, devices, now, u }: { ctx: TenantContext; devic
             <li key={`${t.deviceId}-${t.startAt}`}>
               <Link
                 href={`/map?device=${t.deviceId}&from=${encodeURIComponent(t.startAt)}&to=${encodeURIComponent(new Date(Date.parse(t.endAt) + 60_000).toISOString())}`}
-                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-sm text-foreground no-underline hover:bg-canvas sm:px-5"
+                className="group flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 text-sm text-foreground no-underline transition-colors hover:bg-primary-soft/40 sm:px-5"
               >
-                <span className="min-w-32 flex-1 font-medium">{t.vehicle}</span>
-                <LocalTime iso={t.startAt} className="text-muted-foreground" />
-                <span className="tabular-nums">{u.fmtDist(t.distanceKm)}</span>
-                <span className="tabular-nums text-muted-foreground">{durationMin(t.durationMin)}</span>
-                <span className="tabular-nums text-muted-foreground">max {u.fmtSpeed(t.maxSpeedKph)}</span>
+                <span className="flex min-w-40 flex-1 items-center gap-3">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-success-soft text-success">
+                    <Route className="size-4" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{t.vehicle}</span>
+                    <LocalTime iso={t.startAt} className="block text-xs text-muted-foreground" />
+                  </span>
+                </span>
+                <span className="flex flex-wrap items-center gap-1.5 text-xs font-medium tabular-nums">
+                  <span className="rounded-full bg-primary-soft px-2.5 py-1 text-primary">{u.fmtDist(t.distanceKm)}</span>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-foreground">{durationMin(t.durationMin)}</span>
+                  <span className="rounded-full bg-muted px-2.5 py-1 text-foreground">max {u.fmtSpeed(t.maxSpeedKph)}</span>
+                </span>
+                <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
               </Link>
             </li>
           ))}

@@ -168,17 +168,19 @@ export function ColumnChart({
 }
 
 /** A single ratio: fill on a lighter step of the same hue. `value` is 0..1. */
-export function Meter({ value, label }: { value: number; label: string }) {
+const BAR_TONE = { primary: ["bg-primary-soft", "bg-primary"], warning: ["bg-warning-soft", "bg-warning"], danger: ["bg-danger-soft", "bg-danger"] } as const;
+
+export function Meter({ value, label, tone = "primary" }: { value: number; label: string; tone?: keyof typeof BAR_TONE }) {
   const pct = Math.min(100, Math.max(0, value * 100));
   return (
-    <div role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} aria-valuetext={`${Math.round(pct)}%`} className="h-2 overflow-hidden rounded-full bg-primary-soft">
-      <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%`, minWidth: pct > 0 ? 4 : 0 }} />
+    <div role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} aria-valuetext={`${Math.round(pct)}%`} className={`h-2.5 overflow-hidden rounded-full ${BAR_TONE[tone][0]}`}>
+      <div className={`h-full origin-left animate-grow-x rounded-full ${BAR_TONE[tone][1]}`} style={{ width: `${pct}%`, minWidth: pct > 0 ? 4 : 0 }} />
     </div>
   );
 }
 
 /** Ranked horizontal bars: name and value as text, the bar underneath (values never rely on the bar alone). */
-export function BarList({ rows, ariaLabel }: { rows: { key: string; label: string; value: number; valueLabel: string; sub?: string }[]; ariaLabel: string }) {
+export function BarList({ rows, ariaLabel, tone = "primary" }: { rows: { key: string; label: string; value: number; valueLabel: string; sub?: string }[]; ariaLabel: string; tone?: keyof typeof BAR_TONE }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
   return (
     <ol aria-label={ariaLabel} className="m-0 grid list-none gap-3 p-0">
@@ -192,7 +194,7 @@ export function BarList({ rows, ariaLabel }: { rows: { key: string; label: strin
             </span>
           </div>
           <div className="mt-1.5 h-2" aria-hidden="true">
-            <div className="h-full rounded-r-[4px] bg-primary" style={{ width: `${(r.value / max) * 100}%`, minWidth: 4 }} />
+            <div className={`h-full origin-left animate-grow-x rounded-full ${BAR_TONE[tone][1]}`} style={{ width: `${(r.value / max) * 100}%`, minWidth: 4 }} />
           </div>
         </li>
       ))}

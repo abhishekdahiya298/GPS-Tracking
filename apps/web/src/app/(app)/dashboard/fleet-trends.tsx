@@ -3,7 +3,9 @@ import { dateFormatter, zoneAbbr } from "@rio-gps/core/timezones";
 import Link from "next/link";
 import { BarList, ColumnChart, Meter } from "@/components/app/charts";
 import { RelativeTime } from "@/components/app/local-time";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Activity, Gauge, Route } from "lucide-react";
+import { IconTitle } from "@/components/app/icon-title";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/cn";
 import { CHART_RANGES, getFleetCharts, type ChartRange } from "@/lib/daily-stats";
@@ -37,18 +39,20 @@ export async function FleetTrends({ organizationId, u, canSeeAlerts, now, days =
     <section id="trends" aria-label="Fleet trends" className="scroll-mt-20 mt-5 grid grid-cols-1 gap-5 lg:grid-cols-5">
       <Card className="min-w-0 lg:col-span-3">
         <CardHeader>
-          <div className="min-w-0">
-            <CardTitle>Fleet mileage, last {days} days</CardTitle>
-            <p className="m-0 mt-0.5 text-[13px] text-muted-foreground">
-              {total > 0 ? (
+          <IconTitle
+            icon={Route}
+            sub={
+              total > 0 ? (
                 <>
                   <span className="font-medium text-foreground">{u.fmtDist(total)}</span> in total · {u.fmtDist(total / Math.max(1, activeDays))} per driving day
                 </>
               ) : (
                 "Distance driven by all vehicles, per day."
-              )}
-            </p>
-          </div>
+              )
+            }
+          >
+            Fleet mileage, last {days} days
+          </IconTitle>
           <div className="flex shrink-0 items-center gap-3">
             <nav aria-label="Chart range">
               <ul className="m-0 inline-flex list-none gap-0.5 rounded-md bg-muted p-0.5">
@@ -59,7 +63,7 @@ export async function FleetTrends({ organizationId, u, canSeeAlerts, now, days =
                       scroll={false}
                       aria-current={r === days ? "true" : undefined}
                       aria-label={`Last ${r} days`}
-                      className={cn("inline-flex h-7 items-center rounded px-2 text-xs font-medium no-underline", r === days ? "bg-background text-foreground shadow-card" : "text-muted-foreground hover:text-foreground")}
+                      className={cn("inline-flex h-7 items-center rounded px-2 text-xs font-medium no-underline", r === days ? "bg-background font-semibold text-primary shadow-card" : "text-muted-foreground hover:text-foreground")}
                     >
                       {r}d
                     </Link>
@@ -93,7 +97,7 @@ export async function FleetTrends({ organizationId, u, canSeeAlerts, now, days =
       <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-2">
         <Card>
           <CardHeader>
-            <CardTitle>Idling, last 7 days</CardTitle>
+            <IconTitle icon={Activity} tone="amber">Idling, last 7 days</IconTitle>
             <Link href="/reports/idling" className="shrink-0 text-sm text-primary no-underline hover:underline">
               Idling report
             </Link>
@@ -104,11 +108,11 @@ export async function FleetTrends({ organizationId, u, canSeeAlerts, now, days =
             ) : (
               <>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-semibold">{pct}%</span>
+                  <span className="text-4xl font-semibold tabular-nums text-warning">{pct}%</span>
                   <span className="text-sm text-muted-foreground">of engine-on time</span>
                 </div>
                 <div className="mt-3">
-                  <Meter value={c.idling.ratio!} label="Share of engine-on time spent idling" />
+                  <Meter value={c.idling.ratio!} label="Share of engine-on time spent idling" tone="warning" />
                 </div>
                 <p className="m-0 mt-2 text-[13px] text-muted-foreground">
                   {hm(c.idling.idleMin)} idling · {hm(c.idling.drivingMin)} driving
@@ -121,7 +125,7 @@ export async function FleetTrends({ organizationId, u, canSeeAlerts, now, days =
         {canSeeAlerts && (
           <Card>
             <CardHeader>
-              <CardTitle>Top speeding vehicles, last 7 days</CardTitle>
+              <IconTitle icon={Gauge} tone="red">Top speeding vehicles, last 7 days</IconTitle>
             </CardHeader>
             <CardContent>
               {c.speeding.length === 0 ? (
@@ -130,6 +134,7 @@ export async function FleetTrends({ organizationId, u, canSeeAlerts, now, days =
                 </p>
               ) : (
                 <BarList
+                  tone="danger"
                   ariaLabel="Vehicles with the most speeding alerts in the last 7 days"
                   rows={c.speeding.map((s) => ({
                     key: s.vehicle,
