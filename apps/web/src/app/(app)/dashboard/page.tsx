@@ -197,14 +197,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 </Link>
               </CardHeader>
               {recentAlerts.length === 0 ? (
-                <CardContent className="flex items-center gap-3">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-success-soft text-success">
-                    <CheckCircle2 className="size-4" aria-hidden="true" />
+                <CardContent className="flex flex-col items-center px-6 py-7 text-center">
+                  <span className="relative grid size-14 place-items-center rounded-full bg-success-soft text-success">
+                    <span aria-hidden="true" className="absolute inset-0 animate-ping rounded-full bg-success/15 [animation-duration:2.6s] motion-reduce:hidden" />
+                    <CheckCircle2 className="relative size-7" aria-hidden="true" />
                   </span>
-                  <div className="min-w-0 text-sm">
-                    <p className="m-0 font-medium">You&apos;re all caught up</p>
-                    <p className="m-0 text-muted-foreground">No alerts right now. Speeding, zone and offline alerts appear here.</p>
-                  </div>
+                  <p className="m-0 mt-3 text-base font-semibold text-[#0a2463]">You&apos;re all caught up</p>
+                  <p className="m-0 mt-1 max-w-xs text-sm text-muted-foreground">No new alerts. Speeding, zone and offline alerts will appear here.</p>
+                  {can("alerts.write") && (
+                    <Link href="/alerts" className="mt-3 text-sm font-medium text-primary no-underline hover:underline">
+                      Manage alert rules
+                    </Link>
+                  )}
                 </CardContent>
               ) : (
                 <ul className="m-0 list-none divide-y divide-border p-0">
@@ -236,12 +240,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <CardHeader>
               <IconTitle icon={Zap}>Quick actions</IconTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-2">
-              {can("locations.read") && <QuickAction href="/map" icon={MapIcon} label="Live map" />}
-              {can("vehicles.create") && <QuickAction href="/vehicles" icon={Plus} label="Add vehicle" />}
-              {can("geofences.write") && <QuickAction href="/geofences" icon={Hexagon} label="Create zone" />}
-              {can("history.read") && <QuickAction href="/reports" icon={Route} label="Trip reports" />}
-              {can("alerts.write") && !can("vehicles.create") && <QuickAction href="/alerts" icon={Bell} label="Alert rules" />}
+            <CardContent className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
+              {can("locations.read") && <QuickAction href="/map" icon={MapIcon} label="Live map" hint="Every vehicle now" tone="navy" />}
+              {can("vehicles.create") && <QuickAction href="/vehicles" icon={Plus} label="Add vehicle" hint="Truck, trailer, van" tone="green" />}
+              {can("geofences.write") && <QuickAction href="/geofences" icon={Hexagon} label="Create zone" hint="Yards and sites" tone="purple" />}
+              {can("history.read") && <QuickAction href="/reports" icon={Route} label="Trip reports" hint="Trips, stops, miles" tone="amber" />}
+              {can("alerts.write") && !can("vehicles.create") && <QuickAction href="/alerts" icon={Bell} label="Alert rules" hint="Speed, zones, offline" tone="red" />}
             </CardContent>
           </Card>
         </div>
@@ -376,14 +380,25 @@ function StatusDonut({ total, parts }: { total: number; parts: { key: string; la
   );
 }
 
-function QuickAction({ href, icon: Icon, label }: { href: string; icon: typeof Truck; label: string }) {
+const QA_TONE = {
+  navy: "bg-primary-soft text-primary group-hover:bg-primary group-hover:text-white",
+  green: "bg-success-soft text-success group-hover:bg-success group-hover:text-white",
+  purple: "bg-[#f1edff] text-[#5b3fd6] group-hover:bg-[#5b3fd6] group-hover:text-white",
+  amber: "bg-warning-soft text-warning group-hover:bg-warning group-hover:text-white",
+  red: "bg-danger-soft text-danger group-hover:bg-danger group-hover:text-white"
+} as const;
+
+function QuickAction({ href, icon: Icon, label, hint, tone }: { href: string; icon: typeof Truck; label: string; hint: string; tone: keyof typeof QA_TONE }) {
   return (
-    <Link href={href} className="group flex items-center gap-2.5 rounded-lg border border-border px-3 py-2.5 text-sm font-medium text-foreground no-underline transition-colors hover:border-primary/40 hover:bg-primary-soft">
-      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-primary-soft text-primary group-hover:bg-background">
-        <Icon className="size-4" aria-hidden="true" />
+    <Link href={href} className="group flex items-center gap-3 rounded-xl border border-border p-3 text-foreground no-underline transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-pop">
+      <span className={cn("grid size-10 shrink-0 place-items-center rounded-lg transition-colors duration-200", QA_TONE[tone])}>
+        <Icon className="size-[18px]" aria-hidden="true" />
       </span>
-      <span className="truncate">{label}</span>
-      <ArrowRight className="ml-auto size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-[#0a2463]">{label}</span>
+        <span className="block truncate text-xs text-muted-foreground">{hint}</span>
+      </span>
+      <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
     </Link>
   );
 }

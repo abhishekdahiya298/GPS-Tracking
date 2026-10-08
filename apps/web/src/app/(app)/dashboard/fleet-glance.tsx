@@ -191,7 +191,8 @@ function GlanceMap({ offlineSeconds }: { offlineSeconds: number }) {
 
   return (
     <>
-      <div ref={div} className="absolute inset-0" />
+      {/* MapLibre sets position: relative on its container, so size it explicitly rather than with inset. */}
+      <div ref={div} className="h-full w-full" />
       {failed && (
         <div className="absolute inset-0 grid place-items-center p-4 text-center text-sm text-muted-foreground">
           <p className="m-0">
