@@ -22,7 +22,7 @@ export function ReportTabs({ active }: { active: ReportTabId }) {
               aria-current={t.id === active ? "page" : undefined}
               className={cn(
                 "inline-flex h-8 items-center whitespace-nowrap rounded-md px-3 text-sm font-medium no-underline transition-colors",
-                t.id === active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                t.id === active ? "bg-primary text-white shadow-card" : "text-muted-foreground hover:text-foreground"
               )}
             >
               {t.label}

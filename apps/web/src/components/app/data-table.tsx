@@ -110,7 +110,7 @@ export function DataTable<T>({
           {/* Desktop / tablet: table */}
           <div className={cn("w-full overflow-x-auto", mobileRow && "hidden md:block")}>
             <table className="w-full border-collapse text-sm">
-              <thead className="bg-canvas">
+              <thead className="bg-primary-soft/70">
                 {table.getHeaderGroups().map((hg) => (
                   <tr key={hg.id}>
                     {hg.headers.map((h) => {
@@ -121,13 +121,13 @@ export function DataTable<T>({
                           key={h.id}
                           scope="col"
                           aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : undefined}
-                          className={cn("h-10 whitespace-nowrap border-b border-border px-3 text-left text-xs font-medium text-muted-foreground first:pl-4 last:pr-4", meta?.className)}
+                          className={cn("h-10 whitespace-nowrap border-b border-border px-3 text-left text-xs font-semibold uppercase tracking-wide text-primary first:pl-4 last:pr-4", meta?.className)}
                         >
                           {h.isPlaceholder ? null : meta?.sortKey ? (
                             <button
                               type="button"
                               onClick={() => onSort(meta.sortKey!, active && direction === "asc" ? "desc" : "asc")}
-                              className="-mx-1 inline-flex cursor-pointer items-center gap-1 rounded border-0 bg-transparent px-1 py-0.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+                              className="-mx-1 inline-flex cursor-pointer items-center gap-1 rounded border-0 bg-transparent px-1 py-0.5 text-xs font-semibold uppercase tracking-wide text-primary hover:text-primary-hover"
                             >
                               {flexRender(h.column.columnDef.header, h.getContext())}
                               {active ? direction === "asc" ? <ArrowUp className="size-3.5" aria-hidden="true" /> : <ArrowDown className="size-3.5" aria-hidden="true" /> : <ArrowUpDown className="size-3.5 opacity-40" aria-hidden="true" />}
@@ -150,7 +150,7 @@ export function DataTable<T>({
                       if ((e.target as HTMLElement).closest("button, a, input, [role=menuitem]")) return;
                       onRowClick(row.original);
                     } : undefined}
-                    className={cn("border-b border-border last:border-b-0", onRowClick && "cursor-pointer hover:bg-canvas")}
+                    className={cn("border-b border-border last:border-b-0", "hover:bg-primary-soft/40", onRowClick && "cursor-pointer")}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td key={cell.id} className={cn("px-3 py-2.5 align-middle first:pl-4 last:pr-4", (cell.column.columnDef.meta as ColumnMeta | undefined)?.className)}>

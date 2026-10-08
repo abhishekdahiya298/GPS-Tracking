@@ -19,7 +19,7 @@ export function SegmentedFilter<T extends string>({ value, onChange, options, la
           onClick={() => onChange(o.value)}
           className={cn(
             "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border-0 px-2.5 text-[13px] font-medium",
-            value === o.value ? "bg-background text-foreground shadow-card" : "bg-transparent text-muted-foreground hover:text-foreground"
+            value === o.value ? "bg-background font-semibold text-primary shadow-card" : "bg-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           {o.label}

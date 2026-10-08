@@ -24,13 +24,13 @@
   --color-muted-foreground: #5b6472;
   --color-border: #e3e6eb;
   --color-input: #d4d8df;
-  --color-ring: #2f5bea;
+  --color-ring: #1d4fb8;
 
   /* Brand + semantic (contrast-checked against white for text use) */
-  --color-primary: #2f5bea;
-  --color-primary-hover: #2449c7;
+  --color-primary: #133a8f;
+  --color-primary-hover: #0a2463;
   --color-primary-foreground: #ffffff;
-  --color-primary-soft: #eef2fe;
+  --color-primary-soft: #e9eefb;
   --color-success: #15803d;
   --color-success-soft: #e9f7ee;
   --color-warning: #b45309;
@@ -120,3 +120,13 @@ html [data-sonner-toaster][data-sonner-theme="light"] {
   --warning-text: #713f12;
   --info-text: #1e3a8a;
 }
+
+/* Buttons inside the navy page band: the main action is white, the rest are glass.
+   Unlayered on purpose, so it wins over the button utilities. */
+.page-band :is(a, button).bg-primary { background: #ffffff; color: #0a2463; }
+.page-band :is(a, button).bg-primary:hover { background: #e9eefb; }
+.page-band :is(a, button).bg-background { background: rgb(255 255 255 / 0.12); color: #ffffff; border-color: rgb(255 255 255 / 0.3); box-shadow: none; }
+.page-band :is(a, button).bg-background:hover { background: rgb(255 255 255 / 0.22); }
+.page-band :is(a, button).bg-transparent { color: #ffffff; }
+.page-band :is(a, button).bg-transparent:hover { background: rgb(255 255 255 / 0.14); }
+.page-band :is(a, button):focus-visible { outline-color: #ffffff; }

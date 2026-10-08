@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { SegmentedFilter } from "@/components/app/filter-bar";
 import { PageHeader } from "@/components/app/page-header";
+import { StatCard } from "@/components/app/stat-card";
 import { Pagination } from "@/components/app/pagination";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/app/states";
 import { useTime } from "@/components/app/time-context";
@@ -289,10 +290,7 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
                 ["Top speed", u.fmtSpeed(report.totals.maxSpeedKph)]
               ] as const
             ).map(([k, v]) => (
-              <Card key={k} className="p-4">
-                <div className="text-xs font-medium text-muted-foreground">{k}</div>
-                <div className="mt-1 text-2xl font-semibold tabular-nums">{v}</div>
-              </Card>
+              <StatCard key={k} label={k} value={v} />
             ))}
           </div>
 

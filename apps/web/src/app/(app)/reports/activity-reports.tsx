@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SegmentedFilter } from "@/components/app/filter-bar";
 import { PageHeader } from "@/components/app/page-header";
+import { StatCard } from "@/components/app/stat-card";
 import { Pagination } from "@/components/app/pagination";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/app/states";
 import { useTime } from "@/components/app/time-context";
@@ -369,10 +370,7 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
         <div className={busy ? "pointer-events-none opacity-60 transition-opacity" : "transition-opacity"} aria-busy={busy}>
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
             {stats.map(([k, v]) => (
-              <Card key={k} className="p-4">
-                <div className="text-xs font-medium text-muted-foreground">{k}</div>
-                <div className="mt-1 text-2xl font-semibold tabular-nums">{v}</div>
-              </Card>
+              <StatCard key={k} label={k} value={v} />
             ))}
           </div>
 
