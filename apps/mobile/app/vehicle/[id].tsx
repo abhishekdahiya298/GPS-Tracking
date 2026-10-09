@@ -1,10 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Stack, useLocalSearchParams } from "expo-router";
+import Constants, { ExecutionEnvironment } from "expo-constants";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { STATE_META, compassPoint, displayName, fleetState, statusLine, timeAgo } from "@/fleet/model";
 import { colors, font, radius, space } from "@/theme";
+
+// The map only exists in the installed app (see app/(tabs)/index.tsx).
+const hasMap = Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -16,6 +20,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 export default function VehicleScreen() {
+  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { devices, units } = useFleet();
   const now = useNow();
@@ -75,7 +80,8 @@ export default function VehicleScreen() {
         {device.model ? <Row label="Tracker" value={device.model} /> : null}
       </View>
 
-      {loc ? <Button title="Open in Maps" onPress={openInMaps} /> : null}
+      {loc && hasMap ? <Button title="Show on map" onPress={() => router.navigate({ pathname: "/(tabs)", params: { device: device.deviceId } })} /> : null}
+      {loc ? <Button variant={hasMap ? "ghost" : "primary"} title="Open in Maps" onPress={openInMaps} /> : null}
     </ScrollView>
   );
 }
