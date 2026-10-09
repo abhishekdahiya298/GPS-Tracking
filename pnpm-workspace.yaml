@@ -1,3 +1,6 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # The phone app installs on its own (npm, own lockfile) so its React Native
+  # dependency tree can never change what the server images install.
+  - "!apps/mobile"

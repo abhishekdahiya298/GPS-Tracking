@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "RIO Tracking",
+    "slug": "rio-tracking",
+    "scheme": "riotracking",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.riocaliforniainc.gps"
+    },
+    "android": {
+      "package": "com.riocaliforniainc.gps",
+      "adaptiveIcon": {
+        "backgroundColor": "#0a2463",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      ["expo-splash-screen", { "backgroundColor": "#0a2463", "image": "./assets/splash-icon.png", "imageWidth": 160 }]
+    ],
+    "experiments": { "typedRoutes": true }
+  }
+}

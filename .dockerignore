@@ -13,3 +13,5 @@ coverage
 .env.*
 !.env.example
 !.env.production.example
+# The phone app is built separately and never ships in the server images.
+apps/mobile
