@@ -35,6 +35,7 @@ npx expo export --platform android   # proves the JavaScript bundles
 app/            screens (file-based routes); (tabs) holds Map, Vehicles, Alerts, Account
 src/api/        client.ts (plain TypeScript, unit-tested) and index.ts (secure token storage)
 src/auth/       service.ts (sign-in logic, unit-tested) and SessionProvider.tsx (who is signed in)
+src/fleet/      model.ts (status, search, wording; unit-tested) and FleetProvider.tsx (shared, auto-refreshing fleet data)
 src/theme.ts    colours and sizes copied from the web app's globals.css
 src/config.ts   server address
 ```
@@ -43,5 +44,6 @@ src/config.ts   server address
 
 - Phase 1 (skeleton): navigation, theme, API client, server connection check on the Account tab.
 - Phase 2 (sign-in): email and password, two-step verification (authenticator app or backup code), sign out. The token is kept in the phone's secure storage. `src/auth/service.ts` explains how the second step works without a cookie jar.
+- Phase 4 (vehicles): searchable list with Moving, Idling, Stopped and Offline filters, refreshed every 20 seconds, and a detail screen with Open in Maps. `src/fleet/model.ts` holds the status rules (a copy of the web app's).
 
-The live map, vehicles, trip history and alerts follow in that order.
+The live map (needs a development build, not Expo Go), trip history and alerts follow.
