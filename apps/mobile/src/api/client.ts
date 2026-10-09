@@ -18,7 +18,9 @@ export class ApiError extends Error {
   constructor(
     readonly kind: ApiErrorKind,
     message: string,
-    readonly status: number | null = null
+    readonly status: number | null = null,
+    /** The server's machine-readable reason, when it sends one (sign-in errors do). */
+    readonly code: string | null = null
   ) {
     super(message);
     this.name = "ApiError";
@@ -42,6 +44,8 @@ export interface RequestOptions {
   area?: "v1" | "auth";
   /** Send the request without a token even if one is stored (sign-in). */
   anonymous?: boolean;
+  /** Extra request headers. Only the two-step sign-in uses this. */
+  headers?: Record<string, string>;
 }
 
 function kindForStatus(status: number): ApiErrorKind {
@@ -66,7 +70,7 @@ export function createApiClient(options: ApiClientOptions) {
 
   /** Returns the parsed JSON body and the response headers (sign-in reads its token from a header). */
   async function send<T>(path: string, opts: RequestOptions = {}): Promise<{ data: T; headers: Headers }> {
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = { Accept: "application/json", ...opts.headers };
     if (opts.body !== undefined) headers["Content-Type"] = "application/json";
     if (!opts.anonymous) {
       const token = await options.tokens.get();
@@ -98,14 +102,16 @@ export function createApiClient(options: ApiClientOptions) {
         options.onSignedOut?.();
       }
       let message = `Request failed (${response.status}).`;
+      let code: string | null = null;
       try {
-        const body = (await response.json()) as { error?: unknown; message?: unknown };
+        const body = (await response.json()) as { error?: unknown; message?: unknown; code?: unknown };
         const text = typeof body.message === "string" ? body.message : typeof body.error === "string" ? body.error : null;
         if (text) message = text;
+        if (typeof body.code === "string") code = body.code;
       } catch {
         // no readable error body
       }
-      throw new ApiError(kindForStatus(response.status), message, response.status);
+      throw new ApiError(kindForStatus(response.status), message, response.status, code);
     }
 
     if (response.status === 204) return { data: undefined as T, headers: response.headers };

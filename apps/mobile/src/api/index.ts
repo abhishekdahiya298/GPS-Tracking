@@ -1,5 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import { API_BASE_URL } from "../config";
+import { createAuthService } from "../auth/service";
 import { createApiClient, type TokenStore } from "./client";
 
 const TOKEN_KEY = "rio.session-token";
@@ -23,5 +24,7 @@ export const api = createApiClient({
   tokens: tokenStore,
   onSignedOut: () => signedOutListeners.forEach((l) => l())
 });
+
+export const auth = createAuthService({ api, tokens: tokenStore, baseUrl: API_BASE_URL });
 
 export * from "./client";

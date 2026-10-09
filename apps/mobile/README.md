@@ -34,10 +34,14 @@ npx expo export --platform android   # proves the JavaScript bundles
 ```
 app/            screens (file-based routes); (tabs) holds Map, Vehicles, Alerts, Account
 src/api/        client.ts (plain TypeScript, unit-tested) and index.ts (secure token storage)
+src/auth/       service.ts (sign-in logic, unit-tested) and SessionProvider.tsx (who is signed in)
 src/theme.ts    colours and sizes copied from the web app's globals.css
 src/config.ts   server address
 ```
 
 ## Status
 
-Phase 1 (skeleton): navigation, theme, API client, server connection check on the Account tab. Sign-in, the live map, vehicles, trip history and alerts follow in that order.
+- Phase 1 (skeleton): navigation, theme, API client, server connection check on the Account tab.
+- Phase 2 (sign-in): email and password, two-step verification (authenticator app or backup code), sign out. The token is kept in the phone's secure storage. `src/auth/service.ts` explains how the second step works without a cookie jar.
+
+The live map, vehicles, trip history and alerts follow in that order.

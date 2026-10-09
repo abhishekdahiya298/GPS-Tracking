@@ -1,19 +1,19 @@
-import { KM_PER_MILE } from "@rio-gps/core/units";
 import Constants from "expo-constants";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { ApiError, api, type ReadyResponse } from "@/api";
+import { useSession } from "@/auth/SessionProvider";
+import { Button } from "@/components/ui";
 import { API_BASE_URL } from "@/config";
 import { colors, font, radius, space } from "@/theme";
 
 type Check = { state: "checking" } | { state: "ok"; at: string } | { state: "failed"; reason: string };
 
-/**
- * Until sign-in exists, this tab proves the two things the rest of the app depends on:
- * the phone can reach the server, and code shared with the web app loads.
- */
 export default function AccountScreen() {
+  const { state, signOut } = useSession();
+  const user = state.status === "signedIn" ? state.user : null;
   const [check, setCheck] = useState<Check>({ state: "checking" });
+  const [leaving, setLeaving] = useState(false);
 
   const run = useCallback(async () => {
     setCheck({ state: "checking" });
@@ -30,8 +30,34 @@ export default function AccountScreen() {
     void run();
   }, [run]);
 
+  function confirmSignOut() {
+    Alert.alert("Sign out?", "You will need your password to sign in again.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign out",
+        style: "destructive",
+        onPress: async () => {
+          setLeaving(true);
+          await signOut();
+        }
+      }
+    ]);
+  }
+
+  const initial = (user?.name || user?.email || "?").trim().charAt(0).toUpperCase();
+
   return (
-    <View style={styles.wrap}>
+    <ScrollView style={styles.wrap} contentContainerStyle={styles.content}>
+      <View style={[styles.card, styles.person]}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initial}</Text>
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.value} numberOfLines={1}>{user?.name || "Signed in"}</Text>
+          {user?.email ? <Text style={styles.label} numberOfLines={1}>{user.email}</Text> : null}
+        </View>
+      </View>
+
       <View style={styles.card}>
         <Text style={styles.label}>Server</Text>
         <Text style={styles.value}>{API_BASE_URL.replace(/^https?:\/\//, "")}</Text>
@@ -41,26 +67,27 @@ export default function AccountScreen() {
             {check.state === "checking" ? "Checking connection" : check.state === "ok" ? `Connected, checked at ${check.at}` : check.reason}
           </Text>
         </View>
-        <Pressable onPress={run} style={({ pressed }) => [styles.button, pressed && { backgroundColor: colors.primaryDark }]} accessibilityRole="button">
-          <Text style={styles.buttonText}>Check again</Text>
-        </Pressable>
+        <Button variant="ghost" title="Check again" onPress={run} />
       </View>
-      <Text style={styles.footer}>
-        RIO GPS {Constants.expoConfig?.version ?? ""} · shared code loaded ({KM_PER_MILE} km per mile)
-      </Text>
-    </View>
+
+      <Button variant="danger" title="Sign out" onPress={confirmSignOut} loading={leaving} />
+      <Text style={styles.footer}>RIO GPS {Constants.expoConfig?.version ?? ""}</Text>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, padding: space.lg, backgroundColor: colors.canvas },
+  wrap: { flex: 1, backgroundColor: colors.canvas },
+  content: { padding: space.lg, gap: space.lg },
+  flex: { flex: 1 },
   card: { backgroundColor: colors.background, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg },
-  label: { fontSize: font.small, color: colors.mutedForeground, marginBottom: space.xs },
+  person: { flexDirection: "row", alignItems: "center", gap: space.md },
+  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
+  avatarText: { color: colors.primary, fontSize: font.title, fontWeight: "700" },
+  label: { fontSize: font.small, color: colors.mutedForeground, marginTop: 2 },
   value: { fontSize: font.title, fontWeight: "600", color: colors.foreground },
   row: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: space.md, minHeight: 24 },
   dot: { width: 10, height: 10, borderRadius: 5 },
   status: { flex: 1, fontSize: font.body, color: colors.foreground },
-  button: { marginTop: space.lg, backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: space.md, alignItems: "center" },
-  buttonText: { color: colors.primaryForeground, fontSize: font.body, fontWeight: "600" },
-  footer: { marginTop: space.lg, textAlign: "center", fontSize: font.small, color: colors.mutedForeground }
+  footer: { textAlign: "center", fontSize: font.small, color: colors.mutedForeground }
 });
