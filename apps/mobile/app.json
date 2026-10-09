@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "RIO Tracking",
-    "slug": "rio-tracking",
-    "scheme": "riotracking",
+    "name": "RIO GPS",
+    "slug": "rio-gps",
+    "scheme": "riogps",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

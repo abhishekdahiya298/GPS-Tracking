@@ -1,4 +1,4 @@
-# RIO Tracking mobile app
+# RIO GPS mobile app
 
 One Expo (React Native) codebase for Android and iOS. It talks to the same server as the web app through `/api/v1` and signs in with a bearer token.
 

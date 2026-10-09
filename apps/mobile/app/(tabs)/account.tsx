@@ -46,7 +46,7 @@ export default function AccountScreen() {
         </Pressable>
       </View>
       <Text style={styles.footer}>
-        RIO Tracking {Constants.expoConfig?.version ?? ""} · shared code loaded ({KM_PER_MILE} km per mile)
+        RIO GPS {Constants.expoConfig?.version ?? ""} · shared code loaded ({KM_PER_MILE} km per mile)
       </Text>
     </View>
   );
