@@ -3,6 +3,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { AlertsProvider } from "@/alerts/AlertsProvider";
 import { SessionProvider, useSession } from "@/auth/SessionProvider";
 import { FleetProvider } from "@/fleet/FleetProvider";
 import { colors } from "@/theme";
@@ -35,8 +36,14 @@ function Screens() {
       </Stack.Protected>
     </Stack>
   );
-  // Fleet data is only loaded, and only kept, while someone is signed in.
-  return signedIn ? <FleetProvider>{stack}</FleetProvider> : stack;
+  // Fleet and alert data are only loaded, and only kept, while someone is signed in.
+  return signedIn ? (
+    <FleetProvider>
+      <AlertsProvider>{stack}</AlertsProvider>
+    </FleetProvider>
+  ) : (
+    stack
+  );
 }
 
 export default function RootLayout() {

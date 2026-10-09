@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import type { ColorValue } from "react-native";
+import { useAlerts } from "@/alerts/AlertsProvider";
+import { badgeText } from "@/alerts/model";
 import { colors } from "@/theme";
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -9,6 +11,7 @@ const icon = (name: IconName) => function TabIcon({ color, size }: { color: Colo
 };
 
 export default function TabsLayout() {
+  const { unread } = useAlerts();
   return (
     <Tabs
       screenOptions={{
@@ -22,7 +25,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: "Map", tabBarIcon: icon("map-outline") }} />
       <Tabs.Screen name="vehicles" options={{ title: "Vehicles", tabBarIcon: icon("bus-outline") }} />
-      <Tabs.Screen name="alerts" options={{ title: "Alerts", tabBarIcon: icon("notifications-outline") }} />
+      <Tabs.Screen name="alerts" options={{ title: "Alerts", tabBarIcon: icon("notifications-outline"), tabBarBadge: badgeText(unread), tabBarBadgeStyle: { backgroundColor: colors.danger } }} />
       <Tabs.Screen name="account" options={{ title: "Account", tabBarIcon: icon("person-circle-outline") }} />
     </Tabs>
   );
