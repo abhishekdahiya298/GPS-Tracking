@@ -18,6 +18,7 @@ Redis · Traccar · Zod · Docker Compose · Caddy
 apps/
   web/      Next.js dashboard + API routes (webhook ingest, SSE stream)
   worker/   background process scaffold (no queues yet in v0)
+  mobile/   Expo (React Native) app for Android and iOS; installs on its own, see apps/mobile/README.md
 packages/
   db/               Drizzle schema, migrations, client
   core/             domain types + Zod schemas, provider-agnostic
