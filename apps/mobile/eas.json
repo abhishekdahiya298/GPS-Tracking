@@ -9,14 +9,18 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "node": "22.22.0"
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "node": "22.22.0"
     },
-    "production": {}
+    "production": {
+      "node": "22.22.0"
+    }
   }
 }

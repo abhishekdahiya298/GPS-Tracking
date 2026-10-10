@@ -12,7 +12,7 @@ Shared code still comes from `packages/core` (`"@rio-gps/core": "file:../../pack
 
 ```bash
 cd apps/mobile
-npm install
+npm ci
 npx expo start
 ```
 
@@ -61,5 +61,7 @@ cd apps/mobile
 npx eas-cli login
 npx eas-cli build --platform android --profile preview   # an APK to install directly
 ```
+
+Use `npm ci`, not `npm install`, on machines that only build or run the app: `npm install` can rewrite `package-lock.json`, and the build servers refuse a lock file that does not match. `eas.json` pins the Node version used on the build servers to the one the lock file was made with.
 
 `eas.json` has three profiles: `preview` (standalone APK for testing), `development` (connects to `npx expo start` for live code changes) and `production` (store builds). iPhone builds need an Apple Developer account.

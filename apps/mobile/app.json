@@ -40,6 +40,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "owner": "abhidahiya77",
+    "extra": {
+      "eas": {
+        "projectId": "47846c54-717d-4012-913f-67bbd1e604ae"
+      }
     }
   }
 }
