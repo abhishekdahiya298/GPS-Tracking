@@ -80,6 +80,7 @@ export default function VehicleScreen() {
         {device.model ? <Row label="Tracker" value={device.model} /> : null}
       </View>
 
+      <Button variant={loc && hasMap ? "ghost" : "primary"} title="Trip history" onPress={() => router.push({ pathname: "/trips/[id]", params: { id: device.deviceId } })} />
       {loc && hasMap ? <Button title="Show on map" onPress={() => router.navigate({ pathname: "/(tabs)", params: { device: device.deviceId } })} /> : null}
       {loc ? <Button variant={hasMap ? "ghost" : "primary"} title="Open in Maps" onPress={openInMaps} /> : null}
     </ScrollView>

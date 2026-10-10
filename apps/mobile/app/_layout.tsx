@@ -12,6 +12,9 @@ import { colors } from "@/theme";
 // so the login screen never flashes for a signed-in person.
 void SplashScreen.preventAutoHideAsync();
 
+/** Screens opened on top of the tabs share one header style. */
+const pushed = { headerShown: true, headerBackTitle: "Back", headerStyle: { backgroundColor: colors.primaryDark }, headerTintColor: colors.primaryForeground } as const;
+
 function Screens() {
   const { state } = useSession();
   const ready = state.status !== "loading";
@@ -26,10 +29,9 @@ function Screens() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen
-          name="vehicle/[id]"
-          options={{ headerShown: true, title: "Vehicle", headerBackTitle: "Back", headerStyle: { backgroundColor: colors.primaryDark }, headerTintColor: colors.primaryForeground }}
-        />
+        <Stack.Screen name="vehicle/[id]" options={{ ...pushed, title: "Vehicle" }} />
+        <Stack.Screen name="trips/[id]" options={{ ...pushed, title: "Trips" }} />
+        <Stack.Screen name="trip" options={{ ...pushed, title: "Trip" }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="login" />

@@ -15,6 +15,9 @@ interface FleetValue {
   error: string | null;
   updatedAt: number | null;
   units: Units;
+  /** The organization's time zone and clock style, used for trip days and times. */
+  timeZone: string;
+  timeFormat: "12h" | "24h";
   refresh(): Promise<void>;
 }
 
@@ -27,6 +30,8 @@ export function FleetProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [system, setSystem] = useState<UnitSystem>("imperial");
+  const [timeZone, setTimeZone] = useState("America/Toronto");
+  const [timeFormat, setTimeFormat] = useState<"12h" | "24h">("12h");
   const inFlight = useRef<Promise<void> | null>(null);
 
   const refresh = useCallback(() => {
@@ -54,9 +59,11 @@ export function FleetProvider({ children }: { children: ReactNode }) {
   // Display units follow the organization's setting, as on the website.
   useEffect(() => {
     api
-      .get<{ unitSystem?: string }>("organization")
+      .get<{ unitSystem?: string; timeZone?: string; timeFormat?: string }>("organization")
       .then((org) => {
         if (org.unitSystem === "metric" || org.unitSystem === "imperial") setSystem(org.unitSystem);
+        if (typeof org.timeZone === "string" && org.timeZone) setTimeZone(org.timeZone);
+        if (org.timeFormat === "12h" || org.timeFormat === "24h") setTimeFormat(org.timeFormat);
       })
       .catch(() => undefined);
   }, []);
@@ -81,7 +88,7 @@ export function FleetProvider({ children }: { children: ReactNode }) {
     };
   }, [refresh]);
 
-  const value = useMemo<FleetValue>(() => ({ devices, loading, error, updatedAt, units: units(system), refresh }), [devices, loading, error, updatedAt, system, refresh]);
+  const value = useMemo<FleetValue>(() => ({ devices, loading, error, updatedAt, units: units(system), timeZone, timeFormat, refresh }), [devices, loading, error, updatedAt, system, timeZone, timeFormat, refresh]);
   return <FleetContext.Provider value={value}>{children}</FleetContext.Provider>;
 }
 

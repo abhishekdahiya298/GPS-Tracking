@@ -36,6 +36,7 @@ app/            screens (file-based routes); (tabs) holds Map, Vehicles, Alerts,
 src/api/        client.ts (plain TypeScript, unit-tested) and index.ts (secure token storage)
 src/auth/       service.ts (sign-in logic, unit-tested) and SessionProvider.tsx (who is signed in)
 src/alerts/     model.ts (labels, wording, paging; unit-tested) and AlertsProvider.tsx
+src/trips/      model.ts (days, playback maths; unit-tested) and TripMap.tsx
 src/map/        model.ts (map features, camera bounds; unit-tested) and LiveMap.tsx
 src/fleet/      model.ts (status, search, wording; unit-tested) and FleetProvider.tsx (shared, auto-refreshing fleet data)
 src/theme.ts    colours and sizes copied from the web app's globals.css
@@ -49,8 +50,9 @@ src/config.ts   server address
 - Phase 4 (vehicles): searchable list with Moving, Idling, Stopped and Offline filters, refreshed every 20 seconds, and a detail screen with Open in Maps. `src/fleet/model.ts` holds the status rules (a copy of the web app's).
 - Phase 6a (alerts list): newest first, All and Unread views, mark one or all as read, unread count on the tab, refreshed every 30 seconds.
 - Phase 3 (live map): MapLibre with the same OpenFreeMap style as the web. Vehicles coloured by status, grouped when zoomed out, tap for a card with Follow and Details, a button to show the whole fleet. Runs only in an installed build; in Expo Go the Map tab shows a notice.
+- Phase 5 (trip history): pick a day, see that day's trips and totals, tap a trip to replay its route on the map with play, pause, three speeds and a progress bar you can drag. Days and times use the organization's time zone.
 
-Still to come: trip playback and push notifications.
+Still to come: push notifications.
 
 ## Installable builds (EAS)
 
