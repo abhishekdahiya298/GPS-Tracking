@@ -20,7 +20,7 @@ import type { GeofenceDto } from "@/lib/alerts";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 const FALLBACK = { center: [-98.6, 39.8] as [number, number], zoom: 3.2 };
 const COLORS = ["#2f5bea", "#15803d", "#b45309", "#c42b2b", "#7c3aed", "#0891b2"];
 type Mode = { kind: "idle" } | { kind: "polygon"; points: LonLat[] } | { kind: "circle"; center: LonLat | null };

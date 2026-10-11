@@ -130,3 +130,17 @@ html [data-sonner-toaster][data-sonner-theme="light"] {
 .page-band :is(a, button).bg-transparent { color: #ffffff; }
 .page-band :is(a, button).bg-transparent:hover { background: rgb(255 255 255 / 0.14); }
 .page-band :is(a, button):focus-visible { outline-color: #ffffff; }
+
+/* ---------- Sign-in page: brand panel motion (decorative; off under reduced motion) ---------- */
+@keyframes auth-drive { to { offset-distance: 100%; } }
+@keyframes auth-rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes auth-dash { to { stroke-dashoffset: -24; } }
+@keyframes auth-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@utility auth-rise { animation: auth-rise 650ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@utility auth-rise-1 { animation-delay: 90ms; }
+@utility auth-rise-2 { animation-delay: 170ms; }
+@utility auth-rise-3 { animation-delay: 250ms; }
+@utility auth-drive { offset-rotate: 0deg; animation: auth-drive 15s linear infinite; }
+@utility auth-drive-2 { offset-rotate: 0deg; animation: auth-drive 21s linear infinite reverse; }
+@utility auth-dash { animation: auth-dash 1.4s linear infinite; }
+@utility auth-float { animation: auth-float 6s ease-in-out infinite; }

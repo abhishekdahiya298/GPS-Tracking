@@ -17,7 +17,7 @@ import { FleetLayer, STATE_COLORS, type FleetPoint } from "../map/fleet-layer";
 import { deviceLabel, FALLBACK_VIEW, mapState, type MapState } from "../map/fleet-model";
 import { useFleetStream } from "../map/use-fleet-stream";
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 const LEGEND: [MapState, string][] = [
   ["moving", "Moving"],
   ["idle", "Idling"],

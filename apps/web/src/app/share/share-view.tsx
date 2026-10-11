@@ -11,7 +11,7 @@ import maplibregl, { type Map as MlMap, type Marker } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import type { PublicShareView } from "@/lib/share-links";
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 const POLL_MS = 15_000;
 type State = { kind: "loading" } | { kind: "gone" } | { kind: "error"; message: string } | { kind: "ok"; view: PublicShareView; fetchedAt: number };
 
