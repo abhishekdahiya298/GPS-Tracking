@@ -15,7 +15,7 @@ export const RESET_TOKEN_SECONDS = 30 * 60;
 function buildAuth() {
   const env = getServerEnv();
   return betterAuth({
-    appName: "RIO Tracking",
+    appName: "RIO GPS",
     baseURL: env.AUTH_URL,
     secret: env.AUTH_SECRET,
     trustedOrigins: [env.AUTH_URL],
@@ -37,7 +37,7 @@ function buildAuth() {
       bearer({ requireSignature: true }),
       // Two-step verification with an authenticator app (TOTP) and one-time backup codes.
       // No "trust this device": every sign-in asks for a code.
-      twoFactor({ issuer: "RIO Tracking", twoFactorTable: "twoFactors", trustDeviceMaxAge: 0 })
+      twoFactor({ issuer: "RIO GPS", twoFactorTable: "twoFactors", trustDeviceMaxAge: 0 })
     ],
     user: {
       modelName: "users",

@@ -49,12 +49,16 @@ function ago(iso: string | null, now: number) {
   return `${Math.round(s / 86400)} d ago`;
 }
 
-function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number): FleetPoint | null {
+const SUB: Record<MapState, string> = { moving: "", idle: "Idling", stopped: "Parked", offline: "Offline" };
+
+function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, fmtSpeed?: (kph: number) => string): FleetPoint | null {
   if (!d.location) return null;
+  const state = mapState(d, now, offlineSeconds);
   return {
+    sub: state === "moving" ? (fmtSpeed && d.location.speedKph !== null ? fmtSpeed(d.location.speedKph) : "") : SUB[state],
     id: d.deviceId,
     name: deviceLabel(d),
-    state: mapState(d, now, offlineSeconds),
+    state,
     type: d.vehicle ? asVehicleType(d.vehicle.type) : "other",
     lngLat: [d.location.longitude, d.location.latitude],
     heading: d.location.headingDeg
@@ -121,12 +125,12 @@ export function LiveMap({
 
   const { devices, conn, version, loaded } = useFleetStream({
     onSnapshot: (list) => {
-      const pts = list.map((d) => toPoint(d, Date.now(), offlineSeconds)).filter((p): p is FleetPoint => p !== null);
+      const pts = list.map((d) => toPoint(d, Date.now(), offlineSeconds, u.fmtSpeed)).filter((p): p is FleetPoint => p !== null);
       layer.current?.reset(pts);
       fitFleet(false);
     },
     onUpdate: (list) => {
-      const pts = list.map((d) => toPoint(d, Date.now(), offlineSeconds)).filter((p): p is FleetPoint => p !== null);
+      const pts = list.map((d) => toPoint(d, Date.now(), offlineSeconds, u.fmtSpeed)).filter((p): p is FleetPoint => p !== null);
       layer.current?.upsert(pts);
       // Follow mode: keep the selected vehicle in view as it moves.
       const f = followRef.current;
@@ -203,7 +207,7 @@ export function LiveMap({
         layout: { "icon-image": "veh-moving", "icon-rotate": ["to-number", ["coalesce", ["get", "heading"], 0]], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-size": 1.15 }
       });
       // Seed from whatever the stream already has (snapshot may arrive before the style).
-      fl.reset([...devicesRef.current.values()].map((d) => toPoint(d, Date.now(), offlineSeconds)).filter((p): p is FleetPoint => p !== null));
+      fl.reset([...devicesRef.current.values()].map((d) => toPoint(d, Date.now(), offlineSeconds, u.fmtSpeed)).filter((p): p is FleetPoint => p !== null));
       fitFleetRef.current(false);
       // Zones overlay (skipped if the role can't read zones).
       fetch("/api/geofences", { cache: "no-store" })
@@ -244,7 +248,7 @@ export function LiveMap({
     const t = setInterval(() => {
       const n = Date.now();
       setNow(n);
-      const pts = [...devices.current.values()].map((d) => toPoint(d, n, offlineSeconds)).filter((p): p is FleetPoint => p !== null);
+      const pts = [...devices.current.values()].map((d) => toPoint(d, n, offlineSeconds, u.fmtSpeed)).filter((p): p is FleetPoint => p !== null);
       layer.current?.upsert(pts.filter((p) => p.state === "offline"));
     }, 30_000);
     return () => clearInterval(t);

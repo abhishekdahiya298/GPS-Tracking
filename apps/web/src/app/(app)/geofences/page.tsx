@@ -7,7 +7,7 @@ import { AppError } from "@/lib/errors";
 import { GeofenceEditor } from "./geofence-editor";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Zones · RIO Tracking" };
+export const metadata = { title: "Zones · RIO GPS" };
 
 export default async function GeofencesPage() {
   let ctx;

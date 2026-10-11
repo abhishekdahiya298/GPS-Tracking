@@ -28,7 +28,7 @@ import { FleetTrends, TrendsSkeleton } from "./fleet-trends";
 import { IconTitle } from "@/components/app/icon-title";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Dashboard · RIO Tracking" };
+export const metadata = { title: "Dashboard · RIO GPS" };
 
 /** Trip summary covers the vehicles most recently seen, to keep the page fast on big fleets. */
 const TRIP_SUMMARY_MAX_DEVICES = 25;

@@ -107,7 +107,7 @@ export function AppShell({
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" title="RIO Tracking" className="w-72 p-0 lg:hidden">
+        <SheetContent side="left" title="RIO GPS" className="w-72 p-0 lg:hidden">
           <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} hideBrand />
         </SheetContent>
       </Sheet>
@@ -150,8 +150,8 @@ export function AppShell({
   );
 }
 
-function Brand() {
-  return <BrandMark className="h-8" />;
+function Brand({ large }: { large?: boolean }) {
+  return <BrandMark className={large ? "h-[58px]" : "h-9"} />;
 }
 
 function SidebarContent({ nav, pathname, orgName, user, hideBrand }: { nav: NavSection[]; pathname: string; orgName: string; user: ShellUser; hideBrand?: boolean }) {
@@ -171,8 +171,8 @@ function SidebarContent({ nav, pathname, orgName, user, hideBrand }: { nav: NavS
       </svg>
       {!hideBrand && (
         <div className="relative shrink-0 px-3 pb-2 pt-3">
-          <Link href="/dashboard" className="flex h-12 items-center justify-center rounded-lg bg-white px-3 text-[15px] no-underline shadow-card focus-visible:outline-white">
-            <Brand />
+          <Link href="/dashboard" aria-label="RIO GPS home" className="flex h-[74px] items-center justify-center rounded-xl bg-white px-3 no-underline shadow-card transition-transform duration-200 hover:scale-[1.02] focus-visible:outline-white">
+            <Brand large />
           </Link>
         </div>
       )}
