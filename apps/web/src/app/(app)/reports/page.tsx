@@ -7,7 +7,7 @@ import { listDevices } from "@/lib/vehicles";
 import { TripReports } from "./trip-reports";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Trip reports · RIO Tracking" };
+export const metadata = { title: "Trip reports · RIO GPS" };
 
 export default async function ReportsPage() {
   let ctx;

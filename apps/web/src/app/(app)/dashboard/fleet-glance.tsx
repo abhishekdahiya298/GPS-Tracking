@@ -9,6 +9,7 @@ import type { Map as MlMap, Popup } from "maplibre-gl";
 import { Maximize2, Radio } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { useUnits } from "@/components/app/units-context";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { asVehicleType } from "@/lib/schemas/vehicle";
@@ -24,12 +25,16 @@ const LEGEND: [MapState, string][] = [
   ["offline", "Offline"]
 ];
 
-function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number): FleetPoint | null {
+const SUB: Record<MapState, string> = { moving: "", idle: "Idling", stopped: "Parked", offline: "Offline" };
+
+function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, fmtSpeed?: (kph: number) => string): FleetPoint | null {
   if (!d.location) return null;
+  const state = mapState(d, now, offlineSeconds);
   return {
+    sub: state === "moving" ? (fmtSpeed && d.location.speedKph !== null ? fmtSpeed(d.location.speedKph) : "") : SUB[state],
     id: d.deviceId,
     name: deviceLabel(d),
-    state: mapState(d, now, offlineSeconds),
+    state,
     type: d.vehicle ? asVehicleType(d.vehicle.type) : "other",
     lngLat: [d.location.longitude, d.location.latitude],
     heading: d.location.headingDeg
@@ -93,6 +98,7 @@ function MapPlaceholder() {
 }
 
 function GlanceMap({ offlineSeconds }: { offlineSeconds: number }) {
+  const u = useUnits();
   const div = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const layer = useRef<FleetLayer | null>(null);
@@ -115,12 +121,12 @@ function GlanceMap({ offlineSeconds }: { offlineSeconds: number }) {
 
   const { devices } = useFleetStream({
     onSnapshot: (list) => {
-      const pts = list.map((d) => toPoint(d, Date.now(), offlineSeconds)).filter((p): p is FleetPoint => p !== null);
+      const pts = list.map((d) => toPoint(d, Date.now(), offlineSeconds, u.fmtSpeed)).filter((p): p is FleetPoint => p !== null);
       layer.current?.reset(pts);
       fit(pts);
     },
     onUpdate: (list) => {
-      layer.current?.upsert(list.map((d) => toPoint(d, Date.now(), offlineSeconds)).filter((p): p is FleetPoint => p !== null));
+      layer.current?.upsert(list.map((d) => toPoint(d, Date.now(), offlineSeconds, u.fmtSpeed)).filter((p): p is FleetPoint => p !== null));
     }
   });
 
@@ -165,8 +171,8 @@ function GlanceMap({ offlineSeconds }: { offlineSeconds: number }) {
         layer.current = fl;
         m.on("load", () => {
           fl.install();
-          fl.setLabels(false);
-          const pts = [...devices.current.values()].map((d) => toPoint(d, Date.now(), offlineSeconds)).filter((p): p is FleetPoint => p !== null);
+          fl.setLabels(true);
+          const pts = [...devices.current.values()].map((d) => toPoint(d, Date.now(), offlineSeconds, u.fmtSpeed)).filter((p): p is FleetPoint => p !== null);
           fl.reset(pts);
           fit(pts);
         });

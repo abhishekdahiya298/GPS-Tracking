@@ -16,9 +16,14 @@ export interface FleetPoint {
   type: VehicleType;
   lngLat: [number, number];
   heading: number | null;
+  /** Second line of the name chip, e.g. "62 mph" or "Parked". */
+  sub?: string;
 }
 
 const SRC = "fleet";
+const TRAILS = "fleet-trails";
+/** Recent real positions kept per moving vehicle for its trail. */
+const TRAIL_POINTS = 8;
 const ANIM_MS = 900;
 /** Beyond this many simultaneous moves, skip animation (teleport) to keep frames cheap. */
 const MAX_ANIMATING = 400;
@@ -37,70 +42,177 @@ interface Anim {
 }
 
 const pixelRatio = () => Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
-const BADGE_PX = 32;
-const POINTER_PX = 50;
+
+/** Top-down silhouettes, drawn on a 24 x 48 grid pointing up (north). */
+type Shape = "car" | "van" | "truck" | "trailer";
+export const SHAPE_OF: Record<VehicleType, Shape> = { car: "car", pickup: "car", other: "car", van: "van", bus: "truck", truck: "truck", semi: "truck", equipment: "truck", trailer: "trailer" };
+const SPRITE_W = 26;
+const SPRITE_H = 52;
+
+function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
 
 /**
- * Marker badge: a status-coloured disc with the vehicle's pictogram in white. The badge
- * stays upright so the pictogram is always readable; direction is shown by a separate
- * pointer that orbits it (see pointerIcon).
+ * A moving vehicle seen from above, like the cars in ride-hailing apps: body in the status
+ * colour, dark glass, white outline and a soft shadow. Rotated to the heading on the map.
  */
-function badgeIcon(type: VehicleType, color: string) {
+function spriteIcon(shape: Shape, color: string) {
   const ratio = pixelRatio();
-  const size = Math.round(BADGE_PX * ratio);
+  const pad = 6;
   const c = document.createElement("canvas");
-  c.width = c.height = size;
+  c.width = Math.round((SPRITE_W + pad * 2) * ratio);
+  c.height = Math.round((SPRITE_H + pad * 2) * ratio);
   const g = c.getContext("2d")!;
-  const r = size / 2;
+  g.scale(ratio, ratio);
+  g.translate(pad, pad);
+  const glass = "#0b1b3f";
+  const body = (x: number, y: number, w: number, h: number, r: number) => {
+    g.save();
+    g.shadowColor = "rgba(10, 20, 45, 0.35)";
+    g.shadowBlur = 5;
+    g.shadowOffsetY = 2;
+    roundRect(g, x, y, w, h, r);
+    g.fillStyle = color;
+    g.fill();
+    g.restore();
+    roundRect(g, x, y, w, h, r);
+    g.lineWidth = 1.6;
+    g.strokeStyle = "#ffffff";
+    g.stroke();
+  };
+  const pane = (x: number, y: number, w: number, h: number, r: number) => {
+    roundRect(g, x, y, w, h, r);
+    g.fillStyle = glass;
+    g.fill();
+  };
+  if (shape === "car") {
+    body(4, 8, 18, 36, 7);
+    pane(6.5, 15, 13, 7, 2.5); // windscreen
+    roundRect(g, 7, 23, 12, 10, 2);
+    g.fillStyle = "rgba(255,255,255,0.22)"; // roof
+    g.fill();
+    pane(7, 34, 12, 5, 2); // rear window
+    g.fillStyle = "#fde68a";
+    g.fillRect(6.5, 8.6, 3, 1.6); // headlights
+    g.fillRect(16.5, 8.6, 3, 1.6);
+  } else if (shape === "van") {
+    body(4, 5, 18, 42, 5);
+    pane(6, 10, 14, 7, 2);
+    roundRect(g, 6.5, 19, 13, 25, 1.5);
+    g.fillStyle = "rgba(255,255,255,0.2)";
+    g.fill();
+  } else if (shape === "truck") {
+    // Cab in front, long box behind with a small gap, so it reads as a truck at a glance.
+    body(5, 2, 16, 12, 4);
+    pane(7, 4.5, 12, 4.5, 1.5);
+    body(3.5, 16, 19, 34, 2.5);
+    g.strokeStyle = "rgba(255,255,255,0.35)";
+    g.lineWidth = 1;
+    for (const y of [24, 32, 40]) {
+      g.beginPath();
+      g.moveTo(6, y);
+      g.lineTo(20, y);
+      g.stroke();
+    }
+  } else {
+    // Trailer: box with a short tow bar at the front.
+    g.fillStyle = color;
+    g.fillRect(12, 2, 2, 8);
+    body(3.5, 9, 19, 41, 2.5);
+    g.strokeStyle = "rgba(255,255,255,0.35)";
+    g.lineWidth = 1;
+    for (const y of [19, 29, 39]) {
+      g.beginPath();
+      g.moveTo(6, y);
+      g.lineTo(20, y);
+      g.stroke();
+    }
+  }
+  return { img: g.getImageData(0, 0, c.width, c.height), ratio };
+}
+
+const PIN_W = 34;
+const PIN_H = 44;
+
+/** A parked, idling or offline vehicle: a map pin in the status colour with the vehicle pictogram inside. */
+function pinIcon(type: VehicleType, color: string) {
+  const ratio = pixelRatio();
+  const c = document.createElement("canvas");
+  c.width = Math.round(PIN_W * ratio);
+  c.height = Math.round(PIN_H * ratio);
+  const g = c.getContext("2d")!;
+  g.scale(ratio, ratio);
+  const cx = PIN_W / 2;
+  const cy = 16;
+  const r = 13.5;
+  g.save();
+  g.shadowColor = "rgba(10, 20, 45, 0.35)";
+  g.shadowBlur = 4;
+  g.shadowOffsetY = 2;
   g.beginPath();
-  g.arc(r, r, r - 2 * ratio, 0, Math.PI * 2);
+  g.moveTo(cx, PIN_H - 3);
+  g.bezierCurveTo(cx - 4, cy + r + 2, cx - r, cy + 8, cx - r, cy);
+  g.arc(cx, cy, r, Math.PI, 0);
+  g.bezierCurveTo(cx + r, cy + 8, cx + 4, cy + r + 2, cx, PIN_H - 3);
+  g.closePath();
   g.fillStyle = color;
   g.fill();
-  g.lineWidth = 2 * ratio;
+  g.restore();
+  g.lineWidth = 2;
   g.strokeStyle = "#ffffff";
   g.stroke();
-  // Pictogram: 24-unit grid scaled to ~58% of the badge, optically centred on its body.
-  const k = (size * 0.58) / 24;
+  // White disc with the pictogram in the status colour.
+  g.beginPath();
+  g.arc(cx, cy, 10.5, 0, Math.PI * 2);
+  g.fillStyle = "#ffffff";
+  g.fill();
+  const k = 15 / 24;
   g.save();
-  g.translate(r - 12 * k, r - 11.6 * k);
+  g.translate(cx - 12 * k, cy - 11.6 * k);
   g.scale(k, k);
   const glyph = VEHICLE_GLYPHS[type];
-  g.fillStyle = "#ffffff";
+  g.fillStyle = color;
   g.fill(new Path2D(glyph.body));
   for (const [x, wr] of glyph.wheels) {
     g.beginPath();
     g.arc(x, WHEEL_Y, wr + 0.9, 0, Math.PI * 2);
-    g.fillStyle = color;
+    g.fillStyle = "#ffffff";
     g.fill();
     g.beginPath();
     g.arc(x, WHEEL_Y, wr, 0, Math.PI * 2);
-    g.fillStyle = "#ffffff";
+    g.fillStyle = color;
     g.fill();
   }
   g.restore();
-  return { img: g.getImageData(0, 0, size, size), ratio };
+  return { img: g.getImageData(0, 0, c.width, c.height), ratio };
 }
 
-/** Direction pointer: a small wedge at the top of a transparent square, rotated to the heading around the marker. */
-function pointerIcon(color: string) {
+/** White rounded card behind vehicle names; stretches to fit the text (icon-text-fit). */
+function chipIcon() {
   const ratio = pixelRatio();
-  const size = Math.round(POINTER_PX * ratio);
+  const w = 24;
+  const h = 24;
   const c = document.createElement("canvas");
-  c.width = c.height = size;
+  c.width = w * ratio;
+  c.height = h * ratio;
   const g = c.getContext("2d")!;
-  const mid = size / 2;
-  g.beginPath();
-  g.moveTo(mid, 1.5 * ratio);
-  g.lineTo(mid + 7 * ratio, 13 * ratio);
-  g.lineTo(mid - 7 * ratio, 13 * ratio);
-  g.closePath();
-  g.fillStyle = color;
+  g.scale(ratio, ratio);
+  g.save();
+  g.shadowColor = "rgba(10, 20, 45, 0.22)";
+  g.shadowBlur = 4;
+  g.shadowOffsetY = 1;
+  roundRect(g, 3, 3, w - 6, h - 6, 6);
+  g.fillStyle = "#ffffff";
   g.fill();
-  g.lineWidth = 2 * ratio;
-  g.lineJoin = "round";
-  g.strokeStyle = "#ffffff";
-  g.stroke();
-  return { img: g.getImageData(0, 0, size, size), ratio };
+  g.restore();
+  return { img: g.getImageData(0, 0, c.width, c.height), ratio, w, h };
 }
 
 /** Circle with a white direction arrow (used for the history playback marker). */
@@ -137,6 +249,8 @@ function arrowIcon(color: string, withArrow: boolean) {
 
 export class FleetLayer {
   private points = new Map<string, FleetPoint>();
+  private trails = new Map<string, [number, number][]>();
+  private trailsDirty = false;
   private display = new Map<string, [number, number]>();
   private anims = new Map<string, Anim>();
   private raf = 0;
@@ -166,16 +280,24 @@ export class FleetLayer {
     const m = this.map;
     for (const s of ["moving", "idle", "stopped", "offline"] as MapState[]) {
       for (const t of VEHICLE_TYPES) {
-        const id = `veh-${t}-${s}`;
+        const id = `pin-${t}-${s}`;
         if (!m.hasImage(id)) {
-          const { img, ratio } = badgeIcon(t, STATE_COLORS[s]);
+          const { img, ratio } = pinIcon(t, STATE_COLORS[s]);
           m.addImage(id, img, { pixelRatio: ratio });
         }
       }
     }
-    if (!m.hasImage("veh-pointer")) {
-      const { img, ratio } = pointerIcon(STATE_COLORS.moving);
-      m.addImage("veh-pointer", img, { pixelRatio: ratio });
+    for (const shape of ["car", "van", "truck", "trailer"] as Shape[]) {
+      const id = `spr-${shape}`;
+      if (!m.hasImage(id)) {
+        const { img, ratio } = spriteIcon(shape, STATE_COLORS.moving);
+        m.addImage(id, img, { pixelRatio: ratio });
+      }
+    }
+    if (!m.hasImage("veh-chip")) {
+      const { img, ratio, w, h } = chipIcon();
+      // Stretch only the flat middle so the rounded corners keep their shape.
+      m.addImage("veh-chip", img, { pixelRatio: ratio, stretchX: [[9 * ratio, (w - 9) * ratio]], stretchY: [[9 * ratio, (h - 9) * ratio]], content: [7 * ratio, 6 * ratio, (w - 7) * ratio, (h - 6) * ratio] });
     }
     // History playback marker.
     if (!m.hasImage("veh-moving")) {
@@ -183,9 +305,21 @@ export class FleetLayer {
       m.addImage("veh-moving", img, { pixelRatio: ratio });
     }
     // promoteId lets live updates send only the vehicles that changed (updateData diff).
+    if (!m.getSource(TRAILS)) m.addSource(TRAILS, { type: "geojson", data: { type: "FeatureCollection", features: [] }, lineMetrics: true });
     if (!m.getSource(SRC)) m.addSource(SRC, { type: "geojson", data: this.collection(), promoteId: "id", cluster: this.clustering, clusterMaxZoom: CLUSTER_MAX_ZOOM, clusterRadius: 48 });
     this.structural = true;
     if (!m.getLayer("fleet-halo")) {
+      // Fading tail behind moving vehicles: where they have just been, brightest at the vehicle.
+      m.addLayer({
+        id: "fleet-trails",
+        type: "line",
+        source: TRAILS,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-width": ["interpolate", ["linear"], ["zoom"], 9, 3, 15, 6],
+          "line-gradient": ["interpolate", ["linear"], ["line-progress"], 0, "rgba(21, 128, 61, 0)", 1, "rgba(21, 128, 61, 0.75)"]
+        }
+      });
       m.addLayer({
         id: "fleet-clusters",
         type: "circle",
@@ -216,30 +350,34 @@ export class FleetLayer {
         filter: ["==", ["get", "id"], ""],
         paint: { "circle-radius": HALO_R, "circle-radius-transition": { duration: 320, delay: 0 }, "circle-color": "#2f5bea", "circle-opacity": 0.18, "circle-stroke-color": "#2f5bea", "circle-stroke-width": 2 }
       });
-      // Heading pointer, under the badge so only its tip shows. Only moving vehicles have a meaningful heading.
+      // Moving: a top-down vehicle that turns with the road.
       m.addLayer({
-        id: "fleet-pointer",
+        id: "fleet-moving",
         type: "symbol",
         source: SRC,
         filter: ["all", NOT_CLUSTER, ["==", ["get", "state"], "moving"]] as never,
         layout: {
-          "icon-image": "veh-pointer",
+          "icon-image": ["concat", "spr-", ["get", "shape"]],
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.85, 13, 1.15, 16, 1.5, 18, 1.75],
           "icon-rotate": ["to-number", ["coalesce", ["get", "heading"], 0]],
           "icon-rotation-alignment": "map",
+          "icon-pitch-alignment": "map",
           "icon-allow-overlap": true,
           "icon-ignore-placement": true
         }
       });
+      // Everything else: a pin in the status colour, anchored at its tip.
       m.addLayer({
         id: "fleet-icons",
         type: "symbol",
         source: SRC,
-        filter: NOT_CLUSTER as never,
+        filter: ["all", NOT_CLUSTER, ["!=", ["get", "state"], "moving"]] as never,
         layout: {
-          "icon-image": ["concat", "veh-", ["get", "type"], "-", ["get", "state"]],
+          "icon-image": ["concat", "pin-", ["get", "type"], "-", ["get", "state"]],
+          "icon-anchor": "bottom",
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
-          "symbol-sort-key": ["match", ["get", "state"], "moving", 4, "idle", 3, "stopped", 2, 1]
+          "symbol-sort-key": ["match", ["get", "state"], "idle", 3, "stopped", 2, 1]
         }
       });
       // Names need glyphs; the production style has them, a bare style may not.
@@ -251,14 +389,18 @@ export class FleetLayer {
           minzoom: 10,
           filter: NOT_CLUSTER as never,
           layout: {
-            "text-field": ["get", "name"],
+            "text-field": ["format", ["get", "name"], { "font-scale": 1 }, ["case", ["==", ["get", "sub"], ""], "", ["concat", "\n", ["get", "sub"]]], { "font-scale": 0.85, "text-color": "#4b5563" }],
             "text-font": ["Noto Sans Regular"],
             "text-size": 12,
-            "text-offset": [0, 1.7],
+            "text-line-height": 1.25,
             "text-anchor": "top",
-            "text-optional": true
+            "text-offset": ["case", ["==", ["get", "state"], "moving"], ["literal", [0, 1.9]], ["literal", [0, 0.6]]],
+            "text-optional": true,
+            "icon-image": "veh-chip",
+            "icon-text-fit": "both",
+            "icon-text-fit-padding": [3, 7, 3, 7]
           },
-          paint: { "text-color": "#111827", "text-halo-color": "#ffffff", "text-halo-width": 1.5 }
+          paint: { "text-color": "#0a2463" }
         });
       }
       const click = (e: MapLayerMouseEvent) => {
@@ -300,14 +442,16 @@ export class FleetLayer {
         m.off("mouseenter", "fleet-clusters", clusterEnter);
         m.off("mouseleave", "fleet-clusters", clusterLeave);
       });
-      m.on("click", "fleet-icons", click);
-      m.on("mousemove", "fleet-icons", enter);
-      m.on("mouseleave", "fleet-icons", leave);
-      this.handlers.push(() => {
-        m.off("click", "fleet-icons", click);
-        m.off("mousemove", "fleet-icons", enter);
-        m.off("mouseleave", "fleet-icons", leave);
-      });
+      for (const layer of ["fleet-icons", "fleet-moving"]) {
+        m.on("click", layer, click);
+        m.on("mousemove", layer, enter);
+        m.on("mouseleave", layer, leave);
+        this.handlers.push(() => {
+          m.off("click", layer, click);
+          m.off("mousemove", layer, enter);
+          m.off("mouseleave", layer, leave);
+        });
+      }
     }
     this.ready = true;
     this.applySelection();
@@ -320,6 +464,8 @@ export class FleetLayer {
     this.points.clear();
     this.display.clear();
     this.anims.clear();
+    this.trails.clear();
+    this.trailsDirty = true;
     for (const p of points) {
       this.points.set(p.id, p);
       this.display.set(p.id, p.lngLat);
@@ -337,6 +483,13 @@ export class FleetLayer {
       if (!this.points.has(p.id)) this.structural = true;
       this.changed.add(p.id);
       const heading = p.heading ?? (shown ? bearing(shown, p.lngLat) : null);
+      if (p.state === "moving") {
+        const prev = this.points.get(p.id);
+        const tail = this.trails.get(p.id) ?? (prev ? [prev.lngLat] : []);
+        tail.push(p.lngLat);
+        this.trails.set(p.id, tail.slice(-TRAIL_POINTS));
+      } else this.trails.delete(p.id);
+      this.trailsDirty = true;
       this.points.set(p.id, { ...p, heading });
       if (shown && animate && this.anims.size < MAX_ANIMATING && shouldAnimate(shown, p.lngLat)) {
         this.anims.set(p.id, { from: shown, to: p.lngLat, start: now });
@@ -353,7 +506,9 @@ export class FleetLayer {
       this.points.delete(id);
       this.display.delete(id);
       this.anims.delete(id);
+      this.trails.delete(id);
     }
+    this.trailsDirty = true;
     this.structural = true;
     this.schedule();
   }
@@ -466,12 +621,29 @@ export class FleetLayer {
                   { key: "state", value: p.state },
                   { key: "type", value: p.type },
                   { key: "heading", value: p.heading ?? 0 },
-                  { key: "name", value: p.name }
+                  { key: "name", value: p.name },
+                  { key: "shape", value: SHAPE_OF[p.type] },
+                  { key: "sub", value: p.sub ?? "" }
                 ]
               }
             ];
           })
         });
+      }
+    }
+    if (this.trailsDirty || animating) {
+      this.trailsDirty = false;
+      const trailSrc = this.map.getSource(TRAILS) as GeoJSONSource | undefined;
+      if (trailSrc) {
+        const lines: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+        for (const [id, tail] of this.trails) {
+          const p = this.points.get(id);
+          if (!p || p.state !== "moving" || !this.passes(p)) continue;
+          // The tail ends where the vehicle is drawn right now, so it never detaches while gliding.
+          const pts = this.anims.has(id) ? [...tail.slice(0, -1), this.display.get(id)!] : tail;
+          if (pts.length >= 2) lines.push({ type: "Feature", properties: { id }, geometry: { type: "LineString", coordinates: pts } });
+        }
+        trailSrc.setData({ type: "FeatureCollection", features: lines });
       }
     }
     this.structural = false;
@@ -490,7 +662,7 @@ export class FleetLayer {
       features.push({
         type: "Feature",
         geometry: { type: "Point", coordinates: this.display.get(p.id) ?? p.lngLat },
-        properties: { id: p.id, name: p.name, state: p.state, type: p.type, heading: p.heading ?? 0 }
+        properties: { id: p.id, name: p.name, state: p.state, type: p.type, shape: SHAPE_OF[p.type], sub: p.sub ?? "", heading: p.heading ?? 0 }
       });
     }
     return { type: "FeatureCollection", features };

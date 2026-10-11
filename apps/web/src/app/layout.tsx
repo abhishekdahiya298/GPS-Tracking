@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 export const metadata = {
-  title: "RIO Tracking",
+  title: "RIO GPS",
   description: "Live fleet GPS tracking"
 };
 
