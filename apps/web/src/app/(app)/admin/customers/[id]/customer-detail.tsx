@@ -1,5 +1,5 @@
 "use client";
-import { Cpu, Eye, Plus, Users } from "lucide-react";
+import { Cpu, Eye, ListPlus, Plus, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { PageHeader } from "@/components/app/page-header";
@@ -9,12 +9,13 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
-import type { CustomerDetail } from "@/lib/customers";
+import type { BulkRowStatus, CustomerDetail } from "@/lib/customers";
+import { BULK_IMPORT_MAX, isValidImei, parseImeiList, PROBLEM_LABEL } from "@/lib/imei-list";
 import { viewAs } from "../_shared/view-as";
 import { RelativeTime } from "@/components/app/local-time";
 import { useTime } from "@/components/app/time-context";
@@ -25,6 +26,7 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
   const time = useTime();
   const router = useRouter();
   const [registering, setRegistering] = useState(false);
+  const [bulk, setBulk] = useState(false);
   return (
     <>
       <PageHeader
@@ -35,6 +37,9 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
           <>
             <Button variant="secondary" onClick={() => viewAs(c.id)}>
               <Eye /> View as customer
+            </Button>
+            <Button variant="secondary" onClick={() => setBulk(true)}>
+              <ListPlus /> Bulk import
             </Button>
             <Button onClick={() => setRegistering(true)}>
               <Plus /> Register device
@@ -51,11 +56,16 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
             <EmptyState
               icon={Cpu}
               title="No devices yet"
-              description="Register the tracker's IMEI. It's added to Traccar and to this customer. Then point the device at tracker.riocaliforniainc.com:5027."
+              description="Register the tracker's IMEI, or paste a whole batch with Bulk import. Each one is added to Traccar and to this customer."
               action={
-                <Button size="sm" onClick={() => setRegistering(true)}>
-                  <Plus /> Register device
-                </Button>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <Button size="sm" onClick={() => setRegistering(true)}>
+                    <Plus /> Register device
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setBulk(true)}>
+                    <ListPlus /> Bulk import
+                  </Button>
+                </div>
               }
             />
           ) : (
@@ -117,6 +127,7 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
         customerId={c.id}
         onDone={() => router.refresh()}
       />
+      <BulkImportDialog open={bulk} onOpenChange={setBulk} customerId={c.id} onDone={() => router.refresh()} />
     </>
   );
 }
@@ -190,17 +201,157 @@ function RegisterDeviceDialog({ open, onOpenChange, customerId, onDone }: { open
   );
 }
 
-/** Luhn check on a 15-digit IMEI (same rule as the server's `isValidImei`). */
-function isValidImei(imei: string): boolean {
-  if (!/^\d{15}$/.test(imei)) return false;
-  let sum = 0;
-  for (let i = 0; i < 15; i++) {
-    let d = Number(imei[14 - i]);
-    if (i % 2 === 1) {
-      d *= 2;
-      if (d > 9) d -= 9;
+type BulkResult = { results: { imei: string; status: BulkRowStatus; message?: string }[]; summary: { registered: number; alreadyRegistered: number; otherCustomer: number; invalid: number; failed: number } };
+
+const STATUS_LABEL: Record<BulkRowStatus, string> = {
+  registered: "Registered",
+  already_registered: "Already registered",
+  other_customer: "Another customer's",
+  invalid: "Invalid IMEI",
+  failed: "Failed"
+};
+
+/** Paste a column of IMEIs (optionally with names) and register them all for this customer. */
+function BulkImportDialog({ open, onOpenChange, customerId, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; customerId: string; onDone: () => void }) {
+  const [text, setText] = useState("");
+  const [model, setModel] = useState("FTM880");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<BulkResult | null>(null);
+  const { rows, problems } = parseImeiList(text);
+  const tooMany = rows.length > BULK_IMPORT_MAX;
+
+  function close(o: boolean) {
+    if (busy) return;
+    onOpenChange(o);
+    if (!o) {
+      if (result) onDone();
+      setText("");
+      setResult(null);
+      setError(null);
     }
-    sum += d;
   }
-  return sum % 10 === 0;
+
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await api<BulkResult>(`/api/admin/customers/${customerId}/devices/bulk`, {
+        method: "POST",
+        json: { model, rows: rows.map((r) => ({ imei: r.imei, ...(r.name ? { name: r.name } : {}) })) }
+      });
+      setResult(out);
+      const s = out.summary;
+      if (s.registered > 0) toast.success(`${s.registered} tracker${s.registered === 1 ? "" : "s"} registered.`);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const needsAttention = result?.results.filter((r) => r.status !== "registered" && r.status !== "already_registered") ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={close}>
+      <DialogContent title="Bulk import trackers" description="Paste one tracker per line: the IMEI, and optionally a name after a comma or tab. A column copied from a spreadsheet works as is.">
+        {result ? (
+          <div className="grid gap-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <Stat label="Registered" value={result.summary.registered} tone="good" />
+              <Stat label="Already registered" value={result.summary.alreadyRegistered} />
+              <Stat label="Need attention" value={result.summary.otherCustomer + result.summary.invalid + result.summary.failed} tone={needsAttention.length ? "bad" : undefined} />
+            </div>
+            {needsAttention.length > 0 && (
+              <div className="max-h-56 overflow-y-auto rounded-md border border-border">
+                <Table>
+                  <THead>
+                    <TR>
+                      <TH>IMEI</TH>
+                      <TH>Result</TH>
+                    </TR>
+                  </THead>
+                  <TBody>
+                    {needsAttention.map((r) => (
+                      <TR key={r.imei}>
+                        <TD className="font-mono text-xs">{r.imei}</TD>
+                        <TD>
+                          <div className="text-sm font-medium">{STATUS_LABEL[r.status]}</div>
+                          {r.message && <div className="text-xs text-muted-foreground">{r.message}</div>}
+                        </TD>
+                      </TR>
+                    ))}
+                  </TBody>
+                </Table>
+              </div>
+            )}
+            <p className="m-0 text-sm text-muted-foreground">
+              Next: add the same IMEIs to your FOTA WEB group so each tracker gets its settings on first power-on, then assign trackers to vehicles under Vehicles.
+            </p>
+            <DialogFooter>
+              <Button onClick={() => close(false)}>Done</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form method="post" onSubmit={submit} className="grid gap-4">
+            <Field id="bi-list" label="Trackers" required description={`Up to ${BULK_IMPORT_MAX} per import. Lines with no digits (such as a header) are skipped.`}>
+              <Textarea
+                id="bi-list"
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  setError(null);
+                }}
+                rows={8}
+                spellCheck={false}
+                autoFocus
+                placeholder={"864361078566024, Truck 12\n864361078566115, Trailer 3"}
+                className="font-mono"
+              />
+            </Field>
+            <Field id="bi-model" label="Model" required description="Applied to every tracker in this import.">
+              <Input id="bi-model" value={model} onChange={(e) => setModel(e.target.value)} required maxLength={60} />
+            </Field>
+            {(rows.length > 0 || problems.length > 0) && (
+              <div className="rounded-md bg-muted px-3 py-2 text-sm" aria-live="polite">
+                <span className="font-medium">{rows.length} ready</span>
+                {problems.length > 0 && <span className="text-muted-foreground"> · {problems.length} skipped</span>}
+              </div>
+            )}
+            {problems.length > 0 && (
+              <Alert tone="warning" title={`${problems.length} line${problems.length === 1 ? "" : "s"} will be skipped`}>
+                <ul className="m-0 max-h-28 list-none overflow-y-auto p-0 text-sm">
+                  {problems.slice(0, 50).map((p) => (
+                    <li key={p.line}>
+                      Line {p.line}: <span className="font-mono">{p.text.slice(0, 40)}</span> {PROBLEM_LABEL[p.reason]}
+                    </li>
+                  ))}
+                </ul>
+              </Alert>
+            )}
+            {tooMany && <Alert tone="danger">That is {rows.length} trackers; import at most {BULK_IMPORT_MAX} at a time.</Alert>}
+            {error && <Alert tone="danger">{error}</Alert>}
+            <DialogFooter>
+              <Button variant="secondary" onClick={() => close(false)} disabled={busy}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={busy} disabled={rows.length === 0 || tooMany || !model.trim()}>
+                {busy ? `Registering ${rows.length}…` : `Register ${rows.length || ""} tracker${rows.length === 1 ? "" : "s"}`}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: number; tone?: "good" | "bad" }) {
+  return (
+    <div className="rounded-md border border-border px-3 py-2">
+      <div className={tone === "good" ? "text-xl font-semibold text-success" : tone === "bad" ? "text-xl font-semibold text-danger" : "text-xl font-semibold"}>{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
 }

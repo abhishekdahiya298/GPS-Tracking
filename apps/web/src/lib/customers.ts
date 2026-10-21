@@ -10,6 +10,7 @@ import { AppError, ConflictError, NotFoundError, ValidationError } from "./error
 import { logger } from "./logger";
 import { addMember } from "./team";
 import { getTraccarAdmin } from "./traccar";
+import { BULK_IMPORT_MAX } from "./imei-list";
 
 /**
  * Platform (super admin) operations: create customer organizations, register
@@ -111,7 +112,7 @@ export async function registerDevice(actorUserId: string, organizationId: string
   try {
     [dev] = await db
       .insert(schema.gpsDevices)
-      .values({ organizationId, providerId, externalDeviceId: input.imei, imei: input.imei, model: input.model })
+      .values({ organizationId, providerId, externalDeviceId: input.imei, imei: input.imei, model: input.model, name: input.name ?? null })
       .returning({ id: schema.gpsDevices.id });
   } catch (err) {
     const e = err as { code?: string; cause?: { code?: string } };
@@ -128,6 +129,58 @@ export async function registerDevice(actorUserId: string, organizationId: string
     ...meta
   });
   return { deviceId: dev!.id, traccarCreated: traccar.created };
+}
+
+export const BulkRegisterSchema = z.object({
+  model: z.string().trim().min(1).max(60),
+  rows: z
+    .array(z.object({ imei: z.string().trim().regex(/^\d{15}$/, "The IMEI must be exactly 15 digits"), name: z.string().trim().min(1).max(80).optional() }))
+    .min(1, "Paste at least one IMEI")
+    .max(BULK_IMPORT_MAX, `At most ${BULK_IMPORT_MAX} trackers per import`)
+});
+
+export type BulkRowStatus = "registered" | "already_registered" | "other_customer" | "invalid" | "failed";
+
+/**
+ * Registers many trackers for one customer. Each row goes through the same path as a single
+ * registration (Traccar first, then RIO), one at a time so Traccar is never flooded. A row that
+ * fails never stops the others; the caller gets a status per IMEI. IMEIs that fail the check
+ * digit are refused here: in bulk there is nobody to confirm a typo.
+ */
+export async function registerDevicesBulk(actorUserId: string, organizationId: string, input: z.infer<typeof BulkRegisterSchema>, meta: Meta) {
+  const [org] = await getDb().select({ id: schema.organizations.id }).from(schema.organizations).where(eq(schema.organizations.id, organizationId));
+  if (!org) throw new NotFoundError("Customer not found");
+  const results: { imei: string; status: BulkRowStatus; message?: string }[] = [];
+  const seen = new Set<string>();
+  for (const row of input.rows) {
+    if (seen.has(row.imei)) continue;
+    seen.add(row.imei);
+    if (!isValidImei(row.imei)) {
+      results.push({ imei: row.imei, status: "invalid", message: "Fails the IMEI check; compare it with the label." });
+      continue;
+    }
+    const [existing] = await getDb().select({ organizationId: schema.gpsDevices.organizationId }).from(schema.gpsDevices).where(eq(schema.gpsDevices.imei, row.imei));
+    if (existing) {
+      const same = existing.organizationId === organizationId;
+      results.push({ imei: row.imei, status: same ? "already_registered" : "other_customer", message: same ? "Already registered for this customer." : "Registered to another customer; not changed." });
+      continue;
+    }
+    try {
+      await registerDevice(actorUserId, organizationId, { imei: row.imei, model: input.model, name: row.name, allowUncheckedImei: false }, meta);
+      results.push({ imei: row.imei, status: "registered" });
+    } catch (err) {
+      if (err instanceof AppError) {
+        results.push({ imei: row.imei, status: "failed", message: err.message });
+      } else {
+        logger.error("customers.bulk_register_row_failed", { organizationId }, err);
+        results.push({ imei: row.imei, status: "failed", message: "Unexpected error; try this one again." });
+      }
+    }
+  }
+  const count = (s: BulkRowStatus) => results.filter((r) => r.status === s).length;
+  const summary = { registered: count("registered"), alreadyRegistered: count("already_registered"), otherCustomer: count("other_customer"), invalid: count("invalid"), failed: count("failed") };
+  await writeAudit({ action: "device.bulk_imported", actorUserId, organizationId, targetType: "organization", targetId: organizationId, metadata: { model: input.model, rows: results.length, ...summary }, ...meta });
+  return { results, summary };
 }
 
 /** Super admin "view as": sets the session's active organization (null = back to own). */
