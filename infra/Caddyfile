@@ -1,7 +1,9 @@
 # Production reverse proxy in front of the web app only.
 # Traccar's device port (5027) is never proxied here — it takes raw TCP from
 # cellular devices and is published directly by Docker, not through Caddy/Cloudflare.
-{$RIO_DOMAIN} {
+# RIO_DOMAIN_ALIASES (optional, space-separated) serves the same app on extra hostnames,
+# e.g. the new domain during a domain move. Each gets its own automatic HTTPS certificate.
+{$RIO_DOMAIN} {$RIO_DOMAIN_ALIASES} {
 	# Compress normal responses, but never the SSE stream (compression buffers events).
 	@compressible not path /api/locations/stream
 	encode @compressible zstd gzip

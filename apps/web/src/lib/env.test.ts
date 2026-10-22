@@ -30,4 +30,9 @@ describe("getServerEnv", () => {
     expect(message).toContain("REDIS_URL");
     expect(message).not.toContain("short-secret-value");
   });
+  it("parses AUTH_ALIAS_URLS as a list and rejects non-URLs", () => {
+    expect(getServerEnv({ ...valid, AUTH_ALIAS_URLS: " https://app.riogps.com , https://gps.example.org " } as NodeJS.ProcessEnv).AUTH_ALIAS_URLS).toEqual(["https://app.riogps.com", "https://gps.example.org"]);
+    expect(getServerEnv({ ...valid }).AUTH_ALIAS_URLS).toEqual([]);
+    expect(() => getServerEnv({ ...valid, AUTH_ALIAS_URLS: "app.riogps.com" } as NodeJS.ProcessEnv)).toThrow();
+  });
 });

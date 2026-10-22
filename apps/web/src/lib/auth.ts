@@ -18,7 +18,7 @@ function buildAuth() {
     appName: "RIO GPS",
     baseURL: env.AUTH_URL,
     secret: env.AUTH_SECRET,
-    trustedOrigins: [env.AUTH_URL],
+    trustedOrigins: [env.AUTH_URL, ...env.AUTH_ALIAS_URLS],
     telemetry: { enabled: false },
     database: drizzleAdapter(getDb(), {
       provider: "pg",

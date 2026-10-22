@@ -16,6 +16,16 @@ const ServerEnvSchema = z.object({
   TRACCAR_WEBHOOK_SECRET: secret("TRACCAR_WEBHOOK_SECRET"),
   AUTH_SECRET: secret("AUTH_SECRET"),
   AUTH_URL: z.string().url("AUTH_URL must be the public base URL, e.g. https://gps.example.com"),
+  /**
+   * Other public addresses that serve the same app (comma-separated URLs), e.g. the old domain
+   * during a domain move. Sign-in and form posts are accepted from these too; links in emails
+   * always use AUTH_URL.
+   */
+  AUTH_ALIAS_URLS: z
+    .string()
+    .optional()
+    .transform((v) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean))
+    .pipe(z.array(z.string().url("AUTH_ALIAS_URLS must be comma-separated https:// URLs"))),
   /** A device is "online" if RIO received data from it within this many seconds. */
   GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3_900),
   /** Upper bound on a single location-history query window. */

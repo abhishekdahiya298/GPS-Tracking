@@ -22,4 +22,10 @@ describe("assertSameOrigin", () => {
   it("rejects when both Origin and Referer are missing", () => {
     expect(() => assertSameOrigin(req("PATCH"), O)).toThrow(ForbiddenError);
   });
+  it("accepts any of several app origins (domain move)", () => {
+    const both = [O, "https://app.riogps.com"];
+    expect(() => assertSameOrigin(req("POST", { origin: "https://app.riogps.com" }), both)).not.toThrow();
+    expect(() => assertSameOrigin(req("POST", { referer: `${O}/x` }), both)).not.toThrow();
+    expect(() => assertSameOrigin(req("POST", { origin: "https://riogps.com.evil.test" }), both)).toThrow(ForbiddenError);
+  });
 });
