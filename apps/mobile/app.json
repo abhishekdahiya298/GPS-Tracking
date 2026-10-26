@@ -13,16 +13,16 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.riocaliforniainc.gps",
+      "bundleIdentifier": "com.riogps.app",
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.riocaliforniainc.gps",
+      "package": "com.riogps.app",
       "adaptiveIcon": {
-        "backgroundColor": "#0a2463",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
@@ -36,9 +36,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0a2463",
+          "backgroundColor": "#ffffff",
           "image": "./assets/splash-icon.png",
-          "imageWidth": 160
+          "imageWidth": 240
         }
       ]
     ],
