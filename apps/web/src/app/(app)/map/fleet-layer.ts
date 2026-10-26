@@ -29,7 +29,7 @@ const ANIM_MS = 900;
 const MAX_ANIMATING = 400;
 const MIN_FRAME_MS = 33; // ~30 fps is plenty for smooth marker glides
 
-export const STATE_COLORS: Record<MapState, string> = { moving: "#15803d", idle: "#b45309", stopped: "#0369a1", offline: "#6b7280" };
+export const STATE_COLORS: Record<MapState, string> = { moving: "#15803d", idle: "#b45309", stopped: "#0369a1", parked: "#0369a1", offline: "#6b7280" };
 /** Below this zoom nearby vehicles merge into one counted bubble, so a large fleet stays readable. */
 const CLUSTER_MAX_ZOOM = 8;
 const NOT_CLUSTER = ["!", ["has", "point_count"]];
@@ -280,7 +280,7 @@ export class FleetLayer {
   /** Call after the style has loaded. Safe to call again after a style change. */
   install() {
     const m = this.map;
-    for (const s of ["moving", "idle", "stopped", "offline"] as MapState[]) {
+    for (const s of ["moving", "idle", "stopped", "parked", "offline"] as MapState[]) {
       for (const t of VEHICLE_TYPES) {
         const id = `pin-${t}-${s}`;
         if (!m.hasImage(id)) {
@@ -375,7 +375,7 @@ export class FleetLayer {
         layout: { "circle-sort-key": ["match", ["get", "state"], "moving", 4, "idle", 3, "stopped", 2, 1] },
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 4, 10, 7],
-          "circle-color": ["match", ["get", "state"], "moving", STATE_COLORS.moving, "idle", STATE_COLORS.idle, "stopped", STATE_COLORS.stopped, STATE_COLORS.offline],
+          "circle-color": ["match", ["get", "state"], "moving", STATE_COLORS.moving, "idle", STATE_COLORS.idle, "stopped", STATE_COLORS.stopped, "parked", STATE_COLORS.parked, STATE_COLORS.offline],
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 2
         }

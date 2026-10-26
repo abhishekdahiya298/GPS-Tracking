@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { bearing, compass, csvSafe, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, trackStats } from "./fleet-model";
+import { bearing, compass, csvSafe, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, stateBucket, trackStats } from "./fleet-model";
 
 const now = Date.parse("2026-09-25T12:00:00Z");
 const loc = (speedKph: number | null, ignition: boolean | null = null) => ({ latitude: 0, longitude: 0, speedKph, headingDeg: 0, altitudeM: null, ignition, motion: null, recordedAt: "2026-09-25T11:59:00Z", receivedAt: "2026-09-25T11:59:00Z" });
 
 describe("fleet-model", () => {
+  it("mapState: a silent trailer is parked (unhooked), shown under Stopped", () => {
+    const trailer = { type: "trailer" };
+    expect(mapState({ lastSeenAt: "2026-09-25T08:00:00Z", location: loc(0), vehicle: trailer }, now, 600)).toBe("parked");
+    expect(mapState({ lastSeenAt: "2026-09-25T08:00:00Z", location: loc(0), vehicle: { type: "truck" } }, now, 600)).toBe("offline");
+    expect(mapState({ lastSeenAt: null, location: null, vehicle: trailer }, now, 600)).toBe("offline");
+    expect(mapState({ lastSeenAt: "2026-09-25T11:59:00Z", location: loc(40), vehicle: trailer }, now, 600)).toBe("moving");
+    expect(stateBucket("parked")).toBe("stopped");
+    expect(stateBucket("offline")).toBe("offline");
+  });
+
   it("mapState: offline from last_seen, moving by speed, idle only with the engine on", () => {
     expect(mapState({ lastSeenAt: "2026-09-25T11:59:00Z", location: loc(40) }, now, 600)).toBe("moving");
     expect(mapState({ lastSeenAt: "2026-09-25T11:59:00Z", location: loc(40, false) }, now, 600)).toBe("moving");

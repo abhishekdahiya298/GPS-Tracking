@@ -24,6 +24,8 @@ Rules are **edge-triggered**. Each (rule, device) pair keeps its own state in `a
 - Rules run after a position is committed, and only for the newest position of a device. Late backlog points are stored in history but don't fire alerts.
 - A failure in alert processing is logged (`alerts.evaluate_failed`) and never fails GPS ingest.
 
+**Trailers:** a trailer's tracker is powered by the tractor (7-way connector), so it goes silent whenever the trailer is unhooked. Trailers therefore never raise offline alerts, and a silent trailer is shown as **Parked (unhooked)** with its last-seen time and last known position (grouped under Stopped in counts and filters) instead of Offline.
+
 **Offline check:** runs inside the web process every 60 s, protected by a Postgres transaction-level advisory lock, so it stays single-runner even with several processes. Set `ALERTS_SCHEDULER_ENABLED=false` to turn it off.
 
 ## Delivery

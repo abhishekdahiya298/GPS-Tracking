@@ -25,7 +25,7 @@ const LEGEND: [MapState, string][] = [
   ["offline", "Offline"]
 ];
 
-const SUB: Record<MapState, string> = { moving: "", idle: "Idling", stopped: "Parked", offline: "Offline" };
+const SUB: Record<MapState, string> = { moving: "", idle: "Idling", stopped: "Parked", parked: "Unhooked", offline: "Offline" };
 
 function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, fmtSpeed?: (kph: number) => string): FleetPoint | null {
   if (!d.location) return null;

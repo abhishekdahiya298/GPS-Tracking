@@ -103,6 +103,21 @@ describe("vehicles list (server-side)", () => {
     expect(desc.items[0].name).toBe("Van_X");
   });
 
+  it("a silent trailer shows as Parked (unhooked) and is listed under Stopped", async () => {
+    const db = getDb();
+    await db.update(schema.vehicles).set({ type: "trailer" }).where(eq(schema.vehicles.id, vid["Truck 02"]!));
+    await db.update(schema.gpsDevices).set({ lastSeenAt: new Date(Date.now() - 6 * 3600_000) }).where(eq(schema.gpsDevices.imei, "860000000000022"));
+    try {
+      const r = await json(await get(vehiclesGET, "/api/vehicles?state=stopped", "viewer"));
+      expect(r.items.map((v: { name: string; state: string }) => [v.name, v.state])).toEqual([["Truck 02", "parked"]]);
+      expect(r.counts.parked).toBe(1);
+      expect(r.counts.offline ?? 0).toBe(0);
+    } finally {
+      await db.update(schema.vehicles).set({ type: "truck" }).where(eq(schema.vehicles.id, vid["Truck 02"]!));
+      await db.update(schema.gpsDevices).set({ lastSeenAt: new Date() }).where(eq(schema.gpsDevices.imei, "860000000000022"));
+    }
+  });
+
   it("invalid parameters fall back to safe defaults instead of erroring", async () => {
     const r = await json(await get(vehiclesGET, "/api/vehicles?page=-5&pageSize=100000&sort=password&direction=sideways&state=x", "viewer"));
     expect(r).toMatchObject({ page: 1, pageSize: 25 });

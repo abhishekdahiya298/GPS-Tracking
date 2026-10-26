@@ -10,8 +10,15 @@ import type { CurrentDeviceLocation, LocationPoint } from "@/lib/locations";
  * stopped: standing still with the engine off, or the tracker has no ignition wire.
  * offline: the tracker has not reported for longer than the offline threshold.
  */
-export type MapState = "moving" | "idle" | "stopped" | "offline";
+export type MapState = "moving" | "idle" | "stopped" | "parked" | "offline";
+/** The four filter chips; "parked" trailers are shown under Stopped. */
 export const MAP_STATES: MapState[] = ["moving", "idle", "stopped", "offline"];
+/** Sort order for the list (parked trailers after stopped vehicles). */
+export const STATE_ORDER: MapState[] = ["moving", "idle", "stopped", "parked", "offline"];
+/** The filter chip a state belongs to. */
+export function stateBucket(s: MapState): Exclude<MapState, "parked"> {
+  return s === "parked" ? "stopped" : s;
+}
 export const MOVING_KPH = 5;
 
 export function deviceLabel(d: Pick<CurrentDeviceLocation, "vehicle" | "name" | "model">) {
@@ -19,8 +26,11 @@ export function deviceLabel(d: Pick<CurrentDeviceLocation, "vehicle" | "name" | 
 }
 
 /** Presentation state. Offline is decided from last_seen so it stays right between snapshots. */
-export function mapState(d: Pick<CurrentDeviceLocation, "lastSeenAt" | "location">, nowMs: number, offlineSeconds: number): MapState {
-  if (!d.lastSeenAt || nowMs - Date.parse(d.lastSeenAt) > offlineSeconds * 1000) return "offline";
+export function mapState(d: Pick<CurrentDeviceLocation, "lastSeenAt" | "location"> & { vehicle?: { type: string } | null }, nowMs: number, offlineSeconds: number): MapState {
+  if (!d.lastSeenAt || nowMs - Date.parse(d.lastSeenAt) > offlineSeconds * 1000) {
+    // A trailer's tracker is powered by the tractor: silence after reporting means unhooked.
+    return d.lastSeenAt && d.vehicle?.type === "trailer" ? "parked" : "offline";
+  }
   if ((d.location?.speedKph ?? 0) >= MOVING_KPH) return "moving";
   return d.location?.ignition === true ? "idle" : "stopped";
 }

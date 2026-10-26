@@ -194,6 +194,18 @@ describe("offline scheduler", () => {
     const off = (await events(orgA)).filter((e) => e.type === "device_offline");
     expect(off.map((e) => e.deviceId)).toEqual([devA, devA]);
   });
+
+  it("never raises offline alerts for trailers (their tracker loses power when unhooked)", async () => {
+    await drive(IMEI_A, 43.8, -79.8, 0, null); // back online → re-arms
+    await getDb().update(schema.vehicles).set({ type: "trailer" }).where(eq(schema.vehicles.id, vehA));
+    await getDb().update(schema.gpsDevices).set({ lastSeenAt: new Date(Date.now() - 3 * 3600_000) }).where(eq(schema.gpsDevices.id, devA));
+    try {
+      expect(await runOfflineCheck()).toBe(0);
+    } finally {
+      await getDb().update(schema.vehicles).set({ type: "truck" }).where(eq(schema.vehicles.id, vehA));
+      await getDb().update(schema.gpsDevices).set({ lastSeenAt: new Date() }).where(eq(schema.gpsDevices.id, devA));
+    }
+  });
 });
 
 describe("alerts API", () => {

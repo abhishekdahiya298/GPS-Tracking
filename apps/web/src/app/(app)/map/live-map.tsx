@@ -21,7 +21,7 @@ import type { GeofenceDto } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { FleetLayer, STATE_COLORS, type FleetPoint } from "./fleet-layer";
-import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, mapState, MAP_STATES, type MapState } from "./fleet-model";
+import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, mapState, MAP_STATES, STATE_ORDER, stateBucket, type MapState } from "./fleet-model";
 import { useFleetStream } from "./use-fleet-stream";
 
 // Loaded on first use: most sessions never open history.
@@ -30,15 +30,16 @@ const ShareDialog = dynamic(() => import("../vehicles/share-dialog").then((m) =>
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 const ROW_H = 64;
-const STATE_LABEL: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", offline: "Offline" };
+const STATE_LABEL: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", parked: "Parked (unhooked)", offline: "Offline" };
 const STATE_HINT: Record<MapState, string> = {
   moving: "Travelling",
   idle: "Engine on, not moving",
   stopped: "Parked, engine off",
+  parked: "Unhooked, at last known spot",
   offline: "Tracker not reporting"
 };
 const ZONE_LAYERS = ["fences-fill", "fences-line", "fences-label"];
-type Filter = "all" | MapState;
+type Filter = "all" | Exclude<MapState, "parked">;
 
 function ago(iso: string | null, now: number) {
   if (!iso) return "never";
@@ -49,7 +50,7 @@ function ago(iso: string | null, now: number) {
   return `${Math.round(s / 86400)} d ago`;
 }
 
-const SUB: Record<MapState, string> = { moving: "", idle: "Idling", stopped: "Parked", offline: "Offline" };
+const SUB: Record<MapState, string> = { moving: "", idle: "Idling", stopped: "Parked", parked: "Unhooked", offline: "Offline" };
 
 function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, fmtSpeed?: (kph: number) => string): FleetPoint | null {
   if (!d.location) return null;
@@ -290,7 +291,7 @@ export function LiveMap({
           ? (a, b) => Date.parse(b.d.lastSeenAt ?? "1970-01-01") - Date.parse(a.d.lastSeenAt ?? "1970-01-01") || byName(a, b)
           : sort === "speed"
             ? (a, b) => (b.d.location?.speedKph ?? -1) - (a.d.location?.speedKph ?? -1) || byName(a, b)
-            : (a, b) => MAP_STATES.indexOf(a.state) - MAP_STATES.indexOf(b.state) || byName(a, b)
+            : (a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || byName(a, b)
     );
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -303,18 +304,18 @@ export function LiveMap({
   const scoped = useMemo(() => (groupSet ? all.filter((r) => r.d.vehicle && groupSet.has(r.d.vehicle.id)) : all), [all, groupSet]);
   const counts = useMemo(() => {
     const c = { all: scoped.length, moving: 0, idle: 0, stopped: 0, offline: 0 };
-    for (const r of scoped) c[r.state]++;
+    for (const r of scoped) c[stateBucket(r.state)]++;
     return c;
   }, [scoped]);
   const q = search.trim().toLowerCase();
   const rows = useMemo(
-    () => scoped.filter((r) => (filter === "all" || r.state === filter) && (!q || r.name.toLowerCase().includes(q) || (r.d.vehicle?.licensePlate ?? "").toLowerCase().includes(q))),
+    () => scoped.filter((r) => (filter === "all" || stateBucket(r.state) === filter) && (!q || r.name.toLowerCase().includes(q) || (r.d.vehicle?.licensePlate ?? "").toLowerCase().includes(q))),
     [scoped, filter, q]
   );
 
   // Keep the map filter in step with the list.
   useEffect(() => {
-    layer.current?.filter(filter === "all" ? null : [filter], q || groupSet ? new Set(rows.map((r) => r.d.deviceId)) : null);
+    layer.current?.filter(filter === "all" ? null : filter === "stopped" ? ["stopped", "parked"] : [filter], q || groupSet ? new Set(rows.map((r) => r.d.deviceId)) : null);
   }, [filter, q, groupSet, rows]);
 
   useEffect(() => {

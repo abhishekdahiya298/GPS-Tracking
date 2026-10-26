@@ -22,5 +22,8 @@ describe("format", () => {
     expect(fleetState({ connectivity: "online", location: { speedKph: 0, ignition: true } })).toBe("idle");
     expect(fleetState({ connectivity: "offline", location: { speedKph: 50, ignition: true } })).toBe("offline");
     expect(fleetState({ connectivity: "never_seen", location: null })).toBe("never_seen");
+    expect(fleetState({ connectivity: "offline", location: { speedKph: 0, ignition: false }, vehicle: { type: "trailer" } })).toBe("parked");
+    expect(fleetState({ connectivity: "offline", location: { speedKph: 0, ignition: false }, vehicle: { type: "truck" } })).toBe("offline");
+    expect(fleetState({ connectivity: "never_seen", location: null, vehicle: { type: "trailer" } })).toBe("never_seen");
   });
 });

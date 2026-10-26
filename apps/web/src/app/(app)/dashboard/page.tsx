@@ -101,7 +101,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <section aria-label="Fleet summary" className={cn("stagger-in mb-5 grid grid-cols-2 gap-3", tileCount === 5 ? "md:grid-cols-5" : "md:grid-cols-4")}>
         <Tile label="Moving" value={count("moving")} total={devices.length} icon={Navigation} look="moving" href="/vehicles?state=moving" />
         <Tile label="Idling" value={count("idle")} total={devices.length} icon={Activity} look="idle" hint="engine on" href="/vehicles?state=idle" />
-        <Tile label="Stopped" value={count("stopped")} total={devices.length} icon={CircleParking} look="stopped" href="/vehicles?state=stopped" />
+        <Tile label="Stopped" value={count("stopped") + count("parked")} total={devices.length} icon={CircleParking} look="stopped" href="/vehicles?state=stopped" />
         <Tile label="Offline" value={count("offline") + count("never_seen")} total={devices.length} icon={CircleOff} look="offline" href="/vehicles?state=offline" />
         {can("alerts.read") && <Tile label="Unread alerts" value={unack} icon={Bell} look={unack > 0 ? "alert" : "calm"} href="/alerts" className="col-span-2 md:col-span-1" />}
       </section>
@@ -159,7 +159,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               key: k,
               label: FLEET_STATE_META[k].label,
               color: FLEET_STATE_META[k].color,
-              value: k === "offline" ? count("offline") + count("never_seen") : count(k)
+              value: k === "offline" ? count("offline") + count("never_seen") : k === "stopped" ? count("stopped") + count("parked") : count(k)
             }))}
           />
           <ul className="m-0 list-none divide-y divide-border border-t border-border p-0">
@@ -267,7 +267,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 }
 
 function rank(s: FleetState) {
-  return { moving: 0, idle: 1, stopped: 2, offline: 3, never_seen: 4 }[s];
+  return { moving: 0, idle: 1, stopped: 2, parked: 3, offline: 4, never_seen: 5 }[s];
 }
 
 /** "Good morning" by the clock in the viewer's time zone. */

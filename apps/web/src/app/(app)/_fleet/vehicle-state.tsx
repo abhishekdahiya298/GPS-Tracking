@@ -5,6 +5,7 @@ export const VEHICLE_STATE_META: Record<VehicleState, { label: string; tone: "su
   moving: { label: "Moving", tone: "success" },
   idle: { label: "Idling", tone: "warning" },
   stopped: { label: "Stopped", tone: "info" },
+  parked: { label: "Parked (unhooked)", tone: "info" },
   offline: { label: "Offline", tone: "neutral" },
   never_seen: { label: "No data yet", tone: "neutral" },
   inactive: { label: "Tracker off", tone: "neutral" },

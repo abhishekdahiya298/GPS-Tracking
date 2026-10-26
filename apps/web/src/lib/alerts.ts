@@ -379,9 +379,10 @@ export async function runOfflineCheck(now = new Date()): Promise<number> {
     const rules = await tx.select().from(schema.alertRules).where(and(eq(schema.alertRules.type, "device_offline"), eq(schema.alertRules.active, true)));
     for (const rule of rules) {
       const devices = await tx
-        .select({ id: schema.gpsDevices.id, lastSeenAt: schema.gpsDevices.lastSeenAt, vehicleId: schema.deviceAssignments.vehicleId })
+        .select({ id: schema.gpsDevices.id, lastSeenAt: schema.gpsDevices.lastSeenAt, vehicleId: schema.deviceAssignments.vehicleId, vehicleType: schema.vehicles.type })
         .from(schema.gpsDevices)
         .leftJoin(schema.deviceAssignments, and(eq(schema.deviceAssignments.deviceId, schema.gpsDevices.id), isNull(schema.deviceAssignments.unassignedAt)))
+        .leftJoin(schema.vehicles, eq(schema.vehicles.id, schema.deviceAssignments.vehicleId))
         .where(
           and(
             eq(schema.gpsDevices.organizationId, rule.organizationId),
@@ -390,6 +391,8 @@ export async function runOfflineCheck(now = new Date()): Promise<number> {
           )
         );
       for (const d of devices) {
+        // A trailer's tracker loses power whenever it is unhooked, so silence is normal: no offline alert.
+        if (d.vehicleType === "trailer") continue;
         const prev = await lockState(tx, rule.id, d.id);
         const r = evaluateOffline(prev, d.lastSeenAt, now, rule.offlineMinutes ?? 60);
         await saveState(tx, rule.id, d.id, r.next);

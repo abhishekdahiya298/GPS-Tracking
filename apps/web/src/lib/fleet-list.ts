@@ -21,7 +21,7 @@ const base = {
   direction: z.enum(["asc", "desc"]).default("asc")
 };
 
-export const VEHICLE_STATES = ["moving", "idle", "stopped", "offline", "never_seen", "inactive", "no_device"] as const;
+export const VEHICLE_STATES = ["moving", "idle", "stopped", "parked", "offline", "never_seen", "inactive", "no_device"] as const;
 export type VehicleState = (typeof VEHICLE_STATES)[number];
 
 export const VehicleListQuery = z.object({
@@ -89,7 +89,9 @@ const vehicleBase = (organizationId: string, offlineSeconds: number, now: Date) 
            when d.id is null then 'no_device'
            when d.status <> 'active' then 'inactive'
            when d.last_seen_at is null then 'never_seen'
-           when d.last_seen_at < ${now.toISOString()}::timestamptz - make_interval(secs => ${offlineSeconds}) then 'offline'
+           when d.last_seen_at < ${now.toISOString()}::timestamptz - make_interval(secs => ${offlineSeconds}) then
+             -- A trailer's tracker is powered by the tractor: silence means unhooked and parked.
+             case when v.type = 'trailer' then 'parked' else 'offline' end
            when coalesce(cl.speed_kph, 0) >= 5 then 'moving'
            when cl.ignition is true then 'idle'
            else 'stopped'
@@ -105,7 +107,7 @@ const vehicleBase = (organizationId: string, offlineSeconds: number, now: Date) 
   left join current_locations cl on cl.device_id = d.id and cl.organization_id = ${organizationId}
   where v.organization_id = ${organizationId}`;
 
-const STATE_RANK = sql`case state when 'moving' then 0 when 'idle' then 1 when 'stopped' then 2 when 'offline' then 3 when 'never_seen' then 4 when 'inactive' then 5 else 6 end`;
+const STATE_RANK = sql`case state when 'moving' then 0 when 'idle' then 1 when 'stopped' then 2 when 'parked' then 3 when 'offline' then 4 when 'never_seen' then 5 when 'inactive' then 6 else 7 end`;
 
 export async function listVehiclesPage(organizationId: string, q: VehicleListQuery, now: Date, offlineSeconds: number): Promise<Page<VehicleRow, VehicleState>> {
   const db = getDb();
@@ -115,7 +117,7 @@ export async function listVehiclesPage(organizationId: string, q: VehicleListQue
   // Tenant-scoped membership check: a group id from another organization matches nothing.
   const group = q.group ? sql` and exists (select 1 from vehicle_group_members gm where gm.group_id = ${q.group} and gm.vehicle_id = v.id and gm.organization_id = ${organizationId})` : sql``;
   const inner = sql`${vehicleBase(organizationId, offlineSeconds, now)}${search}${group}`;
-  const stateFilter = q.state === "all" ? sql`true` : q.state === "offline" ? sql`state in ('offline', 'never_seen', 'inactive')` : sql`state = ${q.state}`;
+  const stateFilter = q.state === "all" ? sql`true` : q.state === "offline" ? sql`state in ('offline', 'never_seen', 'inactive')` : q.state === "stopped" ? sql`state in ('stopped', 'parked')` : sql`state = ${q.state}`;
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
   const order: SQL = {
     name: sql`lower(name) ${dir}`,
