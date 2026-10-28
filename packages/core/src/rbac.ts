@@ -27,6 +27,8 @@ export const PERMISSIONS = [
   "reports.manage",
   "maintenance.read",
   "maintenance.write",
+  "loads.read",
+  "loads.write",
   "users.read",
   "users.manage",
   "organization.manage",
@@ -43,7 +45,8 @@ const READ_ONLY: readonly Permission[] = [
   "history.read",
   "geofences.read",
   "alerts.read",
-  "maintenance.read"
+  "maintenance.read",
+  "loads.read"
 ];
 
 export const ROLE_PERMISSIONS: Readonly<Record<OrgRole, ReadonlySet<Permission>>> = {
@@ -59,9 +62,11 @@ export const ROLE_PERMISSIONS: Readonly<Record<OrgRole, ReadonlySet<Permission>>
     "alerts.write",
     "reports.manage",
     "maintenance.write",
+    "loads.write",
     "users.read"
   ]),
-  DISPATCHER: new Set<Permission>([...READ_ONLY, "alerts.write"]),
+  // Dispatchers (a broker's load coordinators) create and run loads.
+  DISPATCHER: new Set<Permission>([...READ_ONLY, "alerts.write", "loads.write"]),
   VIEWER: new Set<Permission>(READ_ONLY)
 };
 

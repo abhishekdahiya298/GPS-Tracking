@@ -46,6 +46,22 @@ const ServerEnvSchema = z.object({
     .or(z.literal("").transform(() => undefined)),
   /** Sender; the domain must be verified in Resend. */
   EMAIL_FROM: z.string().min(3).default("RIO GPS <no-reply@riocaliforniainc.com>"),
+  /**
+   * Twilio, for sending load-tracking invites to drivers by SMS. Optional: without all three,
+   * the broker copies the driver link and sends it themselves.
+   */
+  TWILIO_ACCOUNT_SID: z
+    .string()
+    .regex(/^AC[0-9a-fA-F]{32}$/, "TWILIO_ACCOUNT_SID must look like AC…")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
+  TWILIO_AUTH_TOKEN: z.string().min(16).optional().or(z.literal("").transform(() => undefined)),
+  /** Sender: an E.164 number (+1…) or a Messaging Service SID (MG…). */
+  TWILIO_FROM: z
+    .string()
+    .regex(/^(\+[1-9]\d{6,14}|MG[0-9a-fA-F]{32})$/, "TWILIO_FROM must be +1… or MG…")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
   /** Runs the 60 s device-offline alert check in this process (single-runner via advisory lock). */
   ALERTS_SCHEDULER_ENABLED: z
     .enum(["true", "false"])
