@@ -34,6 +34,12 @@ describe("RBAC", () => {
     for (const role of ORG_ROLES) expect(roleHasPermission(role, "locations.read")).toBe(true);
   });
 
+  it("loads: every role reads, only viewers cannot write", () => {
+    for (const role of ORG_ROLES) expect(roleHasPermission(role, "loads.read")).toBe(true);
+    for (const role of ["ORG_ADMIN", "FLEET_MANAGER", "DISPATCHER"] as const) expect(roleHasPermission(role, "loads.write")).toBe(true);
+    expect(roleHasPermission("VIEWER", "loads.write")).toBe(false);
+  });
+
   it("SUPER_ADMIN is allowed everything, even without a membership role", () => {
     expect(contextHasPermission(ctx({ isSuperAdmin: true, role: null }), "billing.manage")).toBe(true);
   });

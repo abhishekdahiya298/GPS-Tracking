@@ -7,7 +7,7 @@ const base = { userId: "u", organizationId: "o", isSuperAdmin: false };
 describe("navigation respects RBAC", () => {
   it("VIEWER sees read-only areas but not Team or Customers", () => {
     const l = labels({ ...base, role: "VIEWER" });
-    expect(l).toEqual(expect.arrayContaining(["Dashboard", "Live tracking", "Vehicles", "Zones", "Alerts", "Reports", "Maintenance"]));
+    expect(l).toEqual(expect.arrayContaining(["Dashboard", "Live tracking", "Loads", "Vehicles", "Zones", "Alerts", "Reports", "Maintenance"]));
     expect(l).not.toContain("Team");
     expect(l).not.toContain("Customers");
   });

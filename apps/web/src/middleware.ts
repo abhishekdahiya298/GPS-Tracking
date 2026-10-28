@@ -2,7 +2,7 @@ import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 import { buildCsp, newNonce } from "@/lib/csp";
 
-const PROTECTED = ["/dashboard", "/map", "/vehicles", "/settings", "/geofences", "/alerts", "/reports", "/admin", "/maintenance"];
+const PROTECTED = ["/dashboard", "/map", "/vehicles", "/settings", "/geofences", "/alerts", "/reports", "/admin", "/maintenance", "/loads"];
 
 /**
  * Runs on every HTML page (not API routes or static assets):
@@ -27,8 +27,8 @@ export function middleware(request: NextRequest) {
   requestHeaders.set("Content-Security-Policy", csp);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
-  if (pathname === "/share") {
-    // Public share page: never send a Referer (map tiles come from another origin) and keep it out of search engines.
+  if (pathname === "/share" || pathname === "/d" || pathname === "/track") {
+    // Public share, driver and shipper pages: never send a Referer (map tiles come from another origin) and keep it out of search engines.
     response.headers.set("Referrer-Policy", "no-referrer");
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
