@@ -67,3 +67,32 @@ describe("parseCoordinates", () => {
     expect(parseCoordinates("100 Front St")).toBeNull();
   });
 });
+
+import { cleanAddress } from "./geocode";
+import { shortPlace } from "./load-meta";
+
+describe("clean addresses and short places", () => {
+  it("builds a postal-style address from Nominatim parts", () => {
+    const toronto = cleanAddress({
+      display_name: "Fairmont Royal York, 100, Front Street West, South Core, Spadina—Fort York, Toronto, Ontario, M5J 1E3, Canada",
+      name: "Fairmont Royal York",
+      address: { house_number: "100", road: "Front Street West", suburb: "South Core", city: "Toronto", state: "Ontario", "ISO3166-2-lvl4": "CA-ON", postcode: "M5J 1E3", country: "Canada" }
+    });
+    expect(toronto).toEqual({ label: "100 Front Street West, Toronto, ON M5J 1E3, Canada", name: "Fairmont Royal York" });
+    const montreal = cleanAddress({
+      display_name: "Montreal, Urban agglomeration of Montreal, Montreal (administrative region), Quebec, Canada",
+      name: "Montréal",
+      address: { city: "Montréal", state: "Quebec", "ISO3166-2-lvl4": "CA-QC", country: "Canada" }
+    });
+    expect(montreal).toEqual({ label: "Montréal, QC, Canada", name: null });
+    expect(cleanAddress({ display_name: "Somewhere", address: {} }).label).toBe("Somewhere");
+  });
+
+  it("shortens to City, ST", () => {
+    expect(shortPlace(null, "100 Front Street West, Toronto, ON M5J 1E3, Canada")).toBe("Toronto, ON");
+    expect(shortPlace(null, "Montréal, QC, Canada")).toBe("Montréal, QC");
+    expect(shortPlace(null, "1200 Main St, Dallas, TX 75201, United States")).toBe("Dallas, TX");
+    expect(shortPlace(null, "43.64530, -79.38060")).toBe("43.64530, -79.38060");
+    expect(shortPlace("Acme DC", "anything")).toBe("Acme DC");
+  });
+});

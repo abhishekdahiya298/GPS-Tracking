@@ -129,7 +129,8 @@ function StopFields({ id, title, color, stop, onChange, error }: { id: string; t
     }
   }
   function pick(r: GeocodeResult) {
-    onChange({ ...stop, address: r.label, latitude: r.latitude, longitude: r.longitude });
+    // A business or landmark result also fills an empty Name.
+    onChange({ ...stop, name: stop.name || r.name || "", address: r.label, latitude: r.latitude, longitude: r.longitude });
     setResults(null);
     setQuery("");
   }

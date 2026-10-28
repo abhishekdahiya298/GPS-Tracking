@@ -29,13 +29,18 @@ export const LOAD_EVENT_LABEL: Record<string, string> = {
   updated: "Load details edited"
 };
 
-/** "Toronto, Ontario" style short place from a long address ("100 Front St W, Toronto, ON …"). */
+/**
+ * Short place for lists and headers: the stop's name, else "City, ST" from an address like
+ * "100 Front Street West, Toronto, ON M5J 1E3, Canada" (or "Montréal, QC, Canada").
+ */
 export function shortPlace(name: string | null, address: string): string {
   if (name) return name;
   const parts = address.split(",").map((p) => p.trim()).filter(Boolean);
   if (parts.length <= 2) return address;
-  // Skip a leading house number/street when the next part looks like a city.
-  return parts.slice(1, 3).join(", ");
+  // "[street,] city, ST postcode, country": the city is third from the end.
+  const city = parts[parts.length - 3]!;
+  const region = parts[parts.length - 2]!.split(" ")[0]!;
+  return region.length <= 3 ? `${city}, ${region}` : city;
 }
 
 export function fmtDistanceM(m: number, imperial: boolean): string {
