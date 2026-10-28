@@ -1,5 +1,5 @@
 "use client";
-import { AlertTriangle, ArrowRight, PackagePlus, PauseCircle, Package } from "lucide-react";
+import { AlertTriangle, ArrowRight, Map as MapIcon, PackagePlus, PauseCircle, Package } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -91,10 +91,20 @@ export function LoadsView({ loads, counts, filter, q, canWrite }: { loads: LoadS
       </Link>
     </Button>
   );
+  const headerActions = (
+    <>
+      <Button asChild variant="secondary">
+        <Link href="/loads/map">
+          <MapIcon aria-hidden="true" /> Map view
+        </Link>
+      </Button>
+      {newButton}
+    </>
+  );
 
   return (
     <>
-      <PageHeader title="Loads" description="Track each shipment through the driver's phone, from pickup to delivery." actions={newButton} />
+      <PageHeader title="Loads" description="Track each shipment from pickup to delivery, by the driver's phone or your own trackers." actions={headerActions} />
       <Card>
         <FilterBar>
           <SegmentedFilter

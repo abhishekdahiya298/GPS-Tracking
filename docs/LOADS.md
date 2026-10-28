@@ -11,6 +11,15 @@ A broker tracks a shipment through the driver's phone, with the driver's consent
 5. **ETA**: straight line × 1.3 at 80 km/h to the next stop; late when more than 15 minutes after the appointment. Labelled as an estimate.
 6. **Shipper link** (`/track#token`): status, ETA, appointments and last position only — never driver name, phone, carrier or notes. Making a new one turns the old off.
 
+## Loads map
+
+**Loads → Map view** (`/loads/map`) shows every active load on one map, refreshed every 20 seconds:
+
+- Dot colour = what the load is doing: **Moving** (fresh position at 5 mph / 8 km/h or more), **Stopped**, **Driver paused**, **No signal** (no position for 30 min). A red ring marks **Needs attention** (late, no signal or paused). Nearby loads group into a counted bubble below zoom 7; a red-edged bubble contains a load that needs attention.
+- Side panel (bottom sheet on phones): filter chips with counts (All, Moving, Stopped, Needs attention, Waiting for driver), search, and the list with problems first.
+- Picking a load shows its pickup/delivery pins and arrival areas, the trail so far, a dashed line to the next stop, and a card with status, speed, ETA, distance remaining, last update, and Open load / Call driver.
+- Loads waiting for the driver have no position yet: they are listed but not on the map.
+
 ## Tracking with your own RIO tracker
 
 Choose **Track with → One of our vehicles** when the load is hauled by one of the organization's own vehicles with a RIO tracker. There is no driver link or consent step: tracking starts when the load is created, from the tracker's current position. Every new tracker position (GPS webhook) moves the status the same way phone positions do, and the load's trail is the vehicle's own track from creation to the end of the load. The vehicle can be changed while the load is active; how a load is tracked cannot.
