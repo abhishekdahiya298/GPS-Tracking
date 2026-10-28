@@ -2,6 +2,7 @@
 import { startAlertScheduler } from "./lib/alerts";
 import { startDailyStatsScheduler } from "./lib/daily-stats";
 import { getServerEnv } from "./lib/env";
+import { startLoadScheduler } from "./lib/load-tracking";
 import { logger } from "./lib/logger";
 import { startMaintenanceScheduler } from "./lib/maintenance";
 import { startReportScheduler } from "./lib/report-schedules";
@@ -12,6 +13,7 @@ export function startNode() {
     logger.info("startup.config_valid", { nodeEnv: env.NODE_ENV });
     if (env.ALERTS_SCHEDULER_ENABLED) {
       startAlertScheduler();
+      startLoadScheduler();
       startReportScheduler();
       startMaintenanceScheduler();
       startDailyStatsScheduler();

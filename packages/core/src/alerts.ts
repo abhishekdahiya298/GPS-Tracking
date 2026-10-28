@@ -6,6 +6,12 @@
 export const ALERT_TYPES = ["geofence_enter", "geofence_exit", "speeding", "ignition_on", "ignition_off", "device_offline"] as const;
 export type AlertType = (typeof ALERT_TYPES)[number];
 
+/** Alerts raised by loads (not configured as rules). */
+export const LOAD_ALERT_TYPES = ["load_late", "load_no_signal", "load_paused", "load_arrived", "load_delivered"] as const;
+export type LoadAlertType = (typeof LOAD_ALERT_TYPES)[number];
+/** Every type an alert event can have. */
+export type AlertEventType = AlertType | LoadAlertType;
+
 /** Speeding re-arms only after dropping this far below the limit. */
 export const SPEED_HYSTERESIS_KPH = 5;
 

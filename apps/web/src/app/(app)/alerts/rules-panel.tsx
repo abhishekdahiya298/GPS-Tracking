@@ -187,7 +187,7 @@ function NewRuleDialog({ open, onOpenChange, geofences, vehicles, onCreated }: {
           <div className="grid gap-3 sm:grid-cols-2">
             <Field id="ar-type" label="When">
               <Select id="ar-type" value={type} onChange={(e) => setType(e.target.value)}>
-                {Object.entries(TYPE_LABEL).map(([k, v]) => (
+                {Object.entries(TYPE_LABEL).filter(([k]) => !k.startsWith("load_")).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
                   </option>

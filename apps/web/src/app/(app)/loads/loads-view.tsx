@@ -143,8 +143,8 @@ export function LoadsView({ loads, counts, filter, q, canWrite }: { loads: LoadS
                   </TD>
                   <TD>
                     <div className="flex flex-col">
-                      <span>{l.driverName ?? l.driverPhone}</span>
-                      {l.carrierName && <span className="text-xs text-muted-foreground">{l.carrierName}</span>}
+                      <span>{l.driverName ?? l.driverPhone ?? l.vehicle?.name ?? "—"}</span>
+                      {(l.vehicle || l.carrierName) && <span className="text-xs text-muted-foreground">{[l.vehicle && `Tracker: ${l.vehicle.name}`, l.carrierName].filter(Boolean).join(" · ")}</span>}
                     </div>
                   </TD>
                   <TD>

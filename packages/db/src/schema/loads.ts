@@ -2,6 +2,10 @@ import { sql } from "drizzle-orm";
 import { bigint, doublePrecision, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { organizations } from "./organizations";
 import { users } from "./users";
+import { vehicles } from "./vehicles";
+
+/** phone: the driver's phone through the driver link. vehicle: one of the organization's own RIO trackers. */
+export const loadTrackingModeEnum = pgEnum("load_tracking_mode", ["phone", "vehicle"]);
 
 /** Mirrors LOAD_STATUSES in @rio-gps/core/loads. */
 export const loadStatusEnum = pgEnum("load_status", ["invited", "tracking", "at_pickup", "in_transit", "at_delivery", "delivered", "cancelled", "declined"]);
@@ -29,8 +33,11 @@ export const loads = pgTable(
     status: loadStatusEnum("status").notNull().default("invited"),
     carrierName: text("carrier_name"),
     driverName: text("driver_name"),
-    /** E.164, e.g. +14165550123. */
-    driverPhone: text("driver_phone").notNull(),
+    /** E.164, e.g. +14165550123. Required for phone tracking, optional for a vehicle. */
+    driverPhone: text("driver_phone"),
+    trackingMode: loadTrackingModeEnum("tracking_mode").notNull().default("phone"),
+    /** The organization's vehicle whose tracker follows this load (vehicle mode). */
+    vehicleId: uuid("vehicle_id").references(() => vehicles.id, { onDelete: "set null" }),
     notes: text("notes"),
 
     pickupName: text("pickup_name"),
@@ -62,6 +69,10 @@ export const loads = pgTable(
     lastSpeedKph: doublePrecision("last_speed_kph"),
     lastPositionAt: timestamp("last_position_at", { withTimezone: true }),
 
+    /** Alert bookkeeping so each problem is raised once: the stop a "late" alert was sent for, and when "no signal" was raised (cleared by the next position). */
+    lateAlertTarget: text("late_alert_target"),
+    staleAlertedAt: timestamp("stale_alerted_at", { withTimezone: true }),
+
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
@@ -70,6 +81,9 @@ export const loads = pgTable(
     uniqueIndex("loads_org_reference_unique").on(t.organizationId, t.reference),
     index("loads_org_created_idx").on(t.organizationId, t.createdAt),
     uniqueIndex("loads_driver_token_unique").on(t.driverTokenHash),
+    index("loads_vehicle_idx")
+      .on(t.vehicleId)
+      .where(sql`${t.vehicleId} is not null`),
     uniqueIndex("loads_shipper_token_unique")
       .on(t.shipperTokenHash)
       .where(sql`${t.shipperTokenHash} is not null`)

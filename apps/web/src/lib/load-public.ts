@@ -2,11 +2,11 @@ import type { UnitSystem } from "@rio-gps/core";
 import { estimateLoadEta, isLoadEnded, isLoadTracking, nextLoadStatus, type LoadEventType, type LoadStatus } from "@rio-gps/core/loads";
 import type { TimeFormat } from "@rio-gps/core/timezones";
 import { getDb, schema } from "@rio-gps/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { ValidationError } from "./errors";
 import { hashLoadToken, LoadTokenSchema } from "./loads";
-import { logger } from "./logger";
+import { alertsForEvents, applyLoadPositions, raiseLoadAlerts, type AppliedPositions } from "./load-tracking";
 
 /**
  * The two public (no sign-in) sides of a load:
@@ -43,7 +43,7 @@ async function rowByDriverToken(token: string) {
     .select({ load: schema.loads, org: { name: schema.organizations.name, unitSystem: schema.organizations.unitSystem, timeZone: schema.organizations.timeZone, timeFormat: schema.organizations.timeFormat } })
     .from(schema.loads)
     .innerJoin(schema.organizations, eq(schema.organizations.id, schema.loads.organizationId))
-    .where(eq(schema.loads.driverTokenHash, hashLoadToken(token)));
+    .where(and(eq(schema.loads.driverTokenHash, hashLoadToken(token)), eq(schema.loads.trackingMode, "phone")));
   return r ?? null;
 }
 
@@ -113,6 +113,7 @@ export async function driverAction(token: string, action: "accept" | "decline" |
   } else if (isLoadTracking(l.status) && !l.sharingStoppedAt) {
     await db.update(schema.loads).set({ sharingStoppedAt: now, updatedAt: now }).where(eq(schema.loads.id, l.id));
     await event("sharing_stopped");
+    await raiseLoadAlerts(l, [{ type: "load_paused", at: now, latitude: l.lastLat, longitude: l.lastLon }]);
   }
   return viewAsDriver(token);
 }
@@ -137,8 +138,13 @@ export type PingResult = { accepted: number; phase: DriverView["phase"]; status:
  */
 export async function recordDriverPositions(token: string, input: z.infer<typeof DriverPingSchema>, now = new Date()): Promise<PingResult | null> {
   if (!LoadTokenSchema.safeParse(token).success) return null;
-  return getDb().transaction(async (tx) => {
-    const [l] = await tx.select().from(schema.loads).where(eq(schema.loads.driverTokenHash, hashLoadToken(token))).for("update");
+  let alertsAfter: { load: typeof schema.loads.$inferSelect; events: AppliedPositions["events"] } | null = null;
+  const out = await getDb().transaction(async (tx) => {
+    const [l] = await tx
+      .select()
+      .from(schema.loads)
+      .where(and(eq(schema.loads.driverTokenHash, hashLoadToken(token)), eq(schema.loads.trackingMode, "phone")))
+      .for("update");
     if (!l) return null;
     const result = (accepted: number, status: LoadStatus, phase: DriverView["phase"]): PingResult => ({ accepted, status, phase, pingIntervalSeconds: DRIVER_PING_INTERVAL_SECONDS });
     if (!isLoadTracking(l.status) || l.sharingStoppedAt || !l.acceptedAt) return result(0, l.status, driverPhase(l));
@@ -172,43 +178,21 @@ export async function recordDriverPositions(token: string, input: z.infer<typeof
       .returning({ recordedAt: schema.loadPings.recordedAt });
     const fresh = new Set(inserted.map((i) => i.recordedAt.getTime()));
 
-    // Only new positions newer than the last one move the status and the "last position".
-    const lastAt = l.lastPositionAt?.getTime() ?? 0;
-    let status = l.status;
-    const events: { type: LoadEventType; at: Date; latitude: number; longitude: number }[] = [];
-    const pickup = { latitude: l.pickupLat, longitude: l.pickupLon, radiusM: l.pickupRadiusM };
-    const delivery = { latitude: l.deliveryLat, longitude: l.deliveryLon, radiusM: l.deliveryRadiusM };
-    let newest: (typeof positions)[number] | null = null;
-    for (const p of positions) {
-      if (!fresh.has(p.at.getTime()) || p.at.getTime() <= lastAt) continue;
-      newest = p;
-      const step = nextLoadStatus(status, { latitude: p.latitude, longitude: p.longitude, accuracyM: p.accuracyM ?? null }, pickup, delivery);
-      for (const type of step.events) events.push({ type, at: p.at, latitude: p.latitude, longitude: p.longitude });
-      status = step.status;
-      if (isLoadEnded(status)) break;
-    }
-
-    if (newest) {
-      await tx
-        .update(schema.loads)
-        .set({
-          status,
-          lastLat: newest.latitude,
-          lastLon: newest.longitude,
-          lastAccuracyM: newest.accuracyM ?? null,
-          lastSpeedKph: newest.speedKph ?? null,
-          lastPositionAt: newest.at,
-          ...(isLoadEnded(status) ? { endedAt: now } : {}),
-          updatedAt: now
-        })
-        .where(eq(schema.loads.id, l.id));
-    }
-    if (events.length) {
-      await tx.insert(schema.loadEvents).values(events.map((e) => ({ organizationId: l.organizationId, loadId: l.id, type: e.type, at: e.at, latitude: e.latitude, longitude: e.longitude, detail: { automatic: true } })));
-      logger.info("load.status_changed", { loadId: l.id, from: l.status, to: status });
-    }
+    // Only new positions (not repeats) move the status and the "last position".
+    const applied = await applyLoadPositions(
+      tx,
+      l,
+      positions.filter((p) => fresh.has(p.at.getTime())).map((p) => ({ latitude: p.latitude, longitude: p.longitude, accuracyM: p.accuracyM ?? null, speedKph: p.speedKph ?? null, at: p.at })),
+      now
+    );
+    const status = applied.status;
+    alertsAfter = { load: l, events: applied.events };
     return result(inserted.length, status, isLoadEnded(status) ? "ended" : "sharing");
   });
+  // After commit: arrivals and automatic delivery become alerts.
+  const after = alertsAfter as { load: typeof schema.loads.$inferSelect; events: AppliedPositions["events"] } | null;
+  if (after) await raiseLoadAlerts(after.load, alertsForEvents(after.events));
+  return out;
 }
 
 export interface ShipperView extends OrgDisplay {

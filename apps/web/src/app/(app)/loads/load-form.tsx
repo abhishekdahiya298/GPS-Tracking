@@ -171,10 +171,13 @@ function StopFields({ id, title, color, stop, onChange, error }: { id: string; t
           <ul className="m-0 list-none overflow-hidden rounded-md border border-border p-0" aria-label="Address results">
             {results.length === 0 && <li className="px-3 py-2 text-sm text-muted-foreground">No match. Try adding the city, or type coordinates.</li>}
             {results.map((r) => (
-              <li key={`${r.latitude},${r.longitude}`} className="border-b border-border last:border-b-0">
+              <li key={`${r.latitude},${r.longitude},${r.name ?? ""}`} className="border-b border-border last:border-b-0">
                 <button type="button" onClick={() => pick(r)} className="flex w-full cursor-pointer items-start gap-2 border-0 bg-transparent px-3 py-2 text-left text-sm hover:bg-muted">
                   <MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  {r.label}
+                  <span>
+                    {r.name && <span className="block font-medium">{r.name}</span>}
+                    <span className={r.name ? "text-muted-foreground" : undefined}>{r.label}</span>
+                  </span>
                 </button>
               </li>
             ))}
@@ -246,17 +249,19 @@ export function SmsOutcome({ sms, smsAvailable }: { sms: SmsResult | null; smsAv
   );
 }
 
-export function LoadForm({ initial, smsAvailable }: { initial?: LoadDetailDto; smsAvailable: boolean }) {
+export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDetailDto; smsAvailable: boolean; vehicles: { id: string; name: string }[] }) {
   const router = useRouter();
   const t = useTime();
   const fromDto = (s: LoadDetailDto["pickup"]): StopState => ({ name: s.name ?? "", address: s.address, latitude: s.latitude, longitude: s.longitude, radiusM: s.radiusM, appointment: s.appointmentAt ? toWallTime(s.appointmentAt, t.timeZone) : "" });
   const [pickup, setPickup] = useState<StopState>(initial ? fromDto(initial.pickup) : emptyStop());
   const [delivery, setDelivery] = useState<StopState>(initial ? fromDto(initial.delivery) : emptyStop());
   const [sendInvite, setSendInvite] = useState(smsAvailable);
+  const [mode, setMode] = useState<"phone" | "vehicle">(initial?.trackingMode ?? "phone");
+  const [vehicleId, setVehicleId] = useState(initial?.vehicle?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stopErrors, setStopErrors] = useState<{ pickup: string | null; delivery: string | null }>({ pickup: null, delivery: null });
-  const [created, setCreated] = useState<{ id: string; reference: string; driverLink: string; sms: SmsResult | null } | null>(null);
+  const [created, setCreated] = useState<{ id: string; reference: string; driverLink: string | null; sms: SmsResult | null } | null>(null);
 
   const stopBody = (s: StopState) => ({
     name: s.name.trim() || null,
@@ -276,11 +281,16 @@ export function LoadForm({ initial, smsAvailable }: { initial?: LoadDetailDto; s
     };
     setStopErrors(errs);
     if (errs.pickup || errs.delivery) return;
+    if (mode === "vehicle" && !vehicleId) {
+      setError("Choose the vehicle that hauls this load.");
+      return;
+    }
     const body = {
       reference: String(f.get("reference") ?? "").trim(),
       carrierName: String(f.get("carrierName") ?? "").trim() || null,
       driverName: String(f.get("driverName") ?? "").trim() || null,
-      driverPhone: String(f.get("driverPhone") ?? "").trim(),
+      driverPhone: String(f.get("driverPhone") ?? "").trim() || null,
+      ...(mode === "vehicle" ? { vehicleId: vehicleId || null } : {}),
       notes: String(f.get("notes") ?? "").trim() || null,
       pickup: stopBody(pickup),
       delivery: stopBody(delivery)
@@ -294,7 +304,7 @@ export function LoadForm({ initial, smsAvailable }: { initial?: LoadDetailDto; s
         router.push(`/loads/${initial.id}`);
         router.refresh();
       } else {
-        const r = await api<{ id: string; driverLink: string; sms: SmsResult | null }>("/api/loads", { method: "POST", json: { ...body, sendInvite } });
+        const r = await api<{ id: string; driverLink: string | null; sms: SmsResult | null }>("/api/loads", { method: "POST", json: { ...body, trackingMode: mode, sendInvite } });
         setCreated({ ...r, reference: body.reference });
         window.scrollTo({ top: 0 });
       }
@@ -311,13 +321,17 @@ export function LoadForm({ initial, smsAvailable }: { initial?: LoadDetailDto; s
         <CardHeader>
           <div>
             <CardTitle>Load {created.reference} created</CardTitle>
-            <CardDescription>The driver&apos;s link is shown only now. You can make a new one later from the load page.</CardDescription>
+            <CardDescription>
+              {created.driverLink ? <>The driver&apos;s link is shown only now. You can make a new one later from the load page.</> : <>Tracking with {vehicles.find((v) => v.id === vehicleId)?.name ?? "the vehicle"}&apos;s tracker has started.</>}
+            </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3">
-          <SmsOutcome sms={created.sms} smsAvailable={smsAvailable} />
-          <CopyLink link={created.driverLink} label="Driver link" />
-        </CardContent>
+        {created.driverLink && (
+          <CardContent className="grid gap-3">
+            <SmsOutcome sms={created.sms} smsAvailable={smsAvailable} />
+            <CopyLink link={created.driverLink} label="Driver link" />
+          </CardContent>
+        )}
         <CardFooter>
           <Button variant="secondary" onClick={() => window.location.assign("/loads/new")}>
             Create another
@@ -338,6 +352,39 @@ export function LoadForm({ initial, smsAvailable }: { initial?: LoadDetailDto; s
           <CardTitle>Load and driver</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
+          <fieldset className="m-0 grid gap-2 border-0 p-0 sm:col-span-2">
+            <legend className="mb-1 p-0 text-sm font-medium">Track with</legend>
+            <div className="flex flex-wrap gap-2" role="radiogroup">
+              {([
+                ["phone", "Driver's phone", "The driver gets a link and accepts."],
+                ["vehicle", "One of our vehicles", vehicles.length ? "Its RIO tracker reports the location." : "No vehicles with a tracker yet."]
+              ] as const).map(([value, label, hint]) => (
+                <label
+                  key={value}
+                  className={`flex min-w-56 flex-1 cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm ${mode === value ? "border-primary bg-primary-soft/50" : "border-border"} ${initial || (value === "vehicle" && !vehicles.length) ? "cursor-not-allowed opacity-70" : ""}`}
+                >
+                  <input type="radio" name="trackingMode" value={value} checked={mode === value} disabled={Boolean(initial) || (value === "vehicle" && !vehicles.length)} onChange={() => setMode(value)} className="mt-0.5 accent-primary" />
+                  <span>
+                    <span className="block font-medium">{label}</span>
+                    <span className="text-xs text-muted-foreground">{hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {initial && <p className="m-0 text-xs text-muted-foreground">How a load is tracked can&apos;t be changed after it is created.</p>}
+          </fieldset>
+          {mode === "vehicle" && (
+            <Field id="vehicleId" label="Vehicle" required className="sm:col-span-2">
+              <Select id="vehicleId" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>
+                <option value="">Choose a vehicle…</option>
+                {vehicles.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           <Field id="reference" label="Load number" required>
             <Input id="reference" name="reference" required maxLength={40} defaultValue={initial?.reference} placeholder="L-10432" autoFocus={!initial} />
           </Field>
@@ -347,8 +394,8 @@ export function LoadForm({ initial, smsAvailable }: { initial?: LoadDetailDto; s
           <Field id="driverName" label="Driver name">
             <Input id="driverName" name="driverName" maxLength={80} defaultValue={initial?.driverName ?? ""} autoComplete="off" />
           </Field>
-          <Field id="driverPhone" label="Driver mobile" required description="The tracking link goes to this number.">
-            <Input id="driverPhone" name="driverPhone" type="tel" required maxLength={30} defaultValue={initial?.driverPhone ?? ""} placeholder="(416) 555-0123" autoComplete="off" />
+          <Field id="driverPhone" label="Driver mobile" required={mode === "phone"} description={mode === "phone" ? "The tracking link goes to this number." : "Optional, so your team can call the driver."}>
+            <Input id="driverPhone" name="driverPhone" type="tel" required={mode === "phone"} maxLength={30} defaultValue={initial?.driverPhone ?? ""} placeholder="(416) 555-0123" autoComplete="off" />
           </Field>
           <Field id="notes" label="Notes" className="sm:col-span-2" description="Only your team sees notes.">
             <Textarea id="notes" name="notes" maxLength={1000} defaultValue={initial?.notes ?? ""} rows={2} />
@@ -369,8 +416,8 @@ export function LoadForm({ initial, smsAvailable }: { initial?: LoadDetailDto; s
       </div>
       <Card>
         <CardFooter className="justify-between border-t-0">
-          {initial ? (
-            <span className="text-sm text-muted-foreground">Changes apply to tracking right away.</span>
+          {initial || mode === "vehicle" ? (
+            <span className="text-sm text-muted-foreground">{initial ? "Changes apply to tracking right away." : "Tracking starts as soon as you create the load."}</span>
           ) : (
             <label className="flex items-center gap-2 text-sm">
               <Checkbox checked={sendInvite} disabled={!smsAvailable} onChange={(e) => setSendInvite(e.target.checked)} />

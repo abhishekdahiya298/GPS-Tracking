@@ -11,6 +11,24 @@ A broker tracks a shipment through the driver's phone, with the driver's consent
 5. **ETA**: straight line × 1.3 at 80 km/h to the next stop; late when more than 15 minutes after the appointment. Labelled as an estimate.
 6. **Shipper link** (`/track#token`): status, ETA, appointments and last position only — never driver name, phone, carrier or notes. Making a new one turns the old off.
 
+## Tracking with your own RIO tracker
+
+Choose **Track with → One of our vehicles** when the load is hauled by one of the organization's own vehicles with a RIO tracker. There is no driver link or consent step: tracking starts when the load is created, from the tracker's current position. Every new tracker position (GPS webhook) moves the status the same way phone positions do, and the load's trail is the vehicle's own track from creation to the end of the load. The vehicle can be changed while the load is active; how a load is tracked cannot.
+
+## Alerts
+
+Loads raise alerts in the normal Alerts list (no rule needed), named after the load ("Load L-123 …") and linking to the load page:
+
+| Alert | When | Email | Phone push |
+|---|---|---|---|
+| Load late | ETA to the next stop is more than 15 min past its appointment; once per stop | yes | yes |
+| Load: no location | Tracking (not paused) with no position for 30 min (counted from acceptance until the first one); again only after a new position | yes | yes |
+| Load: driver paused | The driver tapped Stop sharing | yes | yes |
+| Load arrived | Arrived at pickup or delivery | no | yes |
+| Load delivered | Delivered automatically on leaving the delivery | no | yes |
+
+Emails go to Org admins, Fleet managers and Dispatchers. Phones get them when their "loads" choice is on (default on). The late / no-signal check runs every minute on one server process (advisory lock), with the other schedulers.
+
 ## Rules
 
 - Positions are accepted only between accepting and the load ending, while sharing is on, within 24 h and ±2 min of clock slack. Repeats are ignored (`load_pings` unique on load + time).

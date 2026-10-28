@@ -1,6 +1,6 @@
 "use client";
 import { isLoadEnded } from "@rio-gps/core/loads";
-import { CheckCircle2, Link2, MoreHorizontal, Pencil, Phone, Send, Share2, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, Link2, MoreHorizontal, Pencil, Phone, Send, Share2, Trash2, Truck, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -134,7 +134,7 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
 
   const actions = canWrite && (
     <>
-      {!ended && (
+      {!ended && load.trackingMode === "phone" && (
         <Button variant="secondary" onClick={() => setConfirm("driver-link")} >
           <Send aria-hidden="true" /> Driver link
         </Button>
@@ -202,7 +202,9 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
       )}
       {load.stale && !load.sharingStopped && (
         <Alert tone="warning" className="mb-4" title="No location in the last 30 minutes.">
-          The driver&apos;s page may be closed or their phone offline. Positions sent while offline arrive when they reconnect.
+          {load.trackingMode === "vehicle"
+            ? "The vehicle's tracker hasn't reported. It may be parked with the engine off, or out of coverage."
+            : "The driver's page may be closed or their phone offline. Positions sent while offline arrive when they reconnect."}
         </Alert>
       )}
 
@@ -248,10 +250,20 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
 
           <Card>
             <CardContent className="grid gap-1 text-sm">
+              {load.vehicle && (
+                <p className="m-0 mb-1 flex items-center gap-1.5">
+                  <Truck className="size-4 text-muted-foreground" aria-hidden="true" />
+                  <span>
+                    Tracked by <span className="font-medium">{load.vehicle.name}</span>&apos;s RIO tracker
+                  </span>
+                </p>
+              )}
               <p className="m-0 font-medium">{load.driverName ?? "Driver"}</p>
-              <a href={`tel:${load.driverPhone}`} className="inline-flex w-fit items-center gap-1.5 text-primary no-underline hover:underline">
-                <Phone className="size-3.5" aria-hidden="true" /> {load.driverPhone}
-              </a>
+              {load.driverPhone && (
+                <a href={`tel:${load.driverPhone}`} className="inline-flex w-fit items-center gap-1.5 text-primary no-underline hover:underline">
+                  <Phone className="size-3.5" aria-hidden="true" /> {load.driverPhone}
+                </a>
+              )}
               {load.carrierName && <p className="m-0 text-muted-foreground">{load.carrierName}</p>}
               {load.notes && <p className="m-0 mt-2 whitespace-pre-wrap border-t border-border pt-2 text-muted-foreground">{load.notes}</p>}
             </CardContent>

@@ -25,6 +25,8 @@ export const pushDevices = pgTable(
     zones: boolean("zones").notNull().default(true),
     offline: boolean("offline").notNull().default(true),
     maintenance: boolean("maintenance").notNull().default(false),
+    /** Load problems (late, no signal, driver paused) and arrivals. */
+    loads: boolean("loads").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow()
   },

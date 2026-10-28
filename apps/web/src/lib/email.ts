@@ -155,7 +155,12 @@ const ALERT_LABEL: Record<string, string> = {
   speeding: "is speeding",
   ignition_on: "ignition turned on",
   ignition_off: "ignition turned off",
-  device_offline: "device went offline"
+  device_offline: "device went offline",
+  load_late: "is running late",
+  load_no_signal: "has no recent location",
+  load_paused: "driver paused location sharing",
+  load_arrived: "arrived",
+  load_delivered: "was delivered"
 };
 
 export function alertEmail(
@@ -168,9 +173,12 @@ export function alertEmail(
   time: { timeZone: string; timeFormat: TimeFormat } = { timeZone: "UTC", timeFormat: "24h" }
 ): EmailMessage {
   const u = units(unitSystem);
-  const who = ev.vehicleName ?? "A device";
+  const ref = typeof ev.details?.reference === "string" ? ev.details.reference : null;
+  const who = ref ? `Load ${ref}` : (ev.vehicleName ?? "A device");
   const what = ALERT_LABEL[ev.type] ?? ev.type;
   const extra: string[] = [];
+  if (ev.details?.stop) extra.push(`At: ${String(ev.details.stop)}`);
+  if (typeof ev.details?.lateByMinutes === "number") extra.push(`About ${ev.details.lateByMinutes} min after the ${String(ev.details.target ?? "")} appointment`);
   if (ev.details?.geofence) extra.push(`Zone: ${String(ev.details.geofence)}`);
   if (typeof ev.details?.speedKph === "number") extra.push(`Speed: ${u.fmtSpeed(ev.details.speedKph)} (limit ${u.fmtSpeed(Number(ev.details.limitKph))})`);
   const when = dateFormatter(time.timeZone, time.timeFormat).full(ev.occurredAt); // e.g. "Sep 25, 2026, 3:52:07 PM EDT"
@@ -181,9 +189,9 @@ export function alertEmail(
     subject: `RIO GPS alert: ${who} ${what}`,
     html: layout(
       `${who} ${what}`,
-      `<p>Hi ${esc(name || "there")},</p><p>Rule <strong>${esc(ev.ruleName)}</strong> fired at ${esc(when)}.</p>${extra.map((e) => `<p>${esc(e)}</p>`).join("")}${map ? `<p><a href="${esc(map)}">View location</a></p>` : ""}${button(alertsUrl, "Open alerts")}`
+      `<p>Hi ${esc(name || "there")},</p><p>${ref ? `${esc(who)} ${esc(what)} at ${esc(when)}.` : `Rule <strong>${esc(ev.ruleName)}</strong> fired at ${esc(when)}.`}</p>${extra.map((e) => `<p>${esc(e)}</p>`).join("")}${map ? `<p><a href="${esc(map)}">View location</a></p>` : ""}${button(alertsUrl, ref ? "Open load" : "Open alerts")}`
     ),
-    text: `${who} ${what}\nRule: ${ev.ruleName}\nTime: ${when}\n${extra.join("\n")}${map ? `\nLocation: ${map}` : ""}\n\n${alertsUrl}`
+    text: `${who} ${what}\n${ref ? "" : `Rule: ${ev.ruleName}\n`}Time: ${when}\n${extra.join("\n")}${map ? `\nLocation: ${map}` : ""}\n\n${alertsUrl}`
   };
 }
 
