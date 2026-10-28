@@ -8,7 +8,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
  * while the tab is visible.
  */
 import { circleRing } from "@rio-gps/core/geo";
-import { AlertTriangle, ArrowRight, ChevronUp, ExternalLink, List, Maximize2, Package, PackagePlus, PanelLeftClose, PanelLeftOpen, Phone, Truck, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, ChevronUp, ExternalLink, Info, List, Maximize2, Package, PackagePlus, PanelLeftClose, PanelLeftOpen, Phone, Truck, X } from "lucide-react";
 import maplibregl, { type GeoJSONSource, type Map as MlMap, type MapLayerMouseEvent, type Marker } from "maplibre-gl";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -28,6 +28,16 @@ const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 const REFRESH_MS = 20_000;
 const CLUSTER_MAX_ZOOM = 7;
 const FALLBACK = { center: [-85, 43] as [number, number], zoom: 4 };
+const LEGEND_KEY = "rio.loadsMap.legend";
+
+/**
+ * Room around fitted loads so no dot ends up under the controls (top), the legend
+ * (bottom-left, desktop) or the bottom sheet (phones).
+ */
+function fitPadding(base: number, legendOpen: boolean) {
+  if (typeof window === "undefined" || window.innerWidth < 768) return { top: base, right: base, left: base, bottom: 170 };
+  return { top: base, right: base, left: legendOpen ? base + 150 : base, bottom: base };
+}
 
 type Filter = "all" | "moving" | "stopped" | "attention" | "waiting";
 const FILTERS: { value: Filter; label: string }[] = [
@@ -68,6 +78,24 @@ export function LoadsMap({ initial, canWrite }: { initial: LoadSummaryDto[]; can
   const [sheetOpen, setSheetOpen] = useState(false);
   const [refreshError, setRefreshError] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // Legend open by default; the choice is remembered in this browser.
+  const [legendOpen, setLegendOpen] = useState(true);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(LEGEND_KEY) === "closed") setLegendOpen(false);
+    } catch {
+      // storage unavailable: keep the default
+    }
+  }, []);
+  const toggleLegend = () =>
+    setLegendOpen((v) => {
+      try {
+        localStorage.setItem(LEGEND_KEY, v ? "closed" : "open");
+      } catch {
+        // ignore
+      }
+      return !v;
+    });
   const mapDiv = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
   const stopMarkers = useRef<Marker[]>([]);
@@ -222,9 +250,9 @@ export function LoadsMap({ initial, canWrite }: { initial: LoadSummaryDto[]; can
       if (!m || pts.length === 0) return;
       const b = new maplibregl.LngLatBounds();
       pts.forEach((p) => b.extend(p));
-      m.fitBounds(b, { padding: 70, maxZoom: 11, duration: animate ? 600 : 0 });
+      m.fitBounds(b, { padding: fitPadding(70, legendOpen), maxZoom: 11, duration: animate ? 600 : 0 });
     },
-    [rows]
+    [rows, legendOpen]
   );
   useEffect(() => {
     if (loaded && !fitted.current && rows.some((r) => r.load.lastPosition)) {
@@ -276,7 +304,7 @@ export function LoadsMap({ initial, canWrite }: { initial: LoadSummaryDto[]; can
     const b = new maplibregl.LngLatBounds();
     if (r.load.lastPosition) b.extend([r.load.lastPosition.longitude, r.load.lastPosition.latitude]);
     b.extend([r.load.pickup.longitude, r.load.pickup.latitude]).extend([r.load.delivery.longitude, r.load.delivery.latitude]);
-    m.fitBounds(b, { padding: 80, maxZoom: 12, duration: 600 });
+    m.fitBounds(b, { padding: fitPadding(80, legendOpen), maxZoom: 12, duration: 600 });
   }
 
   // ---- panel ----
@@ -459,20 +487,34 @@ export function LoadsMap({ initial, canWrite }: { initial: LoadSummaryDto[]; can
             <Maximize2 /> Fit all
           </Button>
         </div>
-        {/* Legend */}
-        <div className="pointer-events-none absolute bottom-8 left-3 z-[1] hidden rounded-lg border border-border bg-background/95 px-3 py-2 text-xs shadow-card md:block">
-          <ul className="m-0 grid list-none gap-1 p-0">
-            {(["moving", "stopped", "paused", "no_signal"] as const).map((k) => (
-              <li key={k} className="flex items-center gap-2">
-                <span aria-hidden="true" className="size-2.5 rounded-full border-2 border-white shadow-sm" style={{ background: MOTION_META[k].color }} />
-                {MOTION_META[k].label}
-              </li>
-            ))}
-            <li className="flex items-center gap-2">
-              <span aria-hidden="true" className="size-2.5 rounded-full border-2 border-danger bg-danger-soft" />
-              Needs attention
-            </li>
-          </ul>
+        {/* Legend (desktop): collapsible to a small button so it never hides a load for long. */}
+        <div className="absolute bottom-8 left-3 z-[1] hidden md:block">
+          {legendOpen ? (
+            <div className="rounded-lg border border-border bg-background/95 px-3 py-2 text-xs shadow-card">
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <span className="font-semibold">Legend</span>
+                <button type="button" onClick={toggleLegend} aria-label="Hide legend" className="grid size-5 cursor-pointer place-items-center rounded border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground">
+                  <X className="size-3.5" aria-hidden="true" />
+                </button>
+              </div>
+              <ul className="m-0 grid list-none gap-1 p-0">
+                {(["moving", "stopped", "paused", "no_signal"] as const).map((k) => (
+                  <li key={k} className="flex items-center gap-2">
+                    <span aria-hidden="true" className="size-2.5 rounded-full border-2 border-white shadow-sm" style={{ background: MOTION_META[k].color }} />
+                    {MOTION_META[k].label}
+                  </li>
+                ))}
+                <li className="flex items-center gap-2">
+                  <span aria-hidden="true" className="size-2.5 rounded-full border-2 border-danger bg-danger-soft" />
+                  Needs attention
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <Button size="sm" variant="secondary" onClick={toggleLegend} aria-label="Show legend">
+              <Info /> Legend
+            </Button>
+          )}
         </div>
         {refreshError && (
           <div className="absolute inset-x-3 top-14 z-[1] md:right-14">
