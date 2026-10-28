@@ -13,9 +13,15 @@
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		Permissions-Policy "geolocation=(), camera=(), microphone=()"
 		-Server
 	}
+
+	# Location is off for every page except the driver's load-tracking page (/d), which asks the
+	# driver for consent before using it. The two matchers never overlap.
+	@driverPage path /d
+	header @driverPage Permissions-Policy "geolocation=(self), camera=(), microphone=()"
+	@notDriverPage not path /d
+	header @notDriverPage Permissions-Policy "geolocation=(), camera=(), microphone=()"
 
 	# Machine-to-machine ingest is internal only: Traccar reaches it directly at
 	# http://web:3000 on the compose network. Never expose it publicly.
