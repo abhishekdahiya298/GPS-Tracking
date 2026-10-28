@@ -13,7 +13,7 @@ import {
   type LoadStatus
 } from "@rio-gps/core/loads";
 import { getDb, schema } from "@rio-gps/db";
-import { and, asc, desc, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
 import { getServerEnv } from "./env";
@@ -85,20 +85,33 @@ const StopSchema = z.object({
     .transform((v) => (v ? new Date(v) : null))
 });
 
-export const LoadInputSchema = z.object({
+const LoadFields = z.object({
   reference: z.string().trim().min(1).max(40),
   carrierName: optionalText(120),
   driverName: optionalText(80),
-  driverPhone: PhoneSchema,
+  driverPhone: PhoneSchema.nullish().transform((v) => v ?? null),
   notes: optionalText(1_000),
   pickup: StopSchema,
-  delivery: StopSchema,
+  delivery: StopSchema
+});
+
+/**
+ * phone: tracked through the driver's phone (driver link, consent).
+ * vehicle: tracked by one of the organization's own vehicles' RIO tracker; starts at once.
+ */
+export const LoadInputSchema = LoadFields.extend({
+  trackingMode: z.enum(["phone", "vehicle"]).default("phone"),
+  vehicleId: z.string().uuid().nullish().transform((v) => v ?? null),
   /** Text the driver the invite now (when SMS is set up). */
   sendInvite: z.boolean().default(true)
+}).superRefine((v, c) => {
+  if (v.trackingMode === "phone" && !v.driverPhone) c.addIssue({ code: z.ZodIssueCode.custom, path: ["driverPhone"], message: "Enter the driver's mobile number" });
+  if (v.trackingMode === "vehicle" && !v.vehicleId) c.addIssue({ code: z.ZodIssueCode.custom, path: ["vehicleId"], message: "Choose the vehicle that hauls this load" });
 });
 export type LoadInput = z.infer<typeof LoadInputSchema>;
 
-export const LoadPatchSchema = LoadInputSchema.omit({ sendInvite: true })
+/** How a load is tracked is fixed at creation; a vehicle-mode load can switch vehicles. */
+export const LoadPatchSchema = LoadFields.extend({ vehicleId: z.string().uuid() })
   .partial()
   .refine((v) => Object.keys(v).length > 0, "Nothing to update");
 
@@ -121,7 +134,9 @@ export interface LoadSummaryDto {
   status: LoadStatus;
   carrierName: string | null;
   driverName: string | null;
-  driverPhone: string;
+  driverPhone: string | null;
+  trackingMode: "phone" | "vehicle";
+  vehicle: { id: string; name: string } | null;
   pickup: LoadStopDto;
   delivery: LoadStopDto;
   lastPosition: { latitude: number; longitude: number; accuracyM: number | null; speedKph: number | null; at: string } | null;
@@ -166,7 +181,7 @@ const stopDto = (r: LoadRow, k: "pickup" | "delivery"): LoadStopDto => ({
   appointmentAt: r[`${k}AppointmentAt`]?.toISOString() ?? null
 });
 
-export function toLoadSummary(r: LoadRow, now = new Date()): LoadSummaryDto {
+export function toLoadSummary(r: LoadRow, now = new Date(), vehicleName: string | null = null): LoadSummaryDto {
   const last =
     r.lastLat !== null && r.lastLon !== null && r.lastPositionAt
       ? { latitude: r.lastLat, longitude: r.lastLon, accuracyM: r.lastAccuracyM, speedKph: r.lastSpeedKph, at: r.lastPositionAt.toISOString() }
@@ -181,11 +196,14 @@ export function toLoadSummary(r: LoadRow, now = new Date()): LoadSummaryDto {
     carrierName: r.carrierName,
     driverName: r.driverName,
     driverPhone: r.driverPhone,
+    trackingMode: r.trackingMode,
+    vehicle: r.vehicleId ? { id: r.vehicleId, name: vehicleName ?? "Vehicle" } : null,
     pickup: stopDto(r, "pickup"),
     delivery: stopDto(r, "delivery"),
     lastPosition: last,
     sharingStopped: r.sharingStoppedAt !== null && isLoadTracking(r.status),
-    stale: isLoadTracking(r.status) && r.sharingStoppedAt === null && isLoadPositionStale(r.lastPositionAt, now),
+    // Counted from acceptance until the first position arrives.
+    stale: isLoadTracking(r.status) && r.sharingStoppedAt === null && isLoadPositionStale(r.lastPositionAt ?? r.acceptedAt ?? r.createdAt, now),
     eta: eta ? { target: eta.target, at: eta.eta.toISOString(), distanceM: eta.distanceM, lateByMinutes: eta.lateByMinutes, late: eta.late } : null,
     hasShipperLink: r.shipperTokenHash !== null,
     createdAt: r.createdAt.toISOString(),
@@ -200,18 +218,19 @@ export async function listLoads(organizationId: string, opts: { filter?: (typeof
   const q = opts.q?.trim().slice(0, 80);
   const like = q ? `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
   const rows = await getDb()
-    .select()
+    .select({ l, vehicleName: schema.vehicles.name })
     .from(l)
+    .leftJoin(schema.vehicles, and(eq(schema.vehicles.id, l.vehicleId), eq(schema.vehicles.organizationId, l.organizationId)))
     .where(
       and(
         eq(l.organizationId, organizationId),
         opts.filter === "ended" ? inArray(l.status, ENDED) : opts.filter === "all" ? undefined : notInArray(l.status, ENDED),
-        like ? or(ilike(l.reference, like), ilike(l.driverName, like), ilike(l.carrierName, like), ilike(l.pickupAddress, like), ilike(l.deliveryAddress, like), ilike(l.driverPhone, like)) : undefined
+        like ? or(ilike(l.reference, like), ilike(l.driverName, like), ilike(l.carrierName, like), ilike(l.pickupAddress, like), ilike(l.deliveryAddress, like), ilike(l.driverPhone, like), ilike(schema.vehicles.name, like)) : undefined
       )
     )
     .orderBy(desc(l.createdAt))
     .limit(300);
-  return rows.map((r) => toLoadSummary(r, now));
+  return rows.map((r) => toLoadSummary(r.l, now, r.vehicleName));
 }
 
 async function loadRow(organizationId: string, id: string): Promise<LoadRow> {
@@ -229,23 +248,35 @@ export async function getLoad(organizationId: string, id: string, now = new Date
   const db = getDb();
   const e = schema.loadEvents;
   const p = schema.loadPings;
-  const [events, pings, creator] = await Promise.all([
+  const h = schema.locationHistory;
+  const trailFrom = r.acceptedAt ?? r.createdAt;
+  const trailTo = r.endedAt;
+  const [events, pings, creator, vehicle] = await Promise.all([
     db
       .select({ type: e.type, at: e.at, latitude: e.latitude, longitude: e.longitude, actorName: schema.users.name })
       .from(e)
       .leftJoin(schema.users, eq(schema.users.id, e.actorUserId))
       .where(and(eq(e.loadId, r.id), eq(e.organizationId, organizationId)))
       .orderBy(asc(e.at), asc(e.id)),
-    db
-      .select({ lat: p.latitude, lon: p.longitude, t: p.recordedAt })
-      .from(p)
-      .where(and(eq(p.loadId, r.id), eq(p.organizationId, organizationId)))
-      .orderBy(desc(p.recordedAt))
-      .limit(TRAIL_LIMIT),
-    r.createdBy ? db.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, r.createdBy)) : Promise.resolve([])
+    // Phone loads: the positions the driver sent. Vehicle loads: the vehicle's own track while the load ran.
+    r.trackingMode === "vehicle" && r.vehicleId
+      ? db
+          .select({ lat: h.latitude, lon: h.longitude, t: h.recordedAt })
+          .from(h)
+          .where(and(eq(h.vehicleId, r.vehicleId), eq(h.organizationId, organizationId), gte(h.recordedAt, trailFrom), trailTo ? lte(h.recordedAt, trailTo) : undefined))
+          .orderBy(desc(h.recordedAt))
+          .limit(TRAIL_LIMIT)
+      : db
+          .select({ lat: p.latitude, lon: p.longitude, t: p.recordedAt })
+          .from(p)
+          .where(and(eq(p.loadId, r.id), eq(p.organizationId, organizationId)))
+          .orderBy(desc(p.recordedAt))
+          .limit(TRAIL_LIMIT),
+    r.createdBy ? db.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, r.createdBy)) : Promise.resolve([]),
+    r.vehicleId ? db.select({ name: schema.vehicles.name }).from(schema.vehicles).where(and(eq(schema.vehicles.id, r.vehicleId), eq(schema.vehicles.organizationId, organizationId))) : Promise.resolve([])
   ]);
   return {
-    ...toLoadSummary(r, now),
+    ...toLoadSummary(r, now, vehicle[0]?.name ?? null),
     notes: r.notes,
     inviteSentAt: r.inviteSentAt?.toISOString() ?? null,
     acceptedAt: r.acceptedAt?.toISOString() ?? null,
@@ -290,6 +321,7 @@ async function addEvent(organizationId: string, loadId: string, type: LoadEventT
 }
 
 async function textInvite(ctx: TenantContext, row: Pick<LoadRow, "id" | "reference" | "driverPhone">, link: string): Promise<SmsResult> {
+  if (!row.driverPhone) return { sent: false, reason: "rejected", message: "This load has no driver mobile number." };
   await assertRateLimit("load_invite", row.id, INVITES_PER_LOAD_PER_HOUR, 3_600, "Too many invites for this load in the last hour. Copy the link and send it yourself.");
   const result = await sendSms(row.driverPhone, inviteText(await orgName(ctx.organizationId), row.reference, link));
   if (result.sent) {
@@ -302,14 +334,35 @@ async function textInvite(ctx: TenantContext, row: Pick<LoadRow, "id" | "referen
 
 export interface CreatedLoad {
   id: string;
-  /** Shown once. */
-  driverLink: string;
+  /** Shown once. null for a load tracked by one of the organization's vehicles. */
+  driverLink: string | null;
   /** null when no text was attempted (not requested or SMS not set up). */
   sms: SmsResult | null;
 }
 
+/** The vehicle (same organization) and its tracker's latest fix, if any. */
+async function vehicleForLoad(organizationId: string, vehicleId: string) {
+  const db = getDb();
+  const [v] = await db.select({ id: schema.vehicles.id }).from(schema.vehicles).where(and(eq(schema.vehicles.id, vehicleId), eq(schema.vehicles.organizationId, organizationId)));
+  if (!v) throw new ValidationError("That vehicle was not found");
+  const a = schema.deviceAssignments;
+  const cl = schema.currentLocations;
+  const [loc] = await db
+    .select({ latitude: cl.latitude, longitude: cl.longitude, speedKph: cl.speedKph, recordedAt: cl.recordedAt })
+    .from(a)
+    .innerJoin(cl, and(eq(cl.deviceId, a.deviceId), eq(cl.organizationId, organizationId)))
+    .where(and(eq(a.vehicleId, vehicleId), eq(a.organizationId, organizationId), isNull(a.unassignedAt)))
+    .orderBy(desc(cl.recordedAt))
+    .limit(1);
+  return { loc: loc ?? null };
+}
+
 export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Meta, now = new Date()): Promise<CreatedLoad> {
   const token = newToken();
+  const byVehicle = input.trackingMode === "vehicle";
+  // A vehicle-mode load is tracked from the start (the organization's own tracker, no consent step);
+  // it starts from the tracker's current fix so the map isn't empty until the next report.
+  const vehicle = byVehicle ? await vehicleForLoad(ctx.organizationId, input.vehicleId!) : null;
   let id: string;
   try {
     const [row] = await getDb()
@@ -320,6 +373,10 @@ export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Met
         carrierName: input.carrierName,
         driverName: input.driverName,
         driverPhone: input.driverPhone,
+        trackingMode: input.trackingMode,
+        vehicleId: byVehicle ? input.vehicleId : null,
+        ...(byVehicle ? { status: "tracking" as const, acceptedAt: now } : {}),
+        ...(vehicle?.loc ? { lastLat: vehicle.loc.latitude, lastLon: vehicle.loc.longitude, lastSpeedKph: vehicle.loc.speedKph, lastPositionAt: vehicle.loc.recordedAt } : {}),
         notes: input.notes,
         ...(stopColumns("pickup", input.pickup) as object),
         ...(stopColumns("delivery", input.delivery) as object),
@@ -336,6 +393,7 @@ export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Met
   }
   await addEvent(ctx.organizationId, id, "created", ctx.userId, now);
   await writeAudit({ action: "load.created", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, metadata: { reference: input.reference }, ...meta });
+  if (byVehicle) return { id, driverLink: null, sms: null };
   const link = driverLink(token);
   const sms = input.sendInvite && smsConfigured() ? await textInvite(ctx, { id, reference: input.reference, driverPhone: input.driverPhone }, link) : null;
   return { id, driverLink: link, sms };
@@ -344,7 +402,13 @@ export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Met
 export async function updateLoad(ctx: TenantContext, id: string, patch: z.infer<typeof LoadPatchSchema>, meta: Meta, now = new Date()): Promise<void> {
   const row = await loadRow(ctx.organizationId, id);
   if (isLoadEnded(row.status)) throw new ValidationError("This load has ended and can no longer be changed");
+  if (row.trackingMode === "phone" && patch.driverPhone === null) throw new ValidationError("A load tracked by phone needs the driver's mobile number");
+  if (patch.vehicleId !== undefined) {
+    if (row.trackingMode !== "vehicle") throw new ValidationError("This load is tracked by the driver's phone");
+    await vehicleForLoad(ctx.organizationId, patch.vehicleId);
+  }
   const set: Record<string, unknown> = { updatedAt: now };
+  if (patch.vehicleId !== undefined) set.vehicleId = patch.vehicleId;
   for (const k of ["reference", "carrierName", "driverName", "driverPhone", "notes"] as const) if (patch[k] !== undefined) set[k] = patch[k];
   if (patch.pickup) Object.assign(set, stopColumns("pickup", patch.pickup));
   if (patch.delivery) Object.assign(set, stopColumns("delivery", patch.delivery));
@@ -369,6 +433,7 @@ export async function updateLoad(ctx: TenantContext, id: string, patch: z.infer<
 export async function reissueDriverLink(ctx: TenantContext, id: string, opts: { send: boolean }, meta: Meta): Promise<{ driverLink: string; sms: SmsResult | null }> {
   const row = await loadRow(ctx.organizationId, id);
   if (isLoadEnded(row.status)) throw new ValidationError("This load has ended");
+  if (row.trackingMode !== "phone") throw new ValidationError("This load is tracked by a vehicle's tracker, not the driver's phone");
   const token = newToken();
   await getDb()
     .update(schema.loads)

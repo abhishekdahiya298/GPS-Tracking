@@ -2,6 +2,7 @@ import { locationChannel } from "@rio-gps/core";
 import { TraccarWebhookAuthError, TraccarWebhookPayloadError, parseWebhookPosition, verifyWebhookSecret } from "@rio-gps/traccar-client";
 import { NextResponse } from "next/server";
 import { evaluateAlertsForPosition } from "@/lib/alerts";
+import { updateLoadsForDevicePosition } from "@/lib/load-tracking";
 import { ingestPosition } from "@/lib/ingest";
 import { countIngest } from "@/lib/ingest-stats";
 import { toLiveEvent } from "@/lib/locations";
@@ -93,6 +94,9 @@ export async function POST(request: Request) {
     ignition: position.ignition,
     recordedAt: position.recordedAt
   });
+
+  // Loads followed by this tracker's vehicle (vehicle mode). Never fails the ingest.
+  await updateLoadsForDevicePosition(device, { latitude: position.latitude, longitude: position.longitude, accuracyM: null, speedKph: position.speedKph, at: position.recordedAt });
 
   return NextResponse.json({ status: "ok" });
 }

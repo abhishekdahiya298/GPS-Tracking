@@ -5,9 +5,15 @@ import { AppError } from "@/lib/errors";
 import { getLoad } from "@/lib/loads";
 import { getRequestContext } from "@/lib/request-context";
 import { smsConfigured } from "@/lib/sms";
+import { listVehicles } from "@/lib/vehicles";
 import { LoadForm } from "../../load-form";
 
 export const dynamic = "force-dynamic";
+
+/** The organization's vehicles with a tracker, for "track with one of our vehicles". */
+async function loadVehicleOptions(organizationId: string) {
+  return (await listVehicles(organizationId)).filter((v) => v.devices.length > 0).map((v) => ({ id: v.id, name: v.name }));
+}
 export const metadata = { title: "Edit load · RIO GPS" };
 
 export default async function EditLoadPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,7 +29,7 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
   return (
     <>
       <PageHeader title={`Edit load ${load.reference}`} breadcrumbs={[{ label: "Loads", href: "/loads" }, { label: load.reference, href: `/loads/${id}` }, { label: "Edit" }]} />
-      <LoadForm initial={load} smsAvailable={smsConfigured()} />
+      <LoadForm initial={load} smsAvailable={smsConfigured()} vehicles={await loadVehicleOptions(rc.ctx.organizationId)} />
     </>
   );
 }

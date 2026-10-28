@@ -6,6 +6,7 @@ import {
   evaluatePosition,
   insideGeofence,
   type AlertState,
+  type AlertEventType,
   type AlertType,
   type GeofenceShape,
   type TenantContext
@@ -149,7 +150,7 @@ export async function listRules(organizationId: string): Promise<AlertRuleDto[]>
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
-    type: r.type,
+    type: r.type as AlertType, // rules only ever hold rule types (see AlertRuleInputSchema)
     vehicleId: r.vehicleId,
     geofenceId: r.geofenceId,
     speedKph: r.speedKph,
@@ -211,7 +212,7 @@ export async function deleteRule(ctx: TenantContext, id: string, meta: Meta) {
 
 export interface AlertEventDto {
   id: number;
-  type: AlertType;
+  type: AlertEventType;
   ruleName: string;
   deviceId: string | null;
   vehicleId: string | null;
@@ -276,7 +277,7 @@ export async function acknowledgeEvents(ctx: TenantContext, ids: number[] | "all
 
 // ---------- evaluation ----------
 
-interface FiredEvent {
+export interface FiredEvent {
   row: typeof schema.alertEvents.$inferSelect;
   rule: { id: string; name: string; notifyEmail: boolean };
 }
@@ -337,7 +338,7 @@ export async function evaluateAlertsForPosition(device: { id: string; organizati
       const inside = fence ? insideGeofence([point.longitude, point.latitude], toShape(fence)) : undefined;
       const ev = await db.transaction(async (tx) => {
         const prev = await lockState(tx, rule.id, device.id);
-        const r = evaluatePosition(rule.type, { speedKph: rule.speedKph ?? undefined }, prev, { speedKph: point.speedKph, ignition: point.ignition, inside });
+        const r = evaluatePosition(rule.type as AlertType, { speedKph: rule.speedKph ?? undefined }, prev, { speedKph: point.speedKph, ignition: point.ignition, inside });
         await saveState(tx, rule.id, device.id, r.next);
         if (!r.fire) return null;
         const [row] = await tx
@@ -420,7 +421,7 @@ export async function runOfflineCheck(now = new Date()): Promise<number> {
 const EMAIL_THROTTLE_MS = 5 * 60_000;
 
 /** After commit: live push to the org's SSE channel, then (throttled) email. */
-async function deliver(organizationId: string, fired: FiredEvent[]) {
+export async function deliver(organizationId: string, fired: FiredEvent[]) {
   if (fired.length === 0) return;
   const db = getDb();
   const vehicleIds = [...new Set(fired.map((f) => f.row.vehicleId).filter((v): v is string => Boolean(v)))];
@@ -436,9 +437,11 @@ async function deliver(organizationId: string, fired: FiredEvent[]) {
   }
 
   // Phones that registered for this kind of alert (no-op when none are registered).
+  // Load alerts are named after the load ("Load L-123 is running late").
+  const loadRef = (f: FiredEvent) => (typeof f.row.details?.reference === "string" ? `Load ${f.row.details.reference}` : null);
   await pushAlerts(
     organizationId,
-    fired.map((f) => ({ id: Number(f.row.id), type: f.row.type, vehicleName: f.row.vehicleId ? (names.get(f.row.vehicleId) ?? null) : null, ruleName: f.rule.name }))
+    fired.map((f) => ({ id: Number(f.row.id), type: f.row.type, vehicleName: loadRef(f) ?? (f.row.vehicleId ? (names.get(f.row.vehicleId) ?? null) : null), ruleName: f.rule.name }))
   );
 
   const toEmail = fired.filter((f) => f.rule.notifyEmail);
@@ -471,7 +474,8 @@ async function deliver(organizationId: string, fired: FiredEvent[]) {
       const dto = toEventDto(f.row, f.row.vehicleId ? (names.get(f.row.vehicleId) ?? null) : null);
       for (const r of recipients) {
         const time = effectiveTimePrefs({ timeZone: org?.timeZone ?? "UTC", timeFormat: org?.timeFormat ?? "12h" }, r);
-        await sendEmail(alertEmail(r.email, r.name, dto, `${appUrl}/alerts`, org?.unitSystem ?? "imperial", time)).catch(() => undefined);
+        const link = typeof f.row.details?.loadId === "string" ? `${appUrl}/loads/${f.row.details.loadId}` : `${appUrl}/alerts`;
+        await sendEmail(alertEmail(r.email, r.name, dto, link, org?.unitSystem ?? "imperial", time)).catch(() => undefined);
       }
     }
   } catch (err) {

@@ -259,7 +259,7 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
               {canMap && alertMapHref(detail) && (
                 <Button asChild variant="secondary">
                   <Link href={alertMapHref(detail)!}>
-                    <MapPinned /> Show track on map
+                    <MapPinned /> {typeof detail.details?.loadId === "string" ? "Open load" : "Show track on map"}
                   </Link>
                 </Button>
               )}

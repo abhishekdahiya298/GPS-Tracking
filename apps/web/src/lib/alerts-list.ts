@@ -1,5 +1,5 @@
 import { addDays, canonicalTimeZone, isValidTimeZone, startOfLocalDay } from "@rio-gps/core/timezones";
-import { ALERT_TYPES } from "@rio-gps/core";
+import { ALERT_TYPES, LOAD_ALERT_TYPES } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
 import { and, count, desc, eq, gte, ilike, isNotNull, isNull, lt, or, type SQL } from "drizzle-orm";
 import { z } from "zod";
@@ -18,7 +18,7 @@ export const AlertListQuery = z.object({
     .refine((n) => (PAGE_SIZES as readonly number[]).includes(n))
     .default(25),
   status: z.enum(["all", "unack", "ack"]).default("all"),
-  type: z.enum(["all", ...ALERT_TYPES]).default("all"),
+  type: z.enum(["all", ...ALERT_TYPES, ...LOAD_ALERT_TYPES]).default("all"),
   search: z.string().trim().max(100).default(""),
   /** Local calendar days (YYYY-MM-DD) interpreted in `tz`. */
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),

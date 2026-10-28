@@ -12,7 +12,7 @@ import { logger } from "./logger";
  *
  * Messages carry the vehicle name, what happened and the rule name: never a position.
  */
-export const PUSH_KINDS = ["speeding", "zones", "offline", "maintenance"] as const;
+export const PUSH_KINDS = ["speeding", "zones", "offline", "maintenance", "loads"] as const;
 export type PushKind = (typeof PUSH_KINDS)[number];
 
 const Token = z
@@ -26,7 +26,9 @@ export const PushDeviceInputSchema = z.object({
   speeding: z.boolean().default(true),
   zones: z.boolean().default(true),
   offline: z.boolean().default(true),
-  maintenance: z.boolean().default(false)
+  maintenance: z.boolean().default(false),
+  /** Load alerts (late, no signal, driver paused, arrivals). Older app versions don't send it. */
+  loads: z.boolean().default(true)
 });
 export const PushDeviceRemoveSchema = z.object({ token: Token });
 
@@ -37,12 +39,13 @@ export interface PushDeviceDto {
   zones: boolean;
   offline: boolean;
   maintenance: boolean;
+  loads: boolean;
   lastSeenAt: string;
 }
 
 /** Registers this phone for the caller, or updates its choices. A token belongs to one user at a time. */
 export async function registerPushDevice(ctx: TenantContext, input: z.infer<typeof PushDeviceInputSchema>): Promise<PushDeviceDto> {
-  const values = { organizationId: ctx.organizationId, userId: ctx.userId, platform: input.platform, speeding: input.speeding, zones: input.zones, offline: input.offline, maintenance: input.maintenance, lastSeenAt: new Date() };
+  const values = { organizationId: ctx.organizationId, userId: ctx.userId, platform: input.platform, speeding: input.speeding, zones: input.zones, offline: input.offline, maintenance: input.maintenance, loads: input.loads, lastSeenAt: new Date() };
   const [row] = await getDb()
     .insert(schema.pushDevices)
     .values({ token: input.token, ...values })
@@ -70,7 +73,7 @@ export async function removePushDevice(ctx: TenantContext, token: string): Promi
 }
 
 function toDto(r: typeof schema.pushDevices.$inferSelect): PushDeviceDto {
-  return { id: r.id, platform: r.platform, speeding: r.speeding, zones: r.zones, offline: r.offline, maintenance: r.maintenance, lastSeenAt: r.lastSeenAt.toISOString() };
+  return { id: r.id, platform: r.platform, speeding: r.speeding, zones: r.zones, offline: r.offline, maintenance: r.maintenance, loads: r.loads, lastSeenAt: r.lastSeenAt.toISOString() };
 }
 
 // ---------- sending ----------
@@ -117,6 +120,7 @@ export function pushKindForAlert(type: string): PushKind | null {
   if (type === "speeding") return "speeding";
   if (type === "geofence_enter" || type === "geofence_exit") return "zones";
   if (type === "device_offline") return "offline";
+  if (type.startsWith("load_")) return "loads";
   return null;
 }
 
@@ -132,7 +136,7 @@ export async function pushAlerts(organizationId: string, alerts: { id: number; t
     const db = getDb();
     const d = schema.pushDevices;
     const devices = await db
-      .select({ id: d.id, token: d.token, speeding: d.speeding, zones: d.zones, offline: d.offline, maintenance: d.maintenance })
+      .select({ id: d.id, token: d.token, speeding: d.speeding, zones: d.zones, offline: d.offline, maintenance: d.maintenance, loads: d.loads })
       .from(d)
       .innerJoin(schema.memberships, and(eq(schema.memberships.userId, d.userId), eq(schema.memberships.organizationId, d.organizationId)))
       .where(eq(d.organizationId, organizationId));

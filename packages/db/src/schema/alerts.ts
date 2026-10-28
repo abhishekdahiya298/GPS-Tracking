@@ -25,7 +25,13 @@ export const alertTypeEnum = pgEnum("alert_type", [
   "speeding",
   "ignition_on",
   "ignition_off",
-  "device_offline"
+  "device_offline",
+  // Load events (no rule; raised by the loads feature).
+  "load_late",
+  "load_no_signal",
+  "load_paused",
+  "load_arrived",
+  "load_delivered"
 ]);
 
 /** Zones. Circle: center + radius. Polygon: ring of [lon, lat] (open ring, 3–200 points). */
