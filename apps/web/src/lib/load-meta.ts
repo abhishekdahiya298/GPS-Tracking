@@ -51,3 +51,40 @@ export function fmtDistanceM(m: number, imperial: boolean): string {
   const km = m / 1000;
   return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km).toLocaleString()} km`;
 }
+
+/** What a load is doing right now, for the loads map and its filters. */
+export type LoadMotion = "moving" | "stopped" | "paused" | "no_signal" | "waiting";
+
+/** At or above this speed (km/h) a fresh position counts as moving (about 5 mph). */
+export const MOVING_KPH = 8;
+/** A position older than this is not trusted to say "moving" (the truck may have stopped since). */
+const MOVING_FRESH_MS = 10 * 60_000;
+
+export const MOTION_META: Record<LoadMotion, { label: string; color: string; order: number }> = {
+  moving: { label: "Moving", color: "#15803d", order: 2 },
+  stopped: { label: "Stopped", color: "#0369a1", order: 3 },
+  paused: { label: "Driver paused", color: "#b45309", order: 1 },
+  no_signal: { label: "No signal", color: "#6b7280", order: 0 },
+  waiting: { label: "Waiting for driver", color: "#9ca3af", order: 4 }
+};
+
+interface MotionInput {
+  status: string;
+  sharingStopped: boolean;
+  stale: boolean;
+  lastPosition: { speedKph: number | null; at: string } | null;
+  eta: { late: boolean } | null;
+}
+
+export function loadMotion(l: MotionInput, now = Date.now()): LoadMotion {
+  if (l.status === "invited") return "waiting";
+  if (l.sharingStopped) return "paused";
+  if (l.stale || !l.lastPosition) return "no_signal";
+  const fresh = now - Date.parse(l.lastPosition.at) <= MOVING_FRESH_MS;
+  return fresh && (l.lastPosition.speedKph ?? 0) >= MOVING_KPH ? "moving" : "stopped";
+}
+
+/** Late, silent or paused: the loads a dispatcher should look at first. */
+export function needsAttention(l: MotionInput): boolean {
+  return Boolean(l.eta?.late) || l.stale || l.sharingStopped;
+}

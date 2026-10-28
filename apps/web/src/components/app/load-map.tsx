@@ -10,7 +10,7 @@ type Stop = { latitude: number; longitude: number; radiusM: number };
 type Feature = GeoJSON.Feature;
 const fc = (features: Feature[]): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features });
 
-function pin(label: string, color: string): HTMLElement {
+export function pin(label: string, color: string): HTMLElement {
   const el = document.createElement("div");
   el.setAttribute("aria-hidden", "true");
   el.style.cssText = `width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center`;

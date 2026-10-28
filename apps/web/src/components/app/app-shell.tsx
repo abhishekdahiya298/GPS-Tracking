@@ -50,7 +50,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
 };
 
 /** Routes whose page fills the content area edge to edge (maps). */
-const FULL_BLEED = ["/map", "/geofences", "/zones"];
+const FULL_BLEED = ["/map", "/geofences", "/zones", "/loads/map"];
 
 export interface ShellUser {
   name: string;
