@@ -1,12 +1,16 @@
 "use client";
-import { Archive, ArchiveRestore, Cpu, Eye, ListPlus, PauseCircle, PlayCircle, Plus, Users } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowRightLeft, Cpu, Eye, KeyRound, ListPlus, MoreHorizontal, PauseCircle, Pencil, PlayCircle, Plus, ShieldOff, Undo2, UserCog, UserMinus, UserPlus, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { SIM_STATUS } from "../../_shared/sim-meta";
+import { TrackerActionDialog } from "../../_shared/tracker-actions";
+import { EditCustomerDialog, MemberDialog, type MemberAction } from "./customer-dialogs";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { Input, Textarea } from "@/components/ui/input";
@@ -30,6 +34,10 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
   const [registering, setRegistering] = useState(false);
   const [bulk, setBulk] = useState(false);
   const [changing, setChanging] = useState<StatusAction | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [tracker, setTracker] = useState<{ d: CustomerDetail["devices"][number]; action: "move" | "return" } | null>(null);
+  const [member, setMember] = useState<MemberAction | null>(null);
+  const refresh = () => router.refresh();
   const archived = c.status === "archived";
   return (
     <>
@@ -47,13 +55,16 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
             <Button variant="secondary" onClick={() => viewAs(c.id)}>
               <Eye /> View as customer
             </Button>
+            <Button variant="secondary" onClick={() => setEditing(true)}>
+              <Pencil /> Edit details
+            </Button>
             {!archived && (
               <>
                 <Button variant="secondary" onClick={() => setBulk(true)}>
                   <ListPlus /> Bulk import
                 </Button>
                 <Button onClick={() => setRegistering(true)}>
-                  <Plus /> Register tracker
+                  <Plus /> Add tracker
                 </Button>
               </>
             )}
@@ -84,78 +95,186 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
         </div>
       )}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <Card>
+        <Card className="h-fit min-w-0">
           <CardHeader>
-            <CardTitle>Devices ({c.devices.length})</CardTitle>
+            <CardTitle>Trackers ({c.devices.length})</CardTitle>
           </CardHeader>
           {c.devices.length === 0 ? (
             <EmptyState
               icon={Cpu}
-              title="No devices yet"
-              description="Register the tracker's IMEI, or paste a whole batch with Bulk import. Each one is added to Traccar and to this customer."
+              title="No trackers yet"
+              description="Add a tracker by IMEI: one from RIO stock is handed over, a new one is registered in Traccar. Bulk import takes a whole list."
               action={
-                <div className="flex flex-wrap justify-center gap-2">
-                  <Button size="sm" onClick={() => setRegistering(true)}>
-                    <Plus /> Register device
-                  </Button>
-                  <Button size="sm" variant="secondary" onClick={() => setBulk(true)}>
-                    <ListPlus /> Bulk import
-                  </Button>
-                </div>
+                !archived && (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button size="sm" onClick={() => setRegistering(true)}>
+                      <Plus /> Add tracker
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setBulk(true)}>
+                      <ListPlus /> Bulk import
+                    </Button>
+                  </div>
+                )
               }
             />
           ) : (
-            <Table>
-              <THead>
-                <TR>
-                  <TH>Device</TH>
-                  <TH>Vehicle</TH>
-                  <TH>Status</TH>
-                  <TH>Last seen</TH>
-                </TR>
-              </THead>
-              <TBody>
-                {c.devices.map((d) => (
-                  <TR key={d.id}>
-                    <TD>
-                      <div className="font-medium">{d.name ?? d.model ?? "Device"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {d.model ?? "—"} · IMEI …{d.imeiLast4}
-                      </div>
-                    </TD>
-                    <TD>{d.vehicleName ?? <span className="text-muted-foreground">Unassigned</span>}</TD>
-                    <TD>{d.status === "active" ? <StatusBadge tone="success" label="Active" /> : <StatusBadge tone="neutral" label={d.status === "retired" ? "Retired" : "Deactivated"} />}</TD>
-                    <TD className="whitespace-nowrap">{d.lastSeenAt ? <RelativeTime iso={d.lastSeenAt} /> : "Never"}</TD>
+            <div className="overflow-x-auto">
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Tracker</TH>
+                    <TH>Vehicle</TH>
+                    <TH>SIM</TH>
+                    <TH>Last seen</TH>
+                    <TH>
+                      <span className="sr-only">Actions</span>
+                    </TH>
                   </TR>
+                </THead>
+                <TBody>
+                  {c.devices.map((d) => (
+                    <TR key={d.id}>
+                      <TD>
+                        <div className="font-medium">{d.name ?? d.model ?? "Tracker"}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{d.imei}</div>
+                        {d.status !== "active" && <StatusBadge tone="neutral" label={d.status === "retired" ? "Retired" : "Deactivated"} className="mt-1" />}
+                      </TD>
+                      <TD>{d.vehicleName ?? <span className="text-muted-foreground">Unassigned</span>}</TD>
+                      <TD className="text-xs">
+                        {d.sim ? (
+                          <>
+                            <div className="font-medium">{d.sim.msisdn ?? `…${d.sim.iccid.slice(-6)}`}</div>
+                            {d.sim.status !== "active" && <StatusBadge tone={SIM_STATUS[d.sim.status as keyof typeof SIM_STATUS]?.tone ?? "neutral"} label={SIM_STATUS[d.sim.status as keyof typeof SIM_STATUS]?.label ?? d.sim.status} />}
+                          </>
+                        ) : (
+                          <StatusBadge tone="warning" label="No SIM" />
+                        )}
+                      </TD>
+                      <TD className="whitespace-nowrap">{d.lastSeenAt ? <RelativeTime iso={d.lastSeenAt} /> : "Never"}</TD>
+                      <TD className="w-0 text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <IconButton label={`Actions for ${d.name ?? d.imei}`} size="icon-sm" variant="ghost">
+                              <MoreHorizontal aria-hidden="true" />
+                            </IconButton>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem onSelect={() => setTracker({ d, action: "move" })}>
+                              <ArrowRightLeft aria-hidden="true" /> Move to another customer…
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setTracker({ d, action: "return" })}>
+                              <Undo2 aria-hidden="true" /> Return to stock…
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+          )}
+        </Card>
+
+        <div className="grid h-fit min-w-0 gap-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <CardTitle>Account details</CardTitle>
+              <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+                <Pencil /> Edit
+              </Button>
+            </CardHeader>
+            <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 px-4 pb-4 text-sm">
+              <dt className="text-muted-foreground">Contact</dt>
+              <dd className="m-0 min-w-0">
+                {c.contactName || c.contactEmail || c.contactPhone ? (
+                  <>
+                    {c.contactName && <div className="font-medium">{c.contactName}</div>}
+                    {c.contactEmail && (
+                      <a href={`mailto:${c.contactEmail}`} className="block break-all">
+                        {c.contactEmail}
+                      </a>
+                    )}
+                    {c.contactPhone && <a href={`tel:${c.contactPhone}`}>{c.contactPhone}</a>}
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">Not set</span>
+                )}
+              </dd>
+              <dt className="text-muted-foreground">Time zone</dt>
+              <dd className="m-0">{c.timeZone.replace(/_/g, " ")}</dd>
+              <dt className="text-muted-foreground">Units</dt>
+              <dd className="m-0">
+                {c.unitSystem === "imperial" ? "Miles, mph" : "Kilometres, km/h"} · {c.timeFormat === "12h" ? "12-hour clock" : "24-hour clock"}
+              </dd>
+              {c.notes && (
+                <>
+                  <dt className="text-muted-foreground">Notes</dt>
+                  <dd className="m-0 whitespace-pre-wrap">{c.notes}</dd>
+                </>
+              )}
+            </dl>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-3">
+              <CardTitle>Users ({c.members.length})</CardTitle>
+              {!archived && (
+                <Button size="sm" variant="secondary" onClick={() => setMember({ action: "add" })}>
+                  <UserPlus /> Add user
+                </Button>
+              )}
+            </CardHeader>
+            {c.members.length === 0 ? (
+              <EmptyState icon={Users} title="No users" description="Add the customer's administrator; they get an invitation email." />
+            ) : (
+              <ul className="m-0 list-none divide-y divide-border p-0">
+                {c.members.map((m) => (
+                  <li key={m.userId} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                    <div className="min-w-0">
+                      <div className="font-medium">{m.name}</div>
+                      <div className="break-all text-xs text-muted-foreground">{m.email}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {ROLE_LABEL[m.role] ?? m.role} · {m.lastSignInAt ? <>active <RelativeTime iso={m.lastSignInAt} /></> : "never signed in"}
+                        {m.twoStep && " · two-step on"}
+                      </div>
+                    </div>
+                    {!archived && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <IconButton label={`Actions for ${m.name}`} size="icon-sm" variant="ghost">
+                            <MoreHorizontal aria-hidden="true" />
+                          </IconButton>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          <DropdownMenuItem onSelect={() => setMember({ action: "rename", m })}>
+                            <Pencil aria-hidden="true" /> Edit name…
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setMember({ action: "role", m })}>
+                            <UserCog aria-hidden="true" /> Change role…
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setMember({ action: "password", m })}>
+                            <KeyRound aria-hidden="true" /> Reset password…
+                          </DropdownMenuItem>
+                          {m.twoStep && (
+                            <DropdownMenuItem onSelect={() => setMember({ action: "twostep", m })}>
+                              <ShieldOff aria-hidden="true" /> Turn off two-step…
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem className="text-danger" onSelect={() => setMember({ action: "remove", m })}>
+                            <UserMinus aria-hidden="true" /> Remove from {c.name}…
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </li>
                 ))}
-              </TBody>
-            </Table>
-          )}
-        </Card>
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle>Users ({c.members.length})</CardTitle>
-          </CardHeader>
-          {c.members.length === 0 ? (
-            <EmptyState icon={Users} title="No users" />
-          ) : (
-            <ul className="m-0 list-none divide-y divide-border p-0">
-              {c.members.map((m) => (
-                <li key={m.userId} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-                  <div className="min-w-0">
-                    <div className="font-medium">{m.name}</div>
-                    <div className="break-all text-xs text-muted-foreground">{m.email}</div>
-                  </div>
-                  <div className="shrink-0 text-right text-xs">
-                    <div>{ROLE_LABEL[m.role] ?? m.role}</div>
-                    <div className="text-muted-foreground">{m.lastSignInAt ? <>Active <RelativeTime iso={m.lastSignInAt} /></> : "Invited"}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="m-0 border-t border-border px-4 py-3 text-xs text-muted-foreground">To add or change users, use View as customer → Team. Platform admins are never listed here: they reach every customer through View as customer.</p>
-        </Card>
+              </ul>
+            )}
+            <p className="m-0 border-t border-border px-4 py-3 text-xs text-muted-foreground">Every change is recorded in the activity log under your name. Platform admins are never listed here.</p>
+          </Card>
+        </div>
       </div>
       <Card className="mt-4">
         <CardHeader>
@@ -195,6 +314,28 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
           )}
         </div>
       </Card>
+      {editing && (
+        <EditCustomerDialog
+          c={c}
+          onOpenChange={setEditing}
+          onDone={() => {
+            setEditing(false);
+            refresh();
+          }}
+        />
+      )}
+      {member && <MemberDialog customer={c} action={member} onOpenChange={(o) => !o && setMember(null)} onDone={() => refresh()} onClose={() => setMember(null)} />}
+      {tracker && (
+        <TrackerActionDialog
+          action={tracker.action}
+          tracker={{ id: tracker.d.id, imei: tracker.d.imei, label: tracker.d.name ?? tracker.d.model ?? "Tracker", customerId: c.id, customerName: c.name }}
+          onOpenChange={(o) => !o && setTracker(null)}
+          onDone={() => {
+            setTracker(null);
+            refresh();
+          }}
+        />
+      )}
       {changing && (
         <StatusDialog
           customer={c}
@@ -249,11 +390,11 @@ function RegisterDeviceDialog({ open, onOpenChange, customerId, onDone }: { open
     setError(null);
     try {
       const name = String(f.get("name") ?? "").trim();
-      const out = await api<{ traccarCreated: boolean }>(`/api/admin/customers/${customerId}/devices`, {
+      const out = await api<{ traccarCreated: boolean; fromStock: boolean }>(`/api/admin/customers/${customerId}/devices`, {
         method: "POST",
         json: { imei: digits, model: f.get("model"), ...(name ? { name } : {}), ...(unchecked && confirmed ? { allowUncheckedImei: true } : {}) }
       });
-      toast.success(out.traccarCreated ? "Device registered in Traccar and RIO." : "Device already existed in Traccar; linked to this customer.");
+      toast.success(out.fromStock ? "Tracker handed over from RIO stock." : out.traccarCreated ? "Tracker registered in Traccar and RIO." : "Tracker already existed in Traccar; linked to this customer.");
       setImei("");
       setConfirmed(false);
       onOpenChange(false);
@@ -266,7 +407,7 @@ function RegisterDeviceDialog({ open, onOpenChange, customerId, onDone }: { open
   }
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
-      <DialogContent title="Register a GPS device" description="Adds the IMEI to Traccar (if it isn't there) and assigns it to this customer. Nothing is saved if Traccar rejects it.">
+      <DialogContent title="Add a tracker" description="If the IMEI is in RIO stock, that unit (and its SIM) is handed to this customer. A new IMEI is registered in Traccar first; nothing is saved if Traccar rejects it.">
         <form method="post" onSubmit={submit} className="grid gap-4">
           <Field id="rd-imei" label="IMEI" required description="15 digits, printed on the device label." error={digits.length > 0 && digits.length !== 15 ? `${digits.length} of 15 digits` : null}>
             <Input id="rd-imei" value={imei} onChange={(e) => { setImei(e.target.value); setConfirmed(false); setError(null); }} inputMode="numeric" autoComplete="off" maxLength={20} aria-invalid={digits.length > 0 && digits.length !== 15} autoFocus />
@@ -294,7 +435,7 @@ function RegisterDeviceDialog({ open, onOpenChange, customerId, onDone }: { open
               Cancel
             </Button>
             <Button type="submit" loading={busy} disabled={digits.length !== 15 || (unchecked && !confirmed)}>
-              Register device
+              Add tracker
             </Button>
           </DialogFooter>
         </form>

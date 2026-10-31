@@ -55,9 +55,8 @@ describe("platform customer list", () => {
     expect(byDevices.items[0]).toMatchObject({ name: "Carrier 01", devices: 1 });
   });
 
-  it("detail exposes only the IMEI's last 4 digits", async () => {
+  it("platform detail shows the full IMEI (staff match it against the label); customers' own pages still show the last 4 only", async () => {
     const d = await getCustomerDetail(orgA);
-    expect(d?.devices[0]?.imeiLast4).toBe("6115");
-    expect(JSON.stringify(d)).not.toContain(IMEI);
+    expect(d?.devices[0]).toMatchObject({ imei: IMEI, imeiLast4: "6115" });
   });
 });

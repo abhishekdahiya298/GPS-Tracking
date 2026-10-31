@@ -50,12 +50,14 @@ export function AccountForm({ name, email, prefs, orgDefaults, twoStep }: { name
 
   return (
     <>
-      <PageHeader title="My account" description="Your sign-in details." breadcrumbs={[{ label: "Settings" }, { label: "My account" }]} />
+      <PageHeader title="My account" description="Your name, sign-in and display settings." breadcrumbs={[{ label: "Settings" }, { label: "My account" }]} />
       <div className="grid min-w-0 max-w-xl gap-4">
         <Card className="p-4">
-          <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+          <dl className="m-0 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted-foreground">Name</dt>
-            <dd className="m-0 font-medium">{name}</dd>
+            <dd className="m-0">
+              <NameEditor initial={name} />
+            </dd>
             <dt className="text-muted-foreground">Email</dt>
             <dd className="m-0 break-all">{email}</dd>
           </dl>
@@ -175,5 +177,65 @@ function TimePreferences({ initial, orgDefaults }: { initial: Prefs; orgDefaults
         </div>
       </div>
     </Card>
+  );
+}
+
+/** Shows the name with an Edit button; saving updates it everywhere (menus, team lists, emails). */
+function NameEditor({ initial }: { initial: string }) {
+  const router = useRouter();
+  const [name, setName] = useState(initial);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!editing) {
+    return (
+      <span className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">{name}</span>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setDraft(name);
+            setError(null);
+            setEditing(true);
+          }}
+        >
+          Edit
+        </Button>
+      </span>
+    );
+  }
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await api<{ name: string }>("/api/account/profile", { method: "PATCH", json: { name: draft } });
+      setName(out.name);
+      setEditing(false);
+      toast.success("Name updated");
+      // The menu and sidebar show the name too.
+      router.refresh();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form onSubmit={save} className="grid gap-1.5">
+      <span className="flex flex-wrap items-center gap-2">
+        <Input aria-label="Your name" value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={200} required autoFocus className="max-w-64" autoComplete="name" />
+        <Button type="submit" size="sm" loading={busy} disabled={!draft.trim() || draft.trim() === name}>
+          Save
+        </Button>
+        <Button type="button" size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>
+          Cancel
+        </Button>
+      </span>
+      {error && <span role="alert" className="text-xs text-danger">{error}</span>}
+    </form>
   );
 }

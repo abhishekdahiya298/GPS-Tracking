@@ -19,6 +19,7 @@ import {
   Wrench,
   Activity,
   ShieldCheck,
+  CardSim,
   type LucideIcon,
   Inbox
 } from "lucide-react";
@@ -54,7 +55,8 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   inbox: Inbox,
   activity: Activity,
   shield: ShieldCheck,
-  user: UserCircle
+  user: UserCircle,
+  sim: CardSim
 };
 
 /** Routes whose page fills the content area edge to edge (maps). */

@@ -39,14 +39,14 @@ async function computeDay(p: Pair, timeZone: string): Promise<void> {
   const db = getDb();
   if (!d) {
     // Points but no trip that day (parked with the tracker reporting): no row.
-    await db.delete(t).where(and(eq(t.deviceId, p.deviceId), eq(t.day, p.day)));
+    await db.delete(t).where(and(eq(t.organizationId, p.organizationId), eq(t.deviceId, p.deviceId), eq(t.day, p.day)));
     return;
   }
   const values = { timeZone, distanceM: d.distanceM, drivingS: d.drivingS, idleS: d.idleS, trips: d.trips, maxSpeedKph: d.maxSpeedKph, computedAt: new Date() };
   await db
     .insert(t)
     .values({ organizationId: p.organizationId, deviceId: p.deviceId, day: p.day, ...values })
-    .onConflictDoUpdate({ target: [t.deviceId, t.day], set: values });
+    .onConflictDoUpdate({ target: [t.organizationId, t.deviceId, t.day], set: values });
 }
 
 export interface StatsPassResult {

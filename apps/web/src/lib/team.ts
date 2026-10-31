@@ -297,3 +297,33 @@ export async function resetMemberPassword(ctx: TenantContext, userId: string, me
   }
   return { temporaryPassword, emailed: false };
 }
+
+/** Display names: trimmed, inner runs of spaces collapsed ("Deepak  Kumar " → "Deepak Kumar"). */
+export const PersonNameSchema = z
+  .string()
+  .transform((v) => v.trim().replace(/\s+/g, " "))
+  .pipe(z.string().min(1, "Enter a name").max(200));
+export const RenameSchema = z.object({ name: PersonNameSchema });
+
+async function setName(userId: string, name: string) {
+  const [before] = await getDb().select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, userId));
+  if (!before) throw new NotFoundError("User not found");
+  if (before.name !== name) await getDb().update(schema.users).set({ name, updatedAt: new Date() }).where(eq(schema.users.id, userId));
+  return before.name;
+}
+
+/** The signed-in person corrects their own name (the user id comes from the session). */
+export async function renameSelf(userId: string, organizationId: string | null, name: string, meta: Meta) {
+  const from = await setName(userId, name);
+  if (from !== name) await writeAudit({ action: "user.name_changed", actorUserId: userId, organizationId, targetType: "user", targetId: userId, metadata: { from, to: name }, ...meta });
+}
+
+/**
+ * An admin corrects a member's name. Same rule as password resets: an account that also
+ * belongs to another company can only be renamed by its owner or a platform admin.
+ */
+export async function renameMember(ctx: TenantContext, userId: string, name: string, meta: Meta) {
+  await assertResettableMember(ctx, userId, "ask the person to change it under My account");
+  const from = await setName(userId, name);
+  if (from !== name) await writeAudit({ action: "member.renamed", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "user", targetId: userId, metadata: { from, to: name }, ...meta });
+}

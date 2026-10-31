@@ -35,6 +35,11 @@ export const organizations = pgTable("organizations", {
   statusChangedAt: timestamp("status_changed_at", { withTimezone: true }),
   /** Platform admin who last changed the status (the audit log has the full history). */
   statusChangedBy: uuid("status_changed_by"),
+  /** Customer account details kept by platform admins (never shown to the customer's users). */
+  contactName: text("contact_name"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  platformNotes: text("platform_notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });

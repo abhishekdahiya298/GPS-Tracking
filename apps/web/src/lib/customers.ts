@@ -11,6 +11,8 @@ import { logger } from "./logger";
 import { addMember } from "./team";
 import { getTraccarAdmin } from "./traccar";
 import { BULK_IMPORT_MAX } from "./imei-list";
+import { assignToCustomer } from "./inventory";
+import { TIME_FORMATS } from "@rio-gps/core/timezones";
 import type { OrganizationStatus } from "./organization-status";
 
 /**
@@ -98,8 +100,21 @@ export async function registerDevice(actorUserId: string, organizationId: string
   if (!isValidImei(input.imei) && !input.allowUncheckedImei) {
     throw new ValidationError("This number does not pass the IMEI check, which usually means one digit is mistyped. Compare it with the device label.", { code: "IMEI_CHECK_DIGIT" });
   }
-  const [existing] = await db.select({ organizationId: schema.gpsDevices.organizationId }).from(schema.gpsDevices).where(eq(schema.gpsDevices.imei, input.imei));
-  if (existing) throw new ConflictError(existing.organizationId === organizationId ? "This device is already registered for this customer" : "This IMEI is already registered to another customer");
+  const [existing] = await db.select({ id: schema.gpsDevices.id, organizationId: schema.gpsDevices.organizationId, status: schema.gpsDevices.status }).from(schema.gpsDevices).where(eq(schema.gpsDevices.imei, input.imei));
+  if (existing && !existing.organizationId && existing.status !== "retired") {
+    // Already in RIO's stock (so already in Traccar): hand that unit to this customer.
+    await assignToCustomer(actorUserId, existing.id, { organizationId, name: input.name }, meta);
+    return { deviceId: existing.id, traccarCreated: false, fromStock: true };
+  }
+  if (existing) {
+    throw new ConflictError(
+      existing.organizationId === organizationId
+        ? "This device is already registered for this customer"
+        : existing.organizationId
+          ? "This IMEI is registered to another customer. Use Move on the Trackers page to transfer it."
+          : "This tracker is retired. Put it back in stock on the Trackers page first."
+    );
+  }
 
   // Traccar first: a device RIO knows about but Traccar rejects would silently never report.
   let traccar;
@@ -133,7 +148,7 @@ export async function registerDevice(actorUserId: string, organizationId: string
     metadata: { model: input.model, imeiLast4: input.imei.slice(-4), traccarCreated: traccar.created, ...(isValidImei(input.imei) ? {} : { uncheckedImei: true }) },
     ...meta
   });
-  return { deviceId: dev!.id, traccarCreated: traccar.created };
+  return { deviceId: dev!.id, traccarCreated: traccar.created, fromStock: false };
 }
 
 export const BulkRegisterSchema = z.object({
@@ -166,7 +181,7 @@ export async function registerDevicesBulk(actorUserId: string, organizationId: s
       continue;
     }
     const [existing] = await getDb().select({ organizationId: schema.gpsDevices.organizationId }).from(schema.gpsDevices).where(eq(schema.gpsDevices.imei, row.imei));
-    if (existing) {
+    if (existing && existing.organizationId) {
       const same = existing.organizationId === organizationId;
       results.push({ imei: row.imei, status: same ? "already_registered" : "other_customer", message: same ? "Already registered for this customer." : "Registered to another customer; not changed." });
       continue;
@@ -268,28 +283,36 @@ export interface CustomerDetail {
   name: string;
   slug: string;
   createdAt: string;
+  contactName: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  notes: string | null;
+  timeZone: string;
+  unitSystem: "imperial" | "metric";
+  timeFormat: "12h" | "24h";
   status: OrganizationStatus;
   statusReason: string | null;
   statusChangedAt: string | null;
   statusChangedBy: string | null;
-  members: { userId: string; name: string; email: string; role: string; lastSignInAt: string | null }[];
-  devices: { id: string; name: string | null; model: string | null; imeiLast4: string; status: string; lastSeenAt: string | null; vehicleName: string | null }[];
+  members: { userId: string; name: string; email: string; role: string; lastSignInAt: string | null; twoStep: boolean }[];
+  devices: { id: string; name: string | null; model: string | null; imei: string; imeiLast4: string; status: string; lastSeenAt: string | null; vehicleName: string | null; sim: { iccid: string; msisdn: string | null; status: string } | null }[];
 }
 
-/** Super-admin only. Full IMEIs are not returned; the last 4 digits identify a unit. */
+/** Super-admin only (platform staff match full IMEIs against the labels). */
 export async function getCustomerDetail(organizationId: string): Promise<CustomerDetail | null> {
   const db = getDb();
   const [org] = await db.select().from(schema.organizations).where(eq(schema.organizations.id, organizationId));
   if (!org) return null;
   const [changedBy] = org.statusChangedBy ? await db.select({ name: schema.users.name, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, org.statusChangedBy)) : [];
   const [members, devices] = await Promise.all([
-    db.execute<{ user_id: string; name: string; email: string; role: string; last_sign_in: Date | null }>(sql`
-      select u.id as user_id, u.name, u.email, m.role, (select max(s.created_at) from sessions s where s.user_id = u.id) as last_sign_in
+    db.execute<{ user_id: string; name: string; email: string; role: string; last_sign_in: Date | null; two_factor_enabled: boolean | null }>(sql`
+      select u.id as user_id, u.name, u.email, m.role, u.two_factor_enabled, (select max(s.created_at) from sessions s where s.user_id = u.id) as last_sign_in
       from memberships m join users u on u.id = m.user_id where m.organization_id = ${organizationId} and not u.is_super_admin
       order by case m.role when 'ORG_ADMIN' then 0 when 'FLEET_MANAGER' then 1 when 'DISPATCHER' then 2 else 3 end, lower(u.name)`),
-    db.execute<{ id: string; name: string | null; model: string | null; imei: string; status: string; last_seen_at: Date | null; vehicle_name: string | null }>(sql`
-      select d.id, d.name, d.model, d.imei, d.status, d.last_seen_at, v.name as vehicle_name
+    db.execute<{ id: string; name: string | null; model: string | null; imei: string; status: string; last_seen_at: Date | null; vehicle_name: string | null; iccid: string | null; msisdn: string | null; sim_status: string | null }>(sql`
+      select d.id, d.name, d.model, d.imei, d.status, d.last_seen_at, v.name as vehicle_name, s.iccid, s.msisdn, s.status as sim_status
       from gps_devices d
+      left join sim_cards s on s.device_id = d.id
       left join device_assignments a on a.device_id = d.id and a.organization_id = d.organization_id and a.unassigned_at is null
       left join vehicles v on v.id = a.vehicle_id and v.organization_id = d.organization_id
       where d.organization_id = ${organizationId} order by d.created_at`)
@@ -303,7 +326,64 @@ export async function getCustomerDetail(organizationId: string): Promise<Custome
     statusReason: org.statusReason,
     statusChangedAt: org.statusChangedAt?.toISOString() ?? null,
     statusChangedBy: changedBy ? changedBy.name || changedBy.email : null,
-    members: members.map((m) => ({ userId: m.user_id, name: m.name, email: m.email, role: m.role, lastSignInAt: m.last_sign_in ? new Date(m.last_sign_in).toISOString() : null })),
-    devices: devices.map((d) => ({ id: d.id, name: d.name, model: d.model, imeiLast4: d.imei.slice(-4), status: d.status, lastSeenAt: d.last_seen_at ? new Date(d.last_seen_at).toISOString() : null, vehicleName: d.vehicle_name }))
+    contactName: org.contactName,
+    contactEmail: org.contactEmail,
+    contactPhone: org.contactPhone,
+    notes: org.platformNotes,
+    timeZone: org.timeZone,
+    unitSystem: org.unitSystem,
+    timeFormat: org.timeFormat,
+    members: members.map((m) => ({ userId: m.user_id, name: m.name, email: m.email, role: m.role, lastSignInAt: m.last_sign_in ? new Date(m.last_sign_in).toISOString() : null, twoStep: Boolean(m.two_factor_enabled) })),
+    devices: devices.map((d) => ({ id: d.id, name: d.name, model: d.model, imei: d.imei, imeiLast4: d.imei.slice(-4), status: d.status, lastSeenAt: d.last_seen_at ? new Date(d.last_seen_at).toISOString() : null, vehicleName: d.vehicle_name, sim: d.iccid ? { iccid: d.iccid, msisdn: d.msisdn, status: d.sim_status ?? "inventory" } : null }))
   };
+}
+
+// ---------- platform admin: edit a customer's account ----------
+
+const optText = (max: number) => z.string().trim().max(max).transform((v) => v || null);
+
+export const UpdateCustomerSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120),
+    slug: CreateCustomerSchema.shape.slug,
+    contactName: optText(200),
+    contactEmail: z.union([z.literal(""), z.string().trim().toLowerCase().email().max(254)]).transform((v) => v || null),
+    contactPhone: optText(40),
+    notes: optText(2000),
+    timeZone: TimeZoneSchema,
+    unitSystem: z.enum(UNIT_SYSTEMS),
+    timeFormat: z.enum(TIME_FORMATS)
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, "Nothing to update");
+
+const COLUMN = { name: "name", slug: "slug", contactName: "contactName", contactEmail: "contactEmail", contactPhone: "contactPhone", notes: "platformNotes", timeZone: "timeZone", unitSystem: "unitSystem", timeFormat: "timeFormat" } as const;
+
+/** Platform admins edit a customer's name, short name, account contact, notes and display defaults. Audited field by field. */
+export async function updateCustomer(actorUserId: string, organizationId: string, patch: z.infer<typeof UpdateCustomerSchema>, meta: Meta) {
+  const db = getDb();
+  const [before] = await db.select().from(schema.organizations).where(eq(schema.organizations.id, organizationId));
+  if (!before) throw new NotFoundError("Customer not found");
+  const set: Record<string, unknown> = {};
+  const changed: Record<string, { from: unknown; to: unknown }> = {};
+  for (const [k, col] of Object.entries(COLUMN) as [keyof typeof COLUMN, (typeof COLUMN)[keyof typeof COLUMN]][]) {
+    const v = patch[k];
+    if (v === undefined || v === before[col]) continue;
+    set[col] = v;
+    // Notes and contact details can be long or personal: record that they changed, not their text.
+    changed[k] = k === "notes" || k === "contactEmail" || k === "contactPhone" || k === "contactName" ? { from: "…", to: "…" } : { from: before[col], to: v };
+  }
+  if (Object.keys(set).length === 0) return { changed: [] };
+  try {
+    await db.update(schema.organizations).set({ ...set, updatedAt: new Date() }).where(eq(schema.organizations.id, organizationId));
+  } catch (err) {
+    const e = err as { code?: string; cause?: { code?: string } };
+    if (e?.code === "23505" || e?.cause?.code === "23505") throw new ConflictError("That short name (slug) is already taken");
+    throw err;
+  }
+  if (set.timeZone !== undefined) {
+    void import("./daily-stats").then((m) => m.refreshDailyStats()).catch((err) => logger.error("stats.rebuild_after_zone_change_failed", { organizationId }, err));
+  }
+  await writeAudit({ action: "customer.updated", actorUserId, organizationId, targetType: "organization", targetId: organizationId, metadata: changed, ...meta });
+  return { changed: Object.keys(changed) };
 }

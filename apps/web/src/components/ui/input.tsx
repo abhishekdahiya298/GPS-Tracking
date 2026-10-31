@@ -9,7 +9,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
 });
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...props }, ref) {
-  return <textarea ref={ref} className={cn(field, "min-h-20 py-2", className)} {...props} />;
+  return <textarea ref={ref} className={cn(field, "min-h-20 py-2 font-sans", className)} {...props} />;
 });
 
 /** Native select: best mobile UX and accessibility; styled to match inputs. */
