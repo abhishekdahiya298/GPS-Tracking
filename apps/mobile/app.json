@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "RIO GPS",
+    "slug": "rio-gps",
+    "scheme": "riogps",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.riocaliforniainc.gps",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.riocaliforniainc.gps",
+      "adaptiveIcon": {
+        "backgroundColor": "#0a2463",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 1
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "@maplibre/maplibre-react-native",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0a2463",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "owner": "abhidahiya77",
+    "extra": {
+      "eas": {
+        "projectId": "47846c54-717d-4012-913f-67bbd1e604ae"
+      }
+    }
+  }
+}
