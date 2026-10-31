@@ -103,7 +103,12 @@ export const LoadInputSchema = LoadFields.extend({
   trackingMode: z.enum(["phone", "vehicle"]).default("phone"),
   vehicleId: z.string().uuid().nullish().transform((v) => v ?? null),
   /** Text the driver the invite now (when SMS is set up). */
-  sendInvite: z.boolean().default(true)
+  sendInvite: z.boolean().default(true),
+  /**
+   * The broker confirms the driver agreed to receive a text about this load. Required for an automatic
+   * text (carriers need documented opt-in); recorded on the load's timeline and in the audit log.
+   */
+  driverConsent: z.boolean().default(false)
 }).superRefine((v, c) => {
   if (v.trackingMode === "phone" && !v.driverPhone) c.addIssue({ code: z.ZodIssueCode.custom, path: ["driverPhone"], message: "Enter the driver's mobile number" });
   if (v.trackingMode === "vehicle" && !v.vehicleId) c.addIssue({ code: z.ZodIssueCode.custom, path: ["vehicleId"], message: "Choose the vehicle that hauls this load" });
@@ -375,6 +380,8 @@ export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Met
   // A vehicle-mode load is tracked from the start (the organization's own tracker, no consent step);
   // it starts from the tracker's current fix so the map isn't empty until the next report.
   const vehicle = byVehicle ? await vehicleForLoad(ctx.organizationId, input.vehicleId!) : null;
+  const willText = !byVehicle && input.sendInvite && smsConfigured();
+  if (willText && !input.driverConsent) throw new ValidationError("Confirm the driver agreed to receive a text about this load, or untick the automatic text and send the link yourself.");
   let id: string;
   try {
     const [row] = await getDb()
@@ -403,11 +410,11 @@ export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Met
     if (isUniqueViolation(err)) throw new ConflictError(`Load ${input.reference} already exists`);
     throw err;
   }
-  await addEvent(ctx.organizationId, id, "created", ctx.userId, now);
-  await writeAudit({ action: "load.created", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, metadata: { reference: input.reference }, ...meta });
+  await addEvent(ctx.organizationId, id, "created", ctx.userId, now, willText ? { driverTextConsent: true } : null);
+  await writeAudit({ action: "load.created", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, metadata: { reference: input.reference, ...(willText ? { driverTextConsent: true } : {}) }, ...meta });
   if (byVehicle) return { id, driverLink: null, sms: null, share: null };
   const link = driverLink(token);
-  const sms = input.sendInvite && smsConfigured() ? await textInvite(ctx, { id, reference: input.reference, driverPhone: input.driverPhone }, link) : null;
+  const sms = willText ? await textInvite(ctx, { id, reference: input.reference, driverPhone: input.driverPhone }, link) : null;
   return { id, driverLink: link, sms, share: { phone: input.driverPhone, message: inviteText(await orgName(ctx.organizationId), input.reference, link, { optOut: false }) } };
 }
 

@@ -234,3 +234,4 @@ describe("loads: decline and manual outcomes", () => {
     expect(d.events.at(-1)?.type).toBe("updated");
   });
 });
+

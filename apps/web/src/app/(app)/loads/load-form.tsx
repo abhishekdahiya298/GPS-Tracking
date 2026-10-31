@@ -306,6 +306,7 @@ export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDe
   const [pickup, setPickup] = useState<StopState>(initial ? fromDto(initial.pickup) : emptyStop());
   const [delivery, setDelivery] = useState<StopState>(initial ? fromDto(initial.delivery) : emptyStop());
   const [sendInvite, setSendInvite] = useState(smsAvailable);
+  const [driverConsent, setDriverConsent] = useState(false);
   const [mode, setMode] = useState<"phone" | "vehicle">(initial?.trackingMode ?? "phone");
   const [vehicleId, setVehicleId] = useState(initial?.vehicle?.id ?? "");
   const [busy, setBusy] = useState(false);
@@ -335,6 +336,10 @@ export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDe
       setError("Choose the vehicle that hauls this load.");
       return;
     }
+    if (!initial && mode === "phone" && smsAvailable && sendInvite && !driverConsent) {
+      setError("Tick that the driver agreed to receive a text, or untick the automatic text and send the link yourself.");
+      return;
+    }
     const body = {
       reference: String(f.get("reference") ?? "").trim(),
       carrierName: String(f.get("carrierName") ?? "").trim() || null,
@@ -354,7 +359,7 @@ export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDe
         router.push(`/loads/${initial.id}`);
         router.refresh();
       } else {
-        const r = await api<{ id: string; driverLink: string | null; sms: SmsResult | null; share: DriverShare | null }>("/api/loads", { method: "POST", json: { ...body, trackingMode: mode, sendInvite } });
+        const r = await api<{ id: string; driverLink: string | null; sms: SmsResult | null; share: DriverShare | null }>("/api/loads", { method: "POST", json: { ...body, trackingMode: mode, sendInvite, driverConsent } });
         setCreated({ ...r, reference: body.reference });
         window.scrollTo({ top: 0 });
       }
@@ -469,10 +474,21 @@ export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDe
           {initial || mode === "vehicle" ? (
             <span className="text-sm text-muted-foreground">{initial ? "Changes apply to tracking right away." : "Tracking starts as soon as you create the load."}</span>
           ) : (
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox checked={sendInvite} disabled={!smsAvailable} onChange={(e) => setSendInvite(e.target.checked)} />
-              {smsAvailable ? "Text the tracking link to the driver now" : "Text messages are not set up: you'll copy the link and send it yourself"}
-            </label>
+            <div className="grid gap-2">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox checked={sendInvite} disabled={!smsAvailable} onChange={(e) => setSendInvite(e.target.checked)} />
+                {smsAvailable ? "Text the tracking link to the driver automatically" : "You'll send the link by WhatsApp or text after creating the load"}
+              </label>
+              {smsAvailable && sendInvite && (
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox required checked={driverConsent} onChange={(e) => setDriverConsent(e.target.checked)} className="mt-0.5" />
+                  <span>
+                    The driver agreed to receive a text from us about this load.
+                    <span className="block text-xs text-muted-foreground">One text with the tracking link. They can reply STOP to opt out.</span>
+                  </span>
+                </label>
+              )}
+            </div>
           )}
           <div className="flex gap-2">
             <Button variant="secondary" asChild>
