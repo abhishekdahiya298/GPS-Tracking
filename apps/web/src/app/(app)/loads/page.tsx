@@ -1,15 +1,14 @@
 import { contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
 import { listLoads, loadCounts, LOAD_LIST_FILTERS } from "@/lib/loads";
-import { getRequestContext } from "@/lib/request-context";
+import { requireTenantPage } from "@/lib/request-context";
 import { LoadsView } from "./loads-view";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Loads · RIO GPS" };
 
 export default async function LoadsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const rc = await getRequestContext();
-  if (rc.status !== "ok") redirect("/login?next=/loads");
+  const rc = await requireTenantPage("/loads");
   const { ctx } = rc;
   if (!contextHasPermission(ctx, "loads.read")) redirect("/dashboard");
   const sp = await searchParams;

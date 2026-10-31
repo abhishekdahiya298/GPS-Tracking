@@ -2,7 +2,8 @@
  * Create an operator-provisioned RIO user (public sign-up is disabled).
  *
  *   docker compose ... exec -it web pnpm admin:create-user \
- *     --email owner@example.com --name "Owner" --org rio-california --role ORG_ADMIN [--super-admin]
+ *     --email owner@example.com --name "Owner" --org rio-california --role ORG_ADMIN
+ *   ... admin:create-user --email ops@example.com --name "Ops" --super-admin   (platform admin: no organization)
  *
  * The password is read from the terminal with echo disabled (or from stdin when
  * piped, for automation). It is never accepted as a CLI flag, so it never lands
@@ -57,8 +58,8 @@ async function main() {
       "super-admin": { type: "boolean", default: false }
     }
   });
-  if (!values.email || !values.org) {
-    console.error("Usage: create-user --email <email> --name <name> --org <slug> --role <ORG_ADMIN|FLEET_MANAGER|DISPATCHER|VIEWER> [--super-admin]");
+  if (!values.email || (!values.org && !values["super-admin"])) {
+    console.error("Usage: create-user --email <email> --name <name> (--org <slug> --role <ORG_ADMIN|FLEET_MANAGER|DISPATCHER|VIEWER> | --super-admin)");
     process.exit(2);
   }
   const password = await readPassword("Password (min 12 chars, hidden): ");
@@ -73,7 +74,7 @@ async function main() {
     email: values.email,
     name: values.name ?? values.email,
     password,
-    organizationSlug: values.org,
+    organizationSlug: values["super-admin"] ? undefined : values.org,
     role: values.role as never,
     superAdmin: values["super-admin"]
   });

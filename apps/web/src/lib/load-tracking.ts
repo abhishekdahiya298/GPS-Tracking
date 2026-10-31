@@ -181,7 +181,14 @@ export async function runLoadChecks(now = new Date()): Promise<number> {
     const rows = await tx
       .select()
       .from(l)
-      .where(and(inArray(l.status, ["tracking", "at_pickup", "in_transit", "at_delivery"]), isNull(l.sharingStoppedAt)))
+      .where(
+        and(
+          inArray(l.status, ["tracking", "at_pickup", "in_transit", "at_delivery"]),
+          isNull(l.sharingStoppedAt),
+          // Only active customers: a suspended or archived one gets no load alerts.
+          sql`exists (select 1 from organizations o where o.id = ${l.organizationId} and o.status = 'active')`
+        )
+      )
       .limit(5_000);
     const out: { row: LoadRow; alert: LoadAlert }[] = [];
     for (const r of rows) {

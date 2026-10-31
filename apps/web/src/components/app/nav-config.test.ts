@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildNav, isActive } from "./nav-config";
+import { buildNav, isActive, PLATFORM_NAV } from "./nav-config";
 
 const labels = (ctx: Parameters<typeof buildNav>[0]) => buildNav(ctx).flatMap((s) => s.items.map((i) => i.label));
 const base = { userId: "u", organizationId: "o", isSuperAdmin: false };
@@ -16,9 +16,15 @@ describe("navigation respects RBAC", () => {
     expect(l).toContain("Team");
     expect(l).not.toContain("Customers");
   });
-  it("only super admins see Customers", () => {
-    expect(labels({ ...base, role: "ORG_ADMIN", isSuperAdmin: true })).toContain("Customers");
-    expect(labels({ ...base, role: null, isSuperAdmin: true })).toContain("Customers");
+  it("only platform admins (viewing a customer) get the way back to the platform console", () => {
+    expect(labels({ ...base, role: null, isSuperAdmin: true })).toContain("Platform console");
+    expect(labels({ ...base, role: "ORG_ADMIN" })).not.toContain("Platform console");
+    expect(labels({ ...base, role: null, isSuperAdmin: true })).toContain("Team");
+  });
+  it("the platform overview is active only on its own page", () => {
+    const overview = PLATFORM_NAV[0]!.items[0]!;
+    expect(isActive("/admin", overview)).toBe(true);
+    expect(isActive("/admin/customers", overview)).toBe(false);
   });
   it("active matching covers sub-pages and aliases", () => {
     expect(isActive("/reports/schedules", { href: "/reports", label: "R", icon: "reports" })).toBe(true);

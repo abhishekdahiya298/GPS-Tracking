@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createUserWithMembership } from "@/lib/admin-users";
 import { getAuth } from "@/lib/auth";
 import { requireTenantContext } from "@/lib/authz";
+import { PlatformOnlyError } from "@/lib/errors";
 import { setTraccarAdminForTests, type TraccarAdmin } from "@/lib/traccar";
 import { POST as devicesPOST } from "@/app/api/admin/customers/[id]/devices/route";
 import { GET as customersGET, POST as customersPOST } from "@/app/api/admin/customers/route";
@@ -145,10 +146,10 @@ describe("admin: onboarding", () => {
 });
 
 describe("admin: view as customer", () => {
-  it("super admin can switch into a customer and back; it is audited", async () => {
-    const ctx0 = await requireTenantContext(req("GET", "/", "root"));
-    const [platform] = await getDb().select().from(schema.organizations).where(eq(schema.organizations.slug, "platform"));
-    expect(ctx0.organizationId).toBe(platform!.id);
+  it("super admin is in no organization until they choose a customer, and can switch back; it is audited", async () => {
+    // Platform admins are never members: with no customer chosen there is no tenant at all.
+    await expect(requireTenantContext(req("GET", "/", "root"))).rejects.toBeInstanceOf(PlatformOnlyError);
+    expect((await vehiclesGET(req("GET", "/api/vehicles", "root"))).status).toBe(403);
 
     expect((await viewAsPOST(req("POST", "/api/admin/view-as", "root", { organizationId: customerId }))).status).toBe(200);
     const ctx = await requireTenantContext(req("GET", "/", "root"));
@@ -156,7 +157,7 @@ describe("admin: view as customer", () => {
     expect((await vehiclesGET(req("GET", "/api/vehicles", "root"))).status).toBe(200);
 
     expect((await viewAsPOST(req("POST", "/api/admin/view-as", "root", { organizationId: null }))).status).toBe(200);
-    expect((await requireTenantContext(req("GET", "/", "root"))).organizationId).toBe(platform!.id);
+    await expect(requireTenantContext(req("GET", "/", "root"))).rejects.toBeInstanceOf(PlatformOnlyError);
     const actions = (await getDb().select({ a: schema.auditLogs.action }).from(schema.auditLogs)).map((r) => r.a);
     expect(actions).toEqual(expect.arrayContaining(["admin.view_as_started", "admin.view_as_ended"]));
   });

@@ -161,7 +161,7 @@ export async function viewShareLink(token: string, now = new Date()): Promise<Pu
     })
     .from(s)
     .innerJoin(schema.vehicles, and(eq(schema.vehicles.id, s.vehicleId), eq(schema.vehicles.organizationId, s.organizationId)))
-    .innerJoin(schema.organizations, eq(schema.organizations.id, s.organizationId))
+    .innerJoin(schema.organizations, and(eq(schema.organizations.id, s.organizationId), eq(schema.organizations.status, "active")))
     .where(and(eq(s.tokenHash, hashToken(token)), isNull(s.revokedAt), gt(s.expiresAt, now)));
   if (!link) return null;
 

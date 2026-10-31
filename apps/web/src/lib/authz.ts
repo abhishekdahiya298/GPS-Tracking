@@ -2,7 +2,7 @@ import { contextHasPermission, ORG_ROLES, type OrgRole, type Permission, type Te
 import { getDb, schema } from "@rio-gps/db";
 import { and, asc, eq } from "drizzle-orm";
 import { getAuth } from "./auth";
-import { ForbiddenError, UnauthenticatedError } from "./errors";
+import { ForbiddenError, OrganizationUnavailableError, PlatformOnlyError, UnauthenticatedError } from "./errors";
 
 /**
  * The single authorization choke point. Every tenant-scoped route calls
@@ -44,41 +44,44 @@ function isOrgRole(value: string): value is OrgRole {
   return (ORG_ROLES as readonly string[]).includes(value);
 }
 
-/** Resolves which organization this request acts in, strictly from memberships. */
+/**
+ * Resolves which organization this request acts in, strictly from memberships.
+ *
+ * Platform admins (users.is_super_admin) are never organization members: they act in a customer
+ * only after choosing it with "View as customer" (session.activeOrganizationId, audited), with
+ * full access (role null). With no customer chosen they get PlatformOnlyError, which the pages
+ * turn into the platform console. Any membership rows a platform admin still has are ignored.
+ *
+ * Everyone else can only act in an active organization they belong to; suspended and archived
+ * organizations are skipped, and if nothing is left the request is refused.
+ */
 export async function resolveTenantContext(user: AuthenticatedUser): Promise<TenantContext> {
   const db = getDb();
+  if (user.isSuperAdmin) {
+    if (user.activeOrganizationId) {
+      const [org] = await db
+        .select({ id: schema.organizations.id })
+        .from(schema.organizations)
+        .where(eq(schema.organizations.id, user.activeOrganizationId))
+        .limit(1);
+      if (org) return { userId: user.userId, organizationId: org.id, role: null, isSuperAdmin: true };
+    }
+    throw new PlatformOnlyError();
+  }
+
   const rows = await db
-    .select({ organizationId: schema.memberships.organizationId, role: schema.memberships.role })
+    .select({ organizationId: schema.memberships.organizationId, role: schema.memberships.role, status: schema.organizations.status })
     .from(schema.memberships)
+    .innerJoin(schema.organizations, eq(schema.organizations.id, schema.memberships.organizationId))
     .where(eq(schema.memberships.userId, user.userId))
     .orderBy(asc(schema.memberships.createdAt));
+  const usable = rows.filter((m) => m.status === "active");
 
-  const preferred = user.activeOrganizationId
-    ? rows.find((m) => m.organizationId === user.activeOrganizationId)
-    : undefined;
-  // A platform super admin who explicitly chose an organization they are not a
-  // member of ("view as customer") acts there with role null. Everyone else can
-  // only ever act in an organization they hold a membership in.
-  if (!preferred && user.isSuperAdmin && user.activeOrganizationId) {
-    const [org] = await db
-      .select({ id: schema.organizations.id })
-      .from(schema.organizations)
-      .where(eq(schema.organizations.id, user.activeOrganizationId))
-      .limit(1);
-    if (org) return { userId: user.userId, organizationId: org.id, role: null, isSuperAdmin: true };
-  }
-
-  const membership = preferred ?? rows[0];
-
+  const membership = (user.activeOrganizationId ? usable.find((m) => m.organizationId === user.activeOrganizationId) : undefined) ?? usable[0];
   if (membership && isOrgRole(membership.role)) {
-    return {
-      userId: user.userId,
-      organizationId: membership.organizationId,
-      role: membership.role,
-      isSuperAdmin: user.isSuperAdmin
-    };
+    return { userId: user.userId, organizationId: membership.organizationId, role: membership.role, isSuperAdmin: false };
   }
-
+  if (rows.length > 0) throw new OrganizationUnavailableError(rows.some((r) => r.status === "suspended") ? "suspended" : "archived");
   throw new ForbiddenError("Your account is not a member of any organization");
 }
 

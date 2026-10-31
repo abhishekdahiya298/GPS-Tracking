@@ -12,6 +12,7 @@ export const INGEST_OUTCOMES = [
   "no_fix",
   "unknown_device",
   "device_inactive",
+  "customer_archived",
   "rejected_auth",
   "rejected_payload",
   "store_failed",

@@ -1,3 +1,4 @@
+import { isOrganizationActive } from "./organization-status";
 import { effectiveTimePrefs } from "@rio-gps/core/timezones";
 import {
   ALERT_TYPES,
@@ -423,6 +424,8 @@ const EMAIL_THROTTLE_MS = 5 * 60_000;
 /** After commit: live push to the org's SSE channel, then (throttled) email. */
 export async function deliver(organizationId: string, fired: FiredEvent[]) {
   if (fired.length === 0) return;
+  // Suspended or archived customer: nothing goes out (no live alert, push or email).
+  if (!(await isOrganizationActive(organizationId))) return;
   const db = getDb();
   const vehicleIds = [...new Set(fired.map((f) => f.row.vehicleId).filter((v): v is string => Boolean(v)))];
   const names = vehicleIds.length

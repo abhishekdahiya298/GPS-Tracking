@@ -1,7 +1,7 @@
 import { contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
 import { listRenewals } from "@/lib/renewals";
-import { getRequestContext } from "@/lib/request-context";
+import { requireTenantPage } from "@/lib/request-context";
 import { listMembers } from "@/lib/team";
 import { listVehicles } from "@/lib/vehicles";
 import { RenewalsManager } from "./renewals-manager";
@@ -10,8 +10,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Renewals · RIO GPS" };
 
 export default async function RenewalsPage() {
-  const rc = await getRequestContext();
-  if (rc.status !== "ok") redirect("/login?next=/maintenance/renewals");
+  const rc = await requireTenantPage("/maintenance/renewals");
   const { ctx } = rc;
   if (!contextHasPermission(ctx, "maintenance.read")) redirect("/dashboard");
   const canWrite = contextHasPermission(ctx, "maintenance.write");

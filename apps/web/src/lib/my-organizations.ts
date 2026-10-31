@@ -13,12 +13,15 @@ export interface MyOrganization {
   role: OrgRole;
 }
 
-/** The companies this person belongs to. One account (one email) can belong to several. */
+/**
+ * The active companies this person belongs to (for the switcher). One account (one email) can
+ * belong to several. Suspended and archived companies are left out: they can't be opened.
+ */
 export async function listMyOrganizations(userId: string): Promise<MyOrganization[]> {
   const rows = await getDb()
     .select({ id: schema.organizations.id, name: schema.organizations.name, role: schema.memberships.role })
     .from(schema.memberships)
-    .innerJoin(schema.organizations, eq(schema.organizations.id, schema.memberships.organizationId))
+    .innerJoin(schema.organizations, and(eq(schema.organizations.id, schema.memberships.organizationId), eq(schema.organizations.status, "active")))
     .where(eq(schema.memberships.userId, userId))
     .orderBy(asc(schema.organizations.name));
   return rows.map((r) => ({ id: r.id, name: r.name, role: r.role as OrgRole }));
@@ -33,6 +36,7 @@ export async function switchOrganization(user: AuthenticatedUser, organizationId
   const [m] = await db
     .select({ id: schema.memberships.id })
     .from(schema.memberships)
+    .innerJoin(schema.organizations, and(eq(schema.organizations.id, schema.memberships.organizationId), eq(schema.organizations.status, "active")))
     .where(and(eq(schema.memberships.userId, user.userId), eq(schema.memberships.organizationId, organizationId)));
   // Same answer whether the company does not exist or the person is not in it.
   if (!m) throw new NotFoundError("Company not found");

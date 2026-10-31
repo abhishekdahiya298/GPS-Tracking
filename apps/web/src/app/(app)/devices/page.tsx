@@ -2,15 +2,14 @@ import { contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
 import { getServerEnv } from "@/lib/env";
 import { DeviceListQuery, listDevicesPage, parseListQuery } from "@/lib/fleet-list";
-import { getRequestContext } from "@/lib/request-context";
+import { requireTenantPage } from "@/lib/request-context";
 import { DevicesView } from "./devices-view";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Devices · RIO GPS" };
 
 export default async function DevicesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const rc = await getRequestContext();
-  if (rc.status !== "ok") redirect("/login?next=/devices");
+  const rc = await requireTenantPage("/devices");
   const { ctx } = rc;
   if (!contextHasPermission(ctx, "devices.read")) redirect("/dashboard");
   const q = parseListQuery(DeviceListQuery, await searchParams);

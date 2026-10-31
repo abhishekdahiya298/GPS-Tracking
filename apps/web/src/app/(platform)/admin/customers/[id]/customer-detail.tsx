@@ -1,7 +1,7 @@
 "use client";
-import { Cpu, Eye, ListPlus, Plus, Users } from "lucide-react";
+import { Archive, ArchiveRestore, Cpu, Eye, ListPlus, PauseCircle, PlayCircle, Plus, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -17,6 +17,8 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { BulkRowStatus, CustomerDetail } from "@/lib/customers";
 import { BULK_IMPORT_MAX, isValidImei, parseImeiList, PROBLEM_LABEL } from "@/lib/imei-list";
 import { viewAs } from "../_shared/view-as";
+import { StatusDialog, type StatusAction } from "../_shared/status-dialog";
+import { CUSTOMER_STATUS } from "../_shared/status-meta";
 import { RelativeTime } from "@/components/app/local-time";
 import { useTime } from "@/components/app/time-context";
 
@@ -27,10 +29,17 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
   const router = useRouter();
   const [registering, setRegistering] = useState(false);
   const [bulk, setBulk] = useState(false);
+  const [changing, setChanging] = useState<StatusAction | null>(null);
+  const archived = c.status === "archived";
   return (
     <>
       <PageHeader
-        title={c.name}
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {c.name}
+            {c.status !== "active" && <StatusBadge tone={CUSTOMER_STATUS[c.status].tone} label={CUSTOMER_STATUS[c.status].label} className="bg-white" />}
+          </span>
+        }
         description={`${c.slug} · created ${time.date(c.createdAt)}`}
         breadcrumbs={[{ label: "Customers", href: "/admin/customers" }, { label: c.name }]}
         actions={
@@ -38,15 +47,42 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
             <Button variant="secondary" onClick={() => viewAs(c.id)}>
               <Eye /> View as customer
             </Button>
-            <Button variant="secondary" onClick={() => setBulk(true)}>
-              <ListPlus /> Bulk import
-            </Button>
-            <Button onClick={() => setRegistering(true)}>
-              <Plus /> Register device
-            </Button>
+            {!archived && (
+              <>
+                <Button variant="secondary" onClick={() => setBulk(true)}>
+                  <ListPlus /> Bulk import
+                </Button>
+                <Button onClick={() => setRegistering(true)}>
+                  <Plus /> Register tracker
+                </Button>
+              </>
+            )}
           </>
         }
       />
+      {c.status !== "active" && (
+        <div className="mb-4">
+          <Alert
+            tone={archived ? "info" : "warning"}
+            title={archived ? "This customer is archived" : "This customer is suspended"}
+            action={
+              <Button size="sm" variant="secondary" onClick={() => setChanging(archived ? "restore" : "reactivate")}>
+                {archived ? <ArchiveRestore /> : <PlayCircle />} {archived ? "Restore" : "Reactivate"}
+              </Button>
+            }
+          >
+            {archived ? "Users can't sign in and tracker positions aren't stored. Nothing has been deleted." : "Users can't sign in and no alerts or emails go out. Trackers keep recording."}
+            {c.statusReason && <> Reason: {c.statusReason}.</>}
+            {c.statusChangedAt && (
+              <>
+                {" "}
+                {c.statusChangedBy ? `${c.statusChangedBy}, ` : ""}
+                {time.dateTime(c.statusChangedAt)}.
+              </>
+            )}
+          </Alert>
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Card>
           <CardHeader>
@@ -118,9 +154,58 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
               ))}
             </ul>
           )}
-          <p className="m-0 border-t border-border px-4 py-3 text-xs text-muted-foreground">To add or change users, use View as customer → Team.</p>
+          <p className="m-0 border-t border-border px-4 py-3 text-xs text-muted-foreground">To add or change users, use View as customer → Team. Platform admins are never listed here: they reach every customer through View as customer.</p>
         </Card>
       </div>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Customer status</CardTitle>
+        </CardHeader>
+        <div className="grid gap-3 px-4 pb-4 text-sm sm:grid-cols-2">
+          {c.status === "active" ? (
+            <StatusOption
+              icon={PauseCircle}
+              title="Suspend"
+              text="For unpaid invoices or a pause: users can't sign in and nothing is sent, but trackers keep recording. Reactivate any time."
+              button={<Button variant="secondary" onClick={() => setChanging("suspend")}>Suspend…</Button>}
+            />
+          ) : c.status === "suspended" ? (
+            <StatusOption
+              icon={PlayCircle}
+              title="Reactivate"
+              text="Users can sign in again and alerts, emails and links work as before."
+              button={<Button onClick={() => setChanging("reactivate")}>Reactivate…</Button>}
+            />
+          ) : null}
+          {archived ? (
+            <StatusOption
+              icon={ArchiveRestore}
+              title="Restore"
+              text="Bring the customer back exactly as it was. Nothing was deleted while it was archived."
+              button={<Button onClick={() => setChanging("restore")}>Restore…</Button>}
+            />
+          ) : (
+            <StatusOption
+              icon={Archive}
+              title="Archive (soft delete)"
+              text="When a customer leaves: hidden from the list, users can't sign in and positions are no longer stored. Every record is kept and can be restored."
+              button={<Button variant="danger" onClick={() => setChanging("archive")}>Archive…</Button>}
+              danger
+            />
+          )}
+        </div>
+      </Card>
+      {changing && (
+        <StatusDialog
+          customer={c}
+          action={changing}
+          onOpenChange={(o) => !o && setChanging(null)}
+          onDone={() => {
+            setChanging(null);
+            router.refresh();
+          }}
+        />
+      )}
       <RegisterDeviceDialog
         open={registering}
         onOpenChange={setRegistering}
@@ -129,6 +214,23 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
       />
       <BulkImportDialog open={bulk} onOpenChange={setBulk} customerId={c.id} onDone={() => router.refresh()} />
     </>
+  );
+}
+
+function StatusOption({ icon: Icon, title, text, button, danger }: { icon: typeof Archive; title: string; text: string; button: ReactNode; danger?: boolean }) {
+  return (
+    <div className={`flex flex-col gap-3 rounded-lg border p-4 ${danger ? "border-danger/30" : "border-border"}`}>
+      <div className="flex items-start gap-3">
+        <span className={`grid size-9 shrink-0 place-items-center rounded-full ${danger ? "bg-danger-soft text-danger" : "bg-primary-soft text-primary"}`}>
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="m-0 font-semibold">{title}</p>
+          <p className="m-0 mt-0.5 text-muted-foreground">{text}</p>
+        </div>
+      </div>
+      <div>{button}</div>
+    </div>
   );
 }
 

@@ -14,16 +14,18 @@ export const CreateUserInputSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   name: z.string().trim().min(1).max(200),
   password: z.string().min(6).max(128),
-  organizationSlug: z.string().trim().min(1),
-  role: z.enum(ORG_ROLES),
+  /** Required for normal users. Platform admins never get a membership, so it is ignored for them. */
+  organizationSlug: z.string().trim().min(1).optional(),
+  role: z.enum(ORG_ROLES).default("VIEWER"),
   superAdmin: z.boolean().default(false)
-});
+}).refine((v) => v.superAdmin || v.organizationSlug, { message: "required for a normal user", path: ["organizationSlug"] });
 export type CreateUserInput = z.input<typeof CreateUserInputSchema>;
 
 export interface CreateUserResult {
   userId: string;
-  organizationId: string;
-  role: OrgRole;
+  /** null for a platform admin (never an organization member). */
+  organizationId: string | null;
+  role: OrgRole | null;
   created: boolean;
 }
 
@@ -33,12 +35,14 @@ export async function createUserWithMembership(raw: CreateUserInput): Promise<Cr
   const input = CreateUserInputSchema.parse(raw);
   const db = getDb();
 
-  const [org] = await db
-    .select({ id: schema.organizations.id })
-    .from(schema.organizations)
-    .where(eq(schema.organizations.slug, input.organizationSlug))
-    .limit(1);
-  if (!org) throw new ProvisioningError(`Organization '${input.organizationSlug}' not found`);
+  const [org] = input.superAdmin
+    ? [null]
+    : await db
+        .select({ id: schema.organizations.id })
+        .from(schema.organizations)
+        .where(eq(schema.organizations.slug, input.organizationSlug!))
+        .limit(1);
+  if (!input.superAdmin && !org) throw new ProvisioningError(`Organization '${input.organizationSlug}' not found`);
 
   const passwordHash = await hashPassword(input.password);
 
@@ -72,23 +76,25 @@ export async function createUserWithMembership(raw: CreateUserInput): Promise<Cr
       password: passwordHash
     });
 
-    await tx.insert(schema.memberships).values({
-      userId: user.id,
-      organizationId: org.id,
-      role: input.role
-    });
+    if (org) {
+      await tx.insert(schema.memberships).values({
+        userId: user.id,
+        organizationId: org.id,
+        role: input.role
+      });
+    }
 
     // Audited in the same transaction: a user never exists without its trail.
     await tx.insert(schema.auditLogs).values({
       action: "user.created",
       actorUserId: null,
-      organizationId: org.id,
+      organizationId: org?.id ?? null,
       targetType: "user",
       targetId: user.id,
-      metadata: { via: "cli", role: input.role, superAdmin: input.superAdmin }
+      metadata: { via: "cli", role: org ? input.role : null, superAdmin: input.superAdmin }
     });
 
-    return { userId: user.id, organizationId: org.id, role: input.role, created: true };
+    return { userId: user.id, organizationId: org?.id ?? null, role: org ? input.role : null, created: true };
   });
 }
 
