@@ -311,6 +311,9 @@ export class FleetLayer {
     if (!m.getSource(SRC)) m.addSource(SRC, { type: "geojson", data: this.collection(), promoteId: "id", cluster: this.clustering, clusterMaxZoom: CLUSTER_MAX_ZOOM, clusterRadius: 48 });
     this.structural = true;
     if (!m.getLayer("fleet-halo")) {
+      // After a base-map switch the layers are re-added: drop the old listeners so clicks fire once.
+      this.handlers.forEach((h) => h());
+      this.handlers = [];
       // Fading tail behind moving vehicles: where they have just been, brightest at the vehicle.
       m.addLayer({
         id: "fleet-trails",
