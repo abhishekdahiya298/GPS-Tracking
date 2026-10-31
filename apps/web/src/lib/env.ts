@@ -62,6 +62,16 @@ const ServerEnvSchema = z.object({
     .regex(/^(\+[1-9]\d{6,14}|MG[0-9a-fA-F]{32})$/, "TWILIO_FROM must be +1… or MG…")
     .optional()
     .or(z.literal("").transform(() => undefined)),
+  /**
+   * Hologram (the SIM carrier), read-only: SIM status, plan and which tracker each SIM is in are
+   * synced into the SIM cards page every 6 hours. Optional; without a key the page is kept by hand.
+   */
+  HOLOGRAM_API_KEY: z.string().min(16).optional().or(z.literal("").transform(() => undefined)),
+  HOLOGRAM_ORG_ID: z
+    .string()
+    .regex(/^\d+$/, "HOLOGRAM_ORG_ID is a number")
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
   /** Runs the 60 s device-offline alert check in this process (single-runner via advisory lock). */
   ALERTS_SCHEDULER_ENABLED: z
     .enum(["true", "false"])

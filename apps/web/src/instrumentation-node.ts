@@ -2,6 +2,7 @@
 import { startAlertScheduler } from "./lib/alerts";
 import { startDailyStatsScheduler } from "./lib/daily-stats";
 import { getServerEnv } from "./lib/env";
+import { startHologramSyncScheduler } from "./lib/hologram";
 import { startLoadScheduler } from "./lib/load-tracking";
 import { logger } from "./lib/logger";
 import { startMaintenanceScheduler } from "./lib/maintenance";
@@ -17,6 +18,7 @@ export function startNode() {
       startReportScheduler();
       startMaintenanceScheduler();
       startDailyStatsScheduler();
+      startHologramSyncScheduler();
     }
   } catch (err) {
     logger.error("startup.config_invalid", {}, err);
