@@ -22,6 +22,8 @@ export const ACTION_LABEL: Record<string, string> = {
   "sim.inventory": "Marked SIM not activated",
   "sim.linked": "Put SIM in tracker",
   "sim.unlinked": "Took SIM out of tracker",
+  "sim.synced": "Synced SIMs from Hologram",
+  "sim.cost_set": "Set SIM monthly cost",
   "customer.updated": "Edited customer",
   "member.renamed": "Renamed user",
   "member.password_reset": "Reset user's password",

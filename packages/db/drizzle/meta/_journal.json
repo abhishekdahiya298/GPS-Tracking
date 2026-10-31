@@ -134,6 +134,13 @@
       "when": 1793471200043,
       "tag": "0018_inventory_sims",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793474004930,
+      "tag": "0019_sim_provider_sync",
+      "breakpoints": true
     }
   ]
 }

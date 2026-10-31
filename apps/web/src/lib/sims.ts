@@ -216,6 +216,9 @@ export interface SimRow {
   monthlyCostCents: number | null;
   notes: string | null;
   activatedAt: string | null;
+  /** "hologram" when kept in sync from Hologram (status, plan, phone, tracker come from there). */
+  provider: string | null;
+  syncedAt: string | null;
   device: { id: string; imei: string; name: string | null; model: string | null; status: string } | null;
   customer: { id: string; name: string } | null;
   attention: SimAttention;
@@ -273,6 +276,8 @@ export async function listSims(q: SimListQuery) {
         monthlyCostCents: (r.monthly_cost_cents as number | null) ?? null,
         notes: (r.notes as string | null) ?? null,
         activatedAt: r.activated_at ? new Date(r.activated_at as string).toISOString() : null,
+        provider: (r.provider as string | null) ?? null,
+        syncedAt: r.synced_at ? new Date(r.synced_at as string).toISOString() : null,
         device: r.device_id ? { id: String(r.device_id), imei: String(r.d_imei), name: (r.d_name as string | null) ?? null, model: (r.d_model as string | null) ?? null, status: String(r.d_status) } : null,
         customer: r.o_id ? { id: String(r.o_id), name: String(r.o_name) } : null,
         attention: (r.attention as SimAttention) ?? null
@@ -283,4 +288,18 @@ export async function listSims(q: SimListQuery) {
     pageSize: q.pageSize,
     counts: counts ?? { all: 0, attention: 0, active: 0, inventory: 0, suspended: 0, cancelled: 0, monthly: 0, wasted: 0 }
   };
+}
+
+export const SimCostSchema = z.object({ monthlyCost: Cost, scope: z.enum(["hologram", "all"]).default("hologram") });
+
+/** Sets one monthly cost on every Hologram SIM (or every SIM): carriers bill a flat rate per line. */
+export async function setSimCost(actorUserId: string | null, input: z.infer<typeof SimCostSchema>, meta: Meta) {
+  if (input.monthlyCost === null) throw new ValidationError("Enter the monthly cost");
+  const rows = await getDb()
+    .update(schema.simCards)
+    .set({ monthlyCostCents: input.monthlyCost, updatedAt: new Date() })
+    .where(input.scope === "hologram" ? eq(schema.simCards.provider, "hologram") : sql`true`)
+    .returning({ id: schema.simCards.id });
+  await writeAudit({ action: "sim.cost_set", actorUserId, organizationId: null, targetType: "sim", targetId: null, metadata: { scope: input.scope, cents: input.monthlyCost, sims: rows.length }, ...meta });
+  return { updated: rows.length };
 }

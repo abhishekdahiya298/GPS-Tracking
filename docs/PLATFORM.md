@@ -65,3 +65,12 @@ Platform pages show the full IMEI (staff match it against labels); customers' ow
 - Add one, import the carrier's list (ICCID, optional phone, optional IMEI to put it in), or add SIMs with their trackers.
 - **Needs attention**: an active SIM that is not in a customer's tracker (billed for nothing), and a SIM that is not active in a tracker that is with a customer (it can't report). The page header shows the monthly total and the amount spent on unused SIMs; the overview links to both.
 - Change a SIM's status here whenever you activate, suspend or cancel it with the carrier, so the list matches the bill.
+
+### Hologram sync
+
+With `HOLOGRAM_API_KEY` (and `HOLOGRAM_ORG_ID`) in the server's `.env`, the SIM cards page fills itself from Hologram every 6 hours (first run a minute after start; **Sync now** on the page). Read-only: SIMs are still activated, paused and paid for in Hologram.
+
+- Copied per SIM (by ICCID): phone number, status (LIVE → active, PAUSED/FROZEN → suspended, DEAD → cancelled, inactive/test → not activated), plan, APN, carrier "Hologram".
+- Tracker: the IMEI Hologram last saw the SIM in, else a 15-digit IMEI in the SIM's Hologram name (name SIMs `GPS-<IMEI>`). One SIM per tracker: a different SIM recorded in that tracker is taken out of it.
+- Kept from RIO: monthly cost (**Set monthly cost…** applies one price to every Hologram SIM) and notes. A SIM Hologram stops listing is never deleted, just no longer refreshed.
+- One `sim.synced` activity entry per sync that changed something (or that a person started).

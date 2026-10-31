@@ -1,11 +1,12 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, CardSim, Link2, Link2Off, ListPlus, MoreHorizontal, Pencil, Plus } from "lucide-react";
+import { AlertTriangle, CardSim, RefreshCw, Link2, Link2Off, ListPlus, MoreHorizontal, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
 import { SegmentedFilter } from "@/components/app/filter-bar";
 import { PageHeader } from "@/components/app/page-header";
+import { RelativeTime } from "@/components/app/local-time";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -53,9 +54,22 @@ const simBody = (v: FormValues) => ({
 });
 
 /** Every data SIM RIO pays for: which tracker and customer it serves, and which ones waste money. */
-export function SimsView({ data, query }: { data: Data; query: SimListQuery }) {
+export function SimsView({ data, query, hologram }: { data: Data; query: SimListQuery; hologram: { configured: boolean; lastSync: string | null } }) {
   const { set, refresh, pending } = useListParams();
-  const [dialog, setDialog] = useState<{ kind: "add" | "bulk" } | { kind: "edit" | "link"; sim: SimRow } | null>(null);
+  const [dialog, setDialog] = useState<{ kind: "add" | "bulk" | "cost" } | { kind: "edit" | "link"; sim: SimRow } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  async function syncNow() {
+    setSyncing(true);
+    try {
+      const r = await api<{ seen: number; added: number; updated: number; linked: number; unmatched: string[] }>("/api/admin/sims/sync", { method: "POST" });
+      toast.success(`Hologram: ${r.seen} SIMs checked, ${r.added} new, ${r.linked} matched to trackers${r.unmatched.length ? `, ${r.unmatched.length} not matched` : ""}`);
+      refresh();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSyncing(false);
+    }
+  }
   const close = () => setDialog(null);
   const done = () => {
     setDialog(null);
@@ -187,6 +201,26 @@ export function SimsView({ data, query }: { data: Data; query: SimListQuery }) {
           </>
         }
       />
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-background px-4 py-3 text-sm shadow-card">
+        <RefreshCw className="size-4 shrink-0 text-primary" aria-hidden="true" />
+        {hologram.configured ? (
+          <span className="min-w-0 flex-1">
+            <strong>Synced with Hologram</strong> every 6 hours{hologram.lastSync ? <> · last <RelativeTime iso={hologram.lastSync} /></> : " · not yet"}. Status, plan and tracker come from Hologram; manage SIMs there.
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1">
+            <strong>Hologram isn&apos;t connected yet.</strong> Add a Hologram API key to the server settings and this list fills itself in and stays up to date.
+          </span>
+        )}
+        {hologram.configured && (
+          <Button size="sm" variant="secondary" loading={syncing} onClick={() => void syncNow()}>
+            Sync now
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onClick={() => setDialog({ kind: "cost" })}>
+          Set monthly cost…
+        </Button>
+      </div>
       <Card>
         <DataTable<SimRow>
           columns={columns}
@@ -255,7 +289,39 @@ export function SimsView({ data, query }: { data: Data; query: SimListQuery }) {
           onOpenChange={(o) => !o && close()}
         />
       )}
-      {dialog?.kind === "edit" && (
+      {dialog?.kind === "cost" && (
+        <FormDialog
+          title="Monthly cost per SIM"
+          intro={<p className="m-0 text-sm text-muted-foreground">Used to show what SIMs cost each month and how much goes on SIMs that aren&apos;t in use. Check the price on your Hologram invoice or plan page.</p>}
+          fields={[
+            { name: "monthlyCost", label: "Monthly cost per SIM (USD)", kind: "money", required: true, maxLength: 12, half: true },
+            { name: "scope", label: "Apply to", kind: "select", defaultValue: "hologram", options: [{ value: "hologram", label: "All Hologram SIMs" }, { value: "all", label: "All SIMs" }], half: true }
+          ]}
+          confirmLabel="Apply"
+          onSubmit={async (v) => {
+            const out = await api<{ updated: number }>("/api/admin/sims/cost", { method: "POST", json: { monthlyCost: String(v.monthlyCost), scope: v.scope } });
+            toast.success(`Monthly cost set on ${out.updated} SIM${out.updated === 1 ? "" : "s"}`);
+            done();
+          }}
+          onOpenChange={(o) => !o && close()}
+        />
+      )}
+      {dialog?.kind === "edit" && dialog.sim.provider === "hologram" && (
+        <FormDialog
+          title="Edit SIM"
+          description={`ICCID ${dialog.sim.iccid} · ${dialog.sim.plan ?? "Hologram"}`}
+          intro={<p className="m-0 text-sm text-muted-foreground">Status, plan, phone number and tracker come from Hologram (activate, pause or cancel the SIM there). Here you keep the cost and your notes.</p>}
+          fields={simFields(dialog.sim).filter((f) => f.name === "monthlyCost" || f.name === "notes")}
+          confirmLabel="Save"
+          onSubmit={async (v) => {
+            await api(`/api/admin/sims/${dialog.sim.id}`, { method: "PATCH", json: { monthlyCost: String(v.monthlyCost ?? "").trim() === "" ? null : String(v.monthlyCost), notes: String(v.notes ?? "") } });
+            toast.success("SIM updated");
+            done();
+          }}
+          onOpenChange={(o) => !o && close()}
+        />
+      )}
+      {dialog?.kind === "edit" && dialog.sim.provider !== "hologram" && (
         <FormDialog
           title="Edit SIM"
           description={`ICCID ${dialog.sim.iccid}`}

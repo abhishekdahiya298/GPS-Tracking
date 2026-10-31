@@ -30,6 +30,12 @@ export const simCards = pgTable(
     deviceId: uuid("device_id").references(() => gpsDevices.id, { onDelete: "set null" }),
     activatedAt: timestamp("activated_at", { withTimezone: true }),
     notes: text("notes"),
+    /** "hologram" when the SIM is kept in sync from the carrier's API (status, plan, tracker); null when entered by hand. */
+    provider: text("provider"),
+    /** The carrier's own id for the SIM (Hologram device id). */
+    providerRef: text("provider_ref"),
+    /** Last time the carrier sync saw this SIM. */
+    syncedAt: timestamp("synced_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },
