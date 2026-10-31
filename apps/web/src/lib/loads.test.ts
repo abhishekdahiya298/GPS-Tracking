@@ -96,3 +96,13 @@ describe("clean addresses and short places", () => {
     expect(shortPlace("Acme DC", "anything")).toBe("Acme DC");
   });
 });
+
+describe("manual invite", () => {
+  it("leaves out the STOP line when the broker sends it themselves", () => {
+    const link = driverLink("B".repeat(43));
+    const manual = inviteText("Northbound Brokerage", "L-1", link, { optOut: false });
+    expect(manual).toContain(link);
+    expect(manual).not.toContain("STOP");
+    expect(inviteText("Northbound Brokerage", "L-1", link)).toContain("Reply STOP");
+  });
+});

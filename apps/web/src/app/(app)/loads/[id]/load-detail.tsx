@@ -18,9 +18,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { fmtDistanceM, LOAD_EVENT_LABEL, shortPlace } from "@/lib/load-meta";
-import type { LoadDetailDto, LoadStopDto } from "@/lib/loads";
+import type { DriverShare, LoadDetailDto, LoadStopDto } from "@/lib/loads";
 import type { SmsResult } from "@/lib/sms";
-import { CopyLink, SmsOutcome } from "../load-form";
+import { CopyLink, ShareDriverLink, SmsOutcome } from "../load-form";
 import { EtaCell, LoadStatusCell } from "../loads-view";
 
 const REFRESH_MS = 20_000;
@@ -55,7 +55,7 @@ function StopCard({ title, color, stop, arrivedAt, departedAt }: { title: string
   );
 }
 
-type LinkDialog = { kind: "driver"; link: string; sms: SmsResult | null } | { kind: "shipper"; link: string } | null;
+type LinkDialog = { kind: "driver"; link: string; sms: SmsResult | null; share: DriverShare } | { kind: "shipper"; link: string } | null;
 
 export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canWrite: boolean }) {
   const router = useRouter();
@@ -98,8 +98,8 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
   async function newDriverLink(send: boolean) {
     setBusy(true);
     try {
-      const r = await api<{ driverLink: string; sms: SmsResult | null }>(`/api/loads/${load.id}/driver-link`, { method: "POST", json: { send } });
-      setDialog({ kind: "driver", link: r.driverLink, sms: r.sms });
+      const r = await api<{ driverLink: string; sms: SmsResult | null; share: DriverShare }>(`/api/loads/${load.id}/driver-link`, { method: "POST", json: { send } });
+      setDialog({ kind: "driver", link: r.driverLink, sms: r.sms, share: r.share });
       void refresh();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -294,14 +294,14 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
         <DialogContent title="New driver link" description="The driver's current link stops working. If they already accepted, they keep sharing once they open the new link.">
           <p className="m-0 text-sm">Send it to {load.driverName ?? "the driver"} at {load.driverPhone}.</p>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => void newDriverLink(false)} loading={busy}>
-              Just show me the link
-            </Button>
             {load.smsAvailable && (
-              <Button onClick={() => void newDriverLink(true)} loading={busy}>
-                <Send aria-hidden="true" /> Text it to the driver
+              <Button variant="secondary" onClick={() => void newDriverLink(true)} loading={busy}>
+                <Send aria-hidden="true" /> Text it automatically
               </Button>
             )}
+            <Button onClick={() => void newDriverLink(false)} loading={busy}>
+              Get the link to send
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -314,7 +314,7 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
           >
             <div className="grid gap-3">
               {dialog.kind === "driver" && <SmsOutcome sms={dialog.sms} smsAvailable={load.smsAvailable} />}
-              <CopyLink link={dialog.link} label={dialog.kind === "driver" ? "Driver link" : "Shipper link"} />
+              {dialog.kind === "driver" ? <ShareDriverLink link={dialog.link} share={dialog.share} /> : <CopyLink link={dialog.link} label="Shipper link" />}
             </div>
             <DialogFooter>
               <Button onClick={() => setDialog(null)}>Done</Button>

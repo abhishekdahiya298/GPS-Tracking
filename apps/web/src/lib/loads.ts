@@ -306,9 +306,19 @@ export function shipperLink(token: string): string {
   return `${new URL(getServerEnv().AUTH_URL).origin}/track#${token}`;
 }
 
-/** Text of the invite. Says who asks, for which load, when it stops, and how to opt out. */
-export function inviteText(orgName: string, reference: string, link: string): string {
-  return `${orgName}: please share your location for load ${reference} while you haul it. Open ${link} to accept. Tracking ends when the load is delivered. Reply STOP to opt out.`;
+/**
+ * Text of the invite. Says who asks, for which load and when it stops. Automatic texts (Twilio)
+ * also say how to opt out; a message the broker sends from their own phone or WhatsApp does not.
+ */
+export function inviteText(orgName: string, reference: string, link: string, opts: { optOut?: boolean } = {}): string {
+  const base = `${orgName}: please share your location for load ${reference} while you haul it. Open ${link} to accept. Tracking ends when the load is delivered.`;
+  return opts.optOut === false ? base : `${base} Reply STOP to opt out.`;
+}
+
+/** What the broker's own WhatsApp / Messages app needs to send the link: the number and the text. */
+export interface DriverShare {
+  phone: string | null;
+  message: string;
 }
 
 async function orgName(organizationId: string): Promise<string> {
@@ -323,7 +333,7 @@ async function addEvent(organizationId: string, loadId: string, type: LoadEventT
 async function textInvite(ctx: TenantContext, row: Pick<LoadRow, "id" | "reference" | "driverPhone">, link: string): Promise<SmsResult> {
   if (!row.driverPhone) return { sent: false, reason: "rejected", message: "This load has no driver mobile number." };
   await assertRateLimit("load_invite", row.id, INVITES_PER_LOAD_PER_HOUR, 3_600, "Too many invites for this load in the last hour. Copy the link and send it yourself.");
-  const result = await sendSms(row.driverPhone, inviteText(await orgName(ctx.organizationId), row.reference, link));
+  const result = await sendSms(row.driverPhone, inviteText(await orgName(ctx.organizationId), row.reference, link, { optOut: true }));
   if (result.sent) {
     const now = new Date();
     await getDb().update(schema.loads).set({ inviteSentAt: now }).where(eq(schema.loads.id, row.id));
@@ -338,6 +348,8 @@ export interface CreatedLoad {
   driverLink: string | null;
   /** null when no text was attempted (not requested or SMS not set up). */
   sms: SmsResult | null;
+  /** For sending the link from the broker's own WhatsApp or Messages app. null with no driver link. */
+  share: DriverShare | null;
 }
 
 /** The vehicle (same organization) and its tracker's latest fix, if any. */
@@ -393,10 +405,10 @@ export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Met
   }
   await addEvent(ctx.organizationId, id, "created", ctx.userId, now);
   await writeAudit({ action: "load.created", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, metadata: { reference: input.reference }, ...meta });
-  if (byVehicle) return { id, driverLink: null, sms: null };
+  if (byVehicle) return { id, driverLink: null, sms: null, share: null };
   const link = driverLink(token);
   const sms = input.sendInvite && smsConfigured() ? await textInvite(ctx, { id, reference: input.reference, driverPhone: input.driverPhone }, link) : null;
-  return { id, driverLink: link, sms };
+  return { id, driverLink: link, sms, share: { phone: input.driverPhone, message: inviteText(await orgName(ctx.organizationId), input.reference, link, { optOut: false }) } };
 }
 
 export async function updateLoad(ctx: TenantContext, id: string, patch: z.infer<typeof LoadPatchSchema>, meta: Meta, now = new Date()): Promise<void> {
@@ -430,7 +442,7 @@ export async function updateLoad(ctx: TenantContext, id: string, patch: z.infer<
  * a text message with it. The driver keeps their consent if they had already accepted;
  * they only need to open the new link.
  */
-export async function reissueDriverLink(ctx: TenantContext, id: string, opts: { send: boolean }, meta: Meta): Promise<{ driverLink: string; sms: SmsResult | null }> {
+export async function reissueDriverLink(ctx: TenantContext, id: string, opts: { send: boolean }, meta: Meta): Promise<{ driverLink: string; sms: SmsResult | null; share: DriverShare }> {
   const row = await loadRow(ctx.organizationId, id);
   if (isLoadEnded(row.status)) throw new ValidationError("This load has ended");
   if (row.trackingMode !== "phone") throw new ValidationError("This load is tracked by a vehicle's tracker, not the driver's phone");
@@ -442,7 +454,7 @@ export async function reissueDriverLink(ctx: TenantContext, id: string, opts: { 
   await writeAudit({ action: "load.driver_link_reissued", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, metadata: { send: opts.send }, ...meta });
   const link = driverLink(token);
   const sms = opts.send ? await textInvite(ctx, row, link) : null;
-  return { driverLink: link, sms };
+  return { driverLink: link, sms, share: { phone: row.driverPhone, message: inviteText(await orgName(ctx.organizationId), row.reference, link, { optOut: false }) } };
 }
 
 /** Ends a load by hand. Tracking stops; the driver link stops accepting positions. */
