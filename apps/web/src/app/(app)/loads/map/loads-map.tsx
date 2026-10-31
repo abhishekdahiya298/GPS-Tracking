@@ -10,6 +10,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { circleRing } from "@rio-gps/core/geo";
 import { AlertTriangle, ArrowRight, ChevronUp, ExternalLink, Info, List, Maximize2, Package, PackagePlus, PanelLeftClose, PanelLeftOpen, Phone, Truck, X } from "lucide-react";
 import maplibregl, { type GeoJSONSource, type Map as MlMap, type MapLayerMouseEvent, type Marker } from "maplibre-gl";
+import { preferredStyleUrl } from "@/lib/map-style";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pin } from "@/components/app/load-map";
@@ -24,7 +25,6 @@ import { cn } from "@/lib/cn";
 import { fmtDistanceM, LOAD_STATUS_META, loadMotion, MOTION_META, needsAttention, shortPlace, type LoadMotion } from "@/lib/load-meta";
 import type { LoadDetailDto, LoadSummaryDto } from "@/lib/loads";
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 const REFRESH_MS = 20_000;
 const CLUSTER_MAX_ZOOM = 7;
 const FALLBACK = { center: [-85, 43] as [number, number], zoom: 4 };
@@ -172,7 +172,7 @@ export function LoadsMap({ initial, canWrite }: { initial: LoadSummaryDto[]; can
   // ---- map ----
   useEffect(() => {
     if (!mapDiv.current || map.current) return;
-    const m = new maplibregl.Map({ container: mapDiv.current, style: STYLE_URL, center: FALLBACK.center, zoom: FALLBACK.zoom, attributionControl: { compact: true } });
+    const m = new maplibregl.Map({ container: mapDiv.current, style: preferredStyleUrl(), center: FALLBACK.center, zoom: FALLBACK.zoom, attributionControl: { compact: true } });
     m.getCanvas().setAttribute("aria-label", "Map of active loads. Use the load list for keyboard access.");
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
     m.on("styleimagemissing", (e) => {

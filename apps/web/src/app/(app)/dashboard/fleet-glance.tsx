@@ -6,6 +6,7 @@
  */
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Map as MlMap, Popup } from "maplibre-gl";
+import { preferredStyleUrl } from "@/lib/map-style";
 import { Maximize2, Radio } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -17,7 +18,6 @@ import { FleetLayer, STATE_COLORS, type FleetPoint } from "../map/fleet-layer";
 import { deviceLabel, FALLBACK_VIEW, mapState, type MapState } from "../map/fleet-model";
 import { useFleetStream } from "../map/use-fleet-stream";
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 const LEGEND: [MapState, string][] = [
   ["moving", "Moving"],
   ["idle", "Idling"],
@@ -139,7 +139,7 @@ function GlanceMap({ offlineSeconds }: { offlineSeconds: number }) {
         if (cancelled || !div.current) return;
         const m = new maplibregl.Map({
           container: div.current,
-          style: STYLE_URL,
+          style: preferredStyleUrl(),
           center: FALLBACK_VIEW.center,
           zoom: FALLBACK_VIEW.zoom,
           attributionControl: { compact: true },
