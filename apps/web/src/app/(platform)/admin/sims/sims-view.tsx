@@ -19,6 +19,7 @@ import { api } from "@/lib/client/api";
 import type { SimListQuery, SimRow } from "@/lib/sims";
 import { FormDialog, type FieldSpec, type FormValues } from "../_shared/form-dialog";
 import { PasteImportDialog } from "../_shared/paste-import";
+import { SimNumbers } from "../_shared/sim-numbers";
 import { SIM_STATUS } from "../_shared/sim-meta";
 
 type Counts = Record<SimListQuery["view"], number> & { monthly: number; wasted: number };
@@ -84,8 +85,7 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
         meta: { sortKey: "iccid" } as ColumnMeta,
         cell: ({ row }) => (
           <div className="min-w-0">
-            <div className="font-medium">{row.original.msisdn ?? "No phone number"}</div>
-            <div className="font-mono text-xs text-muted-foreground">{row.original.iccid}</div>
+            <SimNumbers msisdn={row.original.msisdn} iccid={row.original.iccid} />
             {row.original.providerName && <div className="truncate text-xs text-muted-foreground" title="Name in Hologram">“{row.original.providerName}”</div>}
           </div>
         )

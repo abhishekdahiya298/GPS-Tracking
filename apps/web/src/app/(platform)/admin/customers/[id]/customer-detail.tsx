@@ -9,6 +9,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button, IconButton } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { SIM_STATUS } from "../../_shared/sim-meta";
+import { SimNumbers } from "../../_shared/sim-numbers";
 import { TrackerActionDialog } from "../../_shared/tracker-actions";
 import { EditCustomerDialog, MemberDialog, type MemberAction } from "./customer-dialogs";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -143,7 +144,7 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
                       <TD className="text-xs">
                         {d.sim ? (
                           <>
-                            <div className="font-medium">{d.sim.msisdn ?? `…${d.sim.iccid.slice(-6)}`}</div>
+                            <SimNumbers msisdn={d.sim.msisdn} iccid={d.sim.iccid} />
                             {d.sim.status !== "active" && <StatusBadge tone={SIM_STATUS[d.sim.status as keyof typeof SIM_STATUS]?.tone ?? "neutral"} label={SIM_STATUS[d.sim.status as keyof typeof SIM_STATUS]?.label ?? d.sim.status} />}
                           </>
                         ) : (
