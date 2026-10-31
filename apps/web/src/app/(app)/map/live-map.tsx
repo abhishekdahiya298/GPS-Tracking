@@ -1,7 +1,7 @@
 "use client";
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
-import { ChevronUp, CircleDotDashed, Copy, Download, Crosshair, ExternalLink, History, Hexagon, LocateFixed, Maximize2, PanelLeftClose, PanelLeftOpen, Radio, Share2, Tag, Truck, X } from "lucide-react";
+import { ChevronUp, CircleDotDashed, Copy, Crosshair, Download, Expand, ExternalLink, History, Hexagon, Locate, LocateFixed, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Share2, Shrink, Tag, Truck, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -28,8 +28,28 @@ import { useFleetStream } from "./use-fleet-stream";
 const HistoryPanel = dynamic(() => import("./history-panel").then((m) => m.HistoryPanel), { ssr: false });
 const ShareDialog = dynamic(() => import("../vehicles/share-dialog").then((m) => m.ShareDialog), { ssr: false });
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
-const ROW_H = 64;
+/**
+ * Base maps. "Streets" (OpenFreeMap Liberty) is the colourful, Mapbox-Streets-like look:
+ * green parks, blue water, yellow main roads. All three come from the same tile origin the CSP allows.
+ */
+const MAP_STYLES = [
+  { id: "streets", label: "Streets", url: "https://tiles.openfreemap.org/styles/liberty" },
+  { id: "light", label: "Light", url: "https://tiles.openfreemap.org/styles/positron" },
+  { id: "dark", label: "Dark", url: "https://tiles.openfreemap.org/styles/dark" }
+] as const;
+type MapStyleId = (typeof MAP_STYLES)[number]["id"];
+const STYLE_KEY = "rio.map.style";
+function savedStyle(): MapStyleId {
+  try {
+    const v = window.localStorage.getItem(STYLE_KEY);
+    if (MAP_STYLES.some((s) => s.id === v)) return v as MapStyleId;
+  } catch {
+    /* storage blocked: use the default */
+  }
+  return "streets";
+}
+const styleUrl = (id: MapStyleId) => MAP_STYLES.find((s) => s.id === id)!.url;
+const ROW_H = 68;
 const STATE_LABEL: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", parked: "Parked (unhooked)", offline: "Offline" };
 const STATE_HINT: Record<MapState, string> = {
   moving: "Travelling",
@@ -38,6 +58,12 @@ const STATE_HINT: Record<MapState, string> = {
   parked: "Unhooked, at last known spot",
   offline: "Tracker not reporting"
 };
+/** Badge grounds: the status colour's soft tint (text uses the status colour itself). */
+const STATE_TINT: Record<MapState, string> = { moving: "#e9f7ee", idle: "#fff5e1", stopped: "#e8f4fb", parked: "#e8f4fb", offline: "#eef0f3" };
+const STATE_BADGE: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", parked: "Unhooked", offline: "Offline" };
+/** Floating map controls: white, raised, 40px targets. */
+const MAP_BTN =
+  "grid size-10 cursor-pointer place-items-center border-0 bg-background text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:opacity-50";
 const ZONE_LAYERS = ["fences-fill", "fences-line", "fences-label"];
 type Filter = "all" | Exclude<MapState, "parked">;
 
@@ -66,15 +92,19 @@ function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, 
   };
 }
 
-function StateDot({ state }: { state: MapState }) {
-  return <span aria-hidden="true" className="inline-block size-2 shrink-0 rounded-full" style={{ background: STATE_COLORS[state] }} />;
+function StatusBadge({ state }: { state: MapState }) {
+  return (
+    <span className="inline-flex shrink-0 items-center rounded-full px-2 text-xs font-semibold leading-[18px]" style={{ background: STATE_TINT[state], color: STATE_COLORS[state] }}>
+      {STATE_BADGE[state]}
+    </span>
+  );
 }
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="min-w-0">
-      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="m-0 truncate text-sm font-medium" title={hint}>
+    <div className="min-w-0 rounded-lg bg-muted px-3 py-2">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="m-0 truncate text-[15px] font-semibold tabular-nums" title={hint}>
         {value}
       </dd>
     </div>
@@ -99,8 +129,7 @@ export function LiveMap({
   const mapDiv = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MlMap | null>(null);
   const layer = useRef<FleetLayer | null>(null);
-  const popup = useRef<Popup | null>(null);
-  const hover = useRef<Popup | null>(null);
+    const hover = useRef<Popup | null>(null);
   const fitted = useRef(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -116,8 +145,16 @@ export function LiveMap({
   const [panelOpen, setPanelOpen] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
   const [showZones, setShowZones] = useState(true);
+  const showZonesRef = useRef(true);
+  showZonesRef.current = showZones;
   const [follow, setFollow] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [mapStyle, setMapStyle] = useState<MapStyleId>("streets");
+  const [bearing, setBearing] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
+  /** Zones are fetched once and re-added whenever the base map changes. */
+  const fencesRef = useRef<GeofenceDto[] | null>(null);
   // Read inside stream callbacks that are created once.
   const followRef = useRef<string | null>(null);
   followRef.current = follow ? selected : null;
@@ -165,17 +202,19 @@ export function LiveMap({
   // Map init (once).
   useEffect(() => {
     if (!mapDiv.current) return;
-    const m = new maplibregl.Map({ container: mapDiv.current, style: STYLE_URL, center: FALLBACK_VIEW.center, zoom: FALLBACK_VIEW.zoom, attributionControl: { compact: true } });
+    const initialStyle = savedStyle();
+    setMapStyle(initialStyle);
+    const m = new maplibregl.Map({ container: mapDiv.current, style: styleUrl(initialStyle), center: FALLBACK_VIEW.center, zoom: FALLBACK_VIEW.zoom, attributionControl: { compact: true } });
     mapRef.current = m;
     m.getCanvas().setAttribute("aria-label", "Fleet map. Use the vehicle list for keyboard access.");
-    m.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
-    m.addControl(new maplibregl.FullscreenControl(), "top-right");
+    m.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: u.speed === "mph" ? "imperial" : "metric" }), "bottom-right");
     m.on("styleimagemissing", (e) => {
-      // The OpenFreeMap style references a few icons its sprite doesn't ship.
+      // The OpenFreeMap styles reference a few icons their sprites don't ship.
       if (!m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
     });
     // Panning by hand means "let me look around": stop following.
     m.on("dragstart", () => setFollow(false));
+    m.on("rotate", () => setBearing(m.getBearing()));
     m.on("error", (e) => {
       console.error("map error", e.error);
       if (!m.isStyleLoaded()) setMapError("Map tiles failed to load. Vehicle positions are still updating in the list.");
@@ -195,40 +234,60 @@ export function LiveMap({
       }
     });
     layer.current = fl;
-    m.on("load", () => {
-      setMapError(null);
-      m.addSource("track", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      m.addLayer({ id: "track-line", type: "line", source: "track", paint: { "line-color": "#2f5bea", "line-width": 4, "line-opacity": 0.85 }, layout: { "line-join": "round", "line-cap": "round" } });
-      fl.install();
-      m.addSource("track-pos", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      m.addLayer({
-        id: "track-pos",
-        type: "symbol",
-        source: "track-pos",
-        layout: { "icon-image": "veh-moving", "icon-rotate": ["to-number", ["coalesce", ["get", "heading"], 0]], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-size": 1.15 }
+
+    const addFences = (list: GeofenceDto[]) => {
+      if (m.getSource("fences")) return;
+      m.addSource("fences", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: list.map((f) => ({ type: "Feature", properties: { name: f.name, color: f.color }, geometry: { type: "Polygon", coordinates: [shapeRing(f.shape)] } })) }
       });
-      // Seed from whatever the stream already has (snapshot may arrive before the style).
-      fl.reset([...devicesRef.current.values()].map((d) => toPoint(d, Date.now(), offlineSeconds, u.fmtSpeed)).filter((p): p is FleetPoint => p !== null));
-      fitFleetRef.current(false);
-      // Zones overlay (skipped if the role can't read zones).
-      fetch("/api/geofences", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((b: { geofences: GeofenceDto[] } | null) => {
-          if (!b || !mapRef.current) return;
-          m.addSource("fences", {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: b.geofences.map((f) => ({ type: "Feature", properties: { name: f.name, color: f.color }, geometry: { type: "Polygon", coordinates: [shapeRing(f.shape)] } })) }
-          });
-          m.addLayer({ id: "fences-fill", type: "fill", source: "fences", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.1 } }, "track-line");
-          m.addLayer({ id: "fences-line", type: "line", source: "fences", paint: { "line-color": ["get", "color"], "line-width": 1.5 } }, "track-line");
-          if (m.getStyle().glyphs) {
-            m.addLayer(
-              { id: "fences-label", type: "symbol", source: "fences", minzoom: 12, layout: { "text-field": ["get", "name"], "text-font": ["Noto Sans Regular"], "text-size": 12 }, paint: { "text-color": "#374151", "text-halo-color": "#fff", "text-halo-width": 1.5 } },
-              "track-line"
-            );
-          }
-        })
-        .catch((err) => console.error("zones failed to load", err));
+      m.addLayer({ id: "fences-fill", type: "fill", source: "fences", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.1 } }, "track-line");
+      m.addLayer({ id: "fences-line", type: "line", source: "fences", paint: { "line-color": ["get", "color"], "line-width": 1.5 } }, "track-line");
+      if (m.getStyle().glyphs) {
+        m.addLayer(
+          { id: "fences-label", type: "symbol", source: "fences", minzoom: 12, layout: { "text-field": ["get", "name"], "text-font": ["Noto Sans Regular"], "text-size": 12 }, paint: { "text-color": "#374151", "text-halo-color": "#fff", "text-halo-width": 1.5 } },
+          "track-line"
+        );
+      }
+      const visible = showZonesRef.current ? "visible" : "none";
+      for (const id of ZONE_LAYERS) if (m.getLayer(id)) m.setLayoutProperty(id, "visibility", visible);
+    };
+
+    // Runs for the first style and again after every base-map switch (setStyle drops our layers).
+    let first = true;
+    m.on("style.load", () => {
+      setMapError(null);
+      if (!m.getSource("track")) {
+        m.addSource("track", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        m.addLayer({ id: "track-line", type: "line", source: "track", paint: { "line-color": "#2f5bea", "line-width": 4, "line-opacity": 0.85 }, layout: { "line-join": "round", "line-cap": "round" } });
+      }
+      fl.install();
+      if (!m.getSource("track-pos")) {
+        m.addSource("track-pos", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        m.addLayer({
+          id: "track-pos",
+          type: "symbol",
+          source: "track-pos",
+          layout: { "icon-image": "veh-moving", "icon-rotate": ["to-number", ["coalesce", ["get", "heading"], 0]], "icon-rotation-alignment": "map", "icon-allow-overlap": true, "icon-size": 1.15 }
+        });
+      }
+      if (first) {
+        first = false;
+        // Seed from whatever the stream already has (snapshot may arrive before the style).
+        fl.reset([...devicesRef.current.values()].map((d) => toPoint(d, Date.now(), offlineSeconds, u.fmtSpeed)).filter((p): p is FleetPoint => p !== null));
+        fitFleetRef.current(false);
+        // Zones overlay (skipped if the role can't read zones).
+        fetch("/api/geofences", { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((b: { geofences: GeofenceDto[] } | null) => {
+            if (!b || !mapRef.current) return;
+            fencesRef.current = b.geofences;
+            addFences(b.geofences);
+          })
+          .catch((err) => console.error("zones failed to load", err));
+      } else if (fencesRef.current) {
+        addFences(fencesRef.current);
+      }
     });
     setMap(m);
     return () => {
@@ -239,6 +298,43 @@ export function LiveMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Base-map switch: remembered per browser.
+  const switchStyle = (id: MapStyleId) => {
+    setMapStyle(id);
+    try {
+      window.localStorage.setItem(STYLE_KEY, id);
+    } catch {
+      /* storage blocked: the choice lasts for this visit */
+    }
+    mapRef.current?.setStyle(styleUrl(id));
+  };
+
+  // Full screen for the whole tracking view (list + map), not just the canvas.
+  useEffect(() => {
+    const on = () => setFullscreen(document.fullscreenElement === shellRef.current);
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
+    else shellRef.current?.requestFullscreen().catch(() => toast.error("Full screen isn't available in this browser."));
+  };
+
+  const locateMe = () => {
+    if (!navigator.geolocation) {
+      toast.error("Your browser can't share its location.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setFollow(false);
+        mapRef.current?.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: Math.max(mapRef.current.getZoom(), 13), duration: 700 });
+      },
+      () => toast.error("Couldn't get your location. Check the browser's location permission."),
+      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 }
+    );
+  };
 
   const devicesRef = devices;
   const fitFleetRef = useRef(fitFleet);
@@ -362,31 +458,20 @@ export function LiveMap({
     if (!selected) setFollow(false);
   }, [selected]);
 
-  // Selection: halo + popup.
+  // Selection: halo on the map; details show in the floating card.
   const sel = selected ? devices.current.get(selected) : undefined;
   const selState: MapState = sel ? mapState(sel, now, offlineSeconds) : "offline";
   useEffect(() => {
     layer.current?.select(selected);
-    popup.current?.remove();
-    popup.current = null;
-    const m = map;
-    if (!m || !sel?.location) return;
-    const el = document.createElement("div");
-    el.className = "grid gap-0.5 text-[13px]";
-    const t = document.createElement("strong");
-    t.textContent = deviceLabel(sel);
-    const s = document.createElement("span");
-    const st = mapState(sel, Date.now(), offlineSeconds);
-    s.textContent = st === "moving" ? `${STATE_LABEL[st]} · ${u.fmtSpeed(sel.location.speedKph)}` : STATE_LABEL[st];
-    const w = document.createElement("span");
-    w.className = "text-muted-foreground";
-    w.textContent = `Last update ${timeRef.current.dateTime(sel.location.recordedAt)} ${timeRef.current.abbr(sel.location.recordedAt)}`;
-    el.append(t, s, w);
-    const ll = layer.current?.displayed(sel.deviceId) ?? [sel.location.longitude, sel.location.latitude];
-    popup.current = new maplibregl.Popup({ offset: 18, closeButton: true, maxWidth: "260px" }).setLngLat(ll).setDOMContent(el).addTo(m);
-    popup.current.on("close", () => setSelected((cur) => (cur === sel.deviceId ? null : cur)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, map, version]);
+  }, [selected, map]);
+  useEffect(() => {
+    if (!selected) return;
+    const close = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !historyFor && !sharing) setSelected(null);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [selected, historyFor, sharing]);
 
   const focus = useCallback(
     (id: string) => {
@@ -427,20 +512,21 @@ export function LiveMap({
 
   const panel = (
     <>
-      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+      <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
         <div className="min-w-0">
-          <h1 className="m-0 text-base font-semibold">Live tracking</h1>
+          <h1 className="m-0 text-xl font-bold tracking-tight">Live tracking</h1>
           <p className="m-0 text-xs text-muted-foreground">
-            {counts.all} vehicle{counts.all === 1 ? "" : "s"} on the map
+            {counts.all} vehicle{counts.all === 1 ? "" : "s"}
+            {counts.offline > 0 && ` · ${counts.offline} not reporting`}
           </p>
         </div>
-        <span role="status" className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium", conn === "live" ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
+        <span role="status" className={cn("mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold", conn === "live" ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
           {conn === "live" ? <span aria-hidden="true" className="live-ping inline-block size-2 rounded-full bg-current" /> : <Radio className="size-3.5" aria-hidden="true" />} {connLabel}
         </span>
       </div>
 
       {historyFor && historyDevice ? (
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto border-t border-border">
           <HistoryPanel
             key={historyFor}
             map={map}
@@ -455,32 +541,37 @@ export function LiveMap({
         </div>
       ) : (
         <>
-          <div className="grid gap-2 border-b border-border px-4 py-3">
-            <SearchInput value={search} onChange={setSearch} placeholder="Search vehicles…" label="Search vehicles" debounceMs={150} />
-            {groups.length > 0 && (
-              <Select aria-label="Filter by group" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
-                <option value="">All groups</option>
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name} ({g.vehicleIds.length})
-                  </option>
-                ))}
-              </Select>
-            )}
+          <div className="grid gap-3 border-b border-border px-5 pb-4">
             <div className="flex gap-2">
+              <div className="min-w-0 flex-1">
+                <SearchInput value={search} onChange={setSearch} placeholder="Search name or plate" label="Search vehicles" debounceMs={150} />
+              </div>
+              <Button size="md" variant="secondary" className="shrink-0 px-3" onClick={exportCsv} disabled={rows.length === 0} aria-label="Export this list as CSV" title="Export this list as CSV">
+                <Download />
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              {groups.length > 0 && (
+                <Select aria-label="Filter by group" className="min-w-0 flex-1" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
+                  <option value="">All groups</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name} ({g.vehicleIds.length})
+                    </option>
+                  ))}
+                </Select>
+              )}
               <Select aria-label="Sort vehicles" className="min-w-0 flex-1" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
                 <option value="status">Sort: status</option>
                 <option value="name">Sort: name</option>
                 <option value="recent">Sort: latest update</option>
                 <option value="speed">Sort: speed</option>
               </Select>
-              <Button size="md" variant="secondary" className="shrink-0 px-3" onClick={exportCsv} disabled={rows.length === 0} aria-label="Export this list as CSV" title="Export this list as CSV">
-                <Download />
-              </Button>
             </div>
-            <div role="group" aria-label="Filter by status" className="grid grid-cols-5 gap-1">
+            <div role="group" aria-label="Filter by status" className="flex flex-wrap gap-1.5">
               {(["all", ...MAP_STATES] as Filter[]).map((f) => {
                 const on = filter === f;
+                const n = counts[f];
                 return (
                   <button
                     key={f}
@@ -489,119 +580,24 @@ export function LiveMap({
                     title={f === "all" ? "Every vehicle" : STATE_HINT[f]}
                     onClick={() => setFilter(on && f !== "all" ? "all" : f)}
                     className={cn(
-                      "grid cursor-pointer justify-items-center gap-0.5 rounded-lg border bg-background px-1 py-1.5 hover:bg-muted",
-                      on ? "border-primary bg-primary-soft hover:bg-primary-soft" : "border-border"
+                      "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[13px] font-medium transition-colors",
+                      on ? "border-primary bg-primary-soft text-primary" : "border-border bg-background text-foreground hover:border-input hover:bg-muted"
                     )}
                   >
-                    <span className="text-base font-semibold leading-5 tabular-nums">{counts[f]}</span>
-                    <span className="flex items-center gap-1 text-[11px] leading-4 text-muted-foreground">
-                      {f !== "all" && <span aria-hidden="true" className="inline-block size-1.5 rounded-full" style={{ background: STATE_COLORS[f] }} />}
-                      {f === "all" ? "All" : STATE_LABEL[f]}
-                    </span>
+                    {f !== "all" && <span aria-hidden="true" className="inline-block size-2 rounded-full" style={{ background: STATE_COLORS[f] }} />}
+                    {f === "all" ? "All" : STATE_LABEL[f]}
+                    <span className={cn("font-bold tabular-nums", n === 0 && !on && "text-muted-foreground")}>{n}</span>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {sel && (
-            <section key={sel.deviceId} aria-label="Selected vehicle" className="grid animate-in gap-3 border-b border-border bg-primary-soft/50 px-4 py-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h2 className="m-0 truncate text-sm font-semibold">{deviceLabel(sel)}</h2>
-                  <p className="m-0 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <StateDot state={selState} />
-                    <span className="font-medium text-foreground">{STATE_LABEL[selState]}</span>
-                    {sel.vehicle && <span className="truncate">· {[VEHICLE_TYPE_LABEL[asVehicleType(sel.vehicle.type)], sel.vehicle.licensePlate].filter(Boolean).join(" · ")}</span>}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  aria-label="Close vehicle details"
-                  className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
-                  onClick={() => setSelected(null)}
-                >
-                  <X className="size-4" aria-hidden="true" />
-                </button>
-              </div>
-              {sel.location ? (
-                <>
-                  <dl className="m-0 grid grid-cols-3 gap-x-3 gap-y-2">
-                    <Stat label="Speed" value={u.fmtSpeed(sel.location.speedKph)} />
-                    <Stat label="Engine" value={sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} />
-                    <Stat label="Direction" value={selState === "moving" ? (compass(sel.location.headingDeg) ?? "–") : "–"} />
-                    <div className="col-span-3 min-w-0">
-                      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">Last update</dt>
-                      <dd className="m-0 truncate text-sm font-medium">
-                        {time.dateTimeSec(sel.location.recordedAt)} {time.abbr(sel.location.recordedAt)} <span className="font-normal text-muted-foreground">({ago(sel.location.recordedAt, now)})</span>
-                      </dd>
-                    </div>
-                  </dl>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <span className="sr-only">Last location: </span>
-                    <span className="truncate tabular-nums">
-                      {sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label="Copy coordinates"
-                      className="grid size-6 shrink-0 cursor-pointer place-items-center rounded border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
-                      onClick={() => {
-                        const text = `${sel.location!.latitude.toFixed(6)}, ${sel.location!.longitude.toFixed(6)}`;
-                        navigator.clipboard.writeText(text).then(
-                          () => toast.success("Coordinates copied."),
-                          () => toast.error("Couldn't copy. Select the coordinates and copy them.")
-                        );
-                      }}
-                    >
-                      <Copy className="size-3.5" aria-hidden="true" />
-                    </button>
-                    <a
-                      className="ml-auto inline-flex shrink-0 items-center gap-1 text-primary hover:underline"
-                      href={`https://www.google.com/maps/search/?api=1&query=${sel.location.latitude.toFixed(6)},${sel.location.longitude.toFixed(6)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Google Maps <ExternalLink className="size-3" aria-hidden="true" />
-                    </a>
-                  </div>
-                </>
-              ) : (
-                <p className="m-0 text-xs text-muted-foreground">This tracker hasn&apos;t reported a position yet.</p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="secondary" onClick={() => focus(sel.deviceId)} disabled={!sel.location}>
-                  <Crosshair /> Center
-                </Button>
-                <Button
-                  size="sm"
-                  variant={follow ? "primary" : "secondary"}
-                  aria-pressed={follow}
-                  disabled={!sel.location}
-                  onClick={() => {
-                    if (!follow) focus(sel.deviceId);
-                    setFollow((v) => !v);
-                  }}
-                >
-                  <LocateFixed /> {follow ? "Following" : "Follow"}
-                </Button>
-                <Button size="sm" variant="secondary" onClick={() => setHistoryFor(sel.deviceId)}>
-                  <History /> History
-                </Button>
-                {canShare && sel.vehicle && (
-                  <Button size="sm" variant="secondary" onClick={() => setSharing(true)}>
-                    <Share2 /> Share
-                  </Button>
-                )}
-              </div>
-            </section>
-          )}
-
-          <div ref={listRef} className="relative min-h-0 flex-1 overflow-auto" onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
+          <div ref={listRef} className="relative min-h-0 flex-1 overflow-auto px-2 py-2" onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
             {!loaded ? (
-              <div className="grid gap-3 p-4" aria-busy="true" aria-label="Loading vehicles">
+              <div className="grid gap-3 p-2" aria-busy="true" aria-label="Loading vehicles">
                 {Array.from({ length: 6 }, (_, i) => (
-                  <Skeleton key={i} className="h-11" />
+                  <Skeleton key={i} className="h-12" />
                 ))}
               </div>
             ) : all.length === 0 ? (
@@ -616,39 +612,39 @@ export function LiveMap({
                 }
               />
             ) : rows.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground">No vehicles match this filter.</p>
+              <div className="px-4 py-8 text-center">
+                <p className="m-0 text-sm font-semibold">No vehicles in this view</p>
+                <p className="m-0 text-xs text-muted-foreground">Vehicles appear here as soon as their status changes or they match your search.</p>
+              </div>
             ) : (
               <ul className="relative m-0 list-none p-0" style={{ height: rows.length * ROW_H }} aria-label="Vehicles">
                 {rows.slice(start, end).map((r, i) => {
                   const d = r.d;
                   const active = d.deviceId === selected;
+                  const detail = !d.location
+                    ? "No position yet"
+                    : [d.vehicle?.licensePlate, r.state === "moving" ? u.fmtSpeed(d.location.speedKph) : STATE_HINT[r.state]].filter(Boolean).join(" · ");
                   return (
-                    <li key={d.deviceId} className="absolute inset-x-0" style={{ top: (start + i) * ROW_H, height: ROW_H }}>
+                    <li key={d.deviceId} className="absolute inset-x-0 py-0.5" style={{ top: (start + i) * ROW_H, height: ROW_H }}>
                       <button
                         type="button"
                         onClick={() => focus(d.deviceId)}
                         aria-pressed={active}
                         className={cn(
-                          "flex h-full w-full cursor-pointer flex-col justify-center gap-0.5 border-0 border-b border-border/70 bg-transparent px-4 text-left hover:bg-muted",
-                          active && "bg-primary-soft hover:bg-primary-soft"
+                          "flex h-full w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left transition-colors hover:bg-muted",
+                          active && "bg-primary-soft shadow-[inset_0_0_0_1px_var(--color-primary)] hover:bg-primary-soft"
                         )}
                       >
-                        <span className="flex items-center gap-2 text-sm font-medium">
-                          <span
-                            aria-hidden="true"
-                            className="-ml-1 grid size-6 shrink-0 place-items-center rounded-full text-white"
-                            style={{ background: STATE_COLORS[r.state], ["--vehicle-icon-gap" as string]: STATE_COLORS[r.state] }}
-                          >
-                            <VehicleTypeIcon type={d.vehicle?.type ?? "other"} className="size-3.5" />
-                          </span>
-                          <span className="truncate">{r.name}</span>
-                          <span className="ml-auto shrink-0 text-xs font-normal tabular-nums text-muted-foreground">
-                            {r.state === "moving" && d.location ? u.fmtSpeed(d.location.speedKph) : STATE_LABEL[r.state]}
-                          </span>
+                        <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full" style={{ background: STATE_TINT[r.state], color: STATE_COLORS[r.state] }}>
+                          <VehicleTypeIcon type={d.vehicle?.type ?? "other"} className="size-4" />
                         </span>
-                        <span className="flex gap-1.5 pl-7 text-xs text-muted-foreground">
-                          <span className="truncate">{d.location ? [d.vehicle?.licensePlate, r.state === "moving" ? "Moving" : STATE_HINT[r.state]].filter(Boolean).join(" · ") : "No position yet"}</span>
-                          <span className="ml-auto shrink-0">{d.lastSeenAt ? `Updated ${ago(d.lastSeenAt, now)}` : "No data yet"}</span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-sm font-semibold">{r.name}</span>
+                          <span className="truncate text-xs text-muted-foreground">{detail}</span>
+                        </span>
+                        <span className="flex shrink-0 flex-col items-end gap-1">
+                          <StatusBadge state={r.state} />
+                          <span className="text-[11px] leading-4 tabular-nums text-muted-foreground">{d.lastSeenAt ? ago(d.lastSeenAt, now) : "No data yet"}</span>
                         </span>
                       </button>
                     </li>
@@ -662,40 +658,200 @@ export function LiveMap({
     </>
   );
 
+  const vehicleCard = sel && !historyFor && (
+    <section
+      key={sel.deviceId}
+      aria-label="Selected vehicle"
+      className={cn(
+        "absolute inset-x-3 z-[2] grid animate-in gap-3 rounded-xl border border-border bg-background p-4 shadow-pop",
+        "bottom-[160px] md:inset-x-auto md:bottom-6 md:left-4 md:w-[360px]",
+        sheetOpen && "hidden md:grid"
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full" style={{ background: STATE_TINT[selState], color: STATE_COLORS[selState] }}>
+          <VehicleTypeIcon type={sel.vehicle?.type ?? "other"} className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="m-0 truncate text-base font-semibold">{deviceLabel(sel)}</h2>
+          <p className="m-0 truncate text-xs text-muted-foreground">
+            {sel.vehicle ? [VEHICLE_TYPE_LABEL[asVehicleType(sel.vehicle.type)], sel.vehicle.licensePlate].filter(Boolean).join(" · ") : STATE_HINT[selState]}
+          </p>
+        </div>
+        <StatusBadge state={selState} />
+        <button
+          type="button"
+          aria-label="Close vehicle details"
+          className="-mr-1 -mt-1 grid size-8 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={() => setSelected(null)}
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+      {sel.location ? (
+        <>
+          <dl className="m-0 grid grid-cols-3 gap-2">
+            <Stat label="Speed" value={u.fmtSpeed(sel.location.speedKph)} />
+            <Stat label="Engine" value={sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} />
+            <Stat label="Heading" value={selState === "moving" ? (compass(sel.location.headingDeg) ?? "–") : "–"} />
+          </dl>
+          <div className="grid gap-1 text-xs text-muted-foreground">
+            <span>
+              Updated <span className="font-medium text-foreground">{ago(sel.location.recordedAt, now)}</span> · {time.dateTimeSec(sel.location.recordedAt)} {time.abbr(sel.location.recordedAt)}
+            </span>
+            <div className="flex items-center gap-1">
+              <span className="sr-only">Last location: </span>
+              <span className="truncate tabular-nums">
+                {sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)}
+              </span>
+              <button
+                type="button"
+                aria-label="Copy coordinates"
+                className="grid size-6 shrink-0 cursor-pointer place-items-center rounded border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+                onClick={() => {
+                  const text = `${sel.location!.latitude.toFixed(6)}, ${sel.location!.longitude.toFixed(6)}`;
+                  navigator.clipboard.writeText(text).then(
+                    () => toast.success("Coordinates copied."),
+                    () => toast.error("Couldn't copy. Select the coordinates and copy them.")
+                  );
+                }}
+              >
+                <Copy className="size-3.5" aria-hidden="true" />
+              </button>
+              <a
+                className="ml-auto inline-flex shrink-0 items-center gap-1 text-primary hover:underline"
+                href={`https://www.google.com/maps/search/?api=1&query=${sel.location.latitude.toFixed(6)},${sel.location.longitude.toFixed(6)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Google Maps <ExternalLink className="size-3" aria-hidden="true" />
+              </a>
+            </div>
+          </div>
+        </>
+      ) : (
+        <p className="m-0 text-xs text-muted-foreground">This tracker hasn&apos;t reported a position yet.</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="md"
+          className="flex-1"
+          variant={follow ? "primary" : "secondary"}
+          aria-pressed={follow}
+          disabled={!sel.location}
+          onClick={() => {
+            if (!follow) focus(sel.deviceId);
+            setFollow((v) => !v);
+          }}
+        >
+          <LocateFixed /> {follow ? "Following" : "Follow"}
+        </Button>
+        <Button
+          size="md"
+          variant="secondary"
+          className="flex-1"
+          onClick={() => {
+            setHistoryFor(sel.deviceId);
+            setSheetOpen(true);
+          }}
+        >
+          <History /> Trip history
+        </Button>
+        <Button size="md" variant="secondary" className="px-3" onClick={() => focus(sel.deviceId)} disabled={!sel.location} aria-label="Center on vehicle" title="Center on vehicle">
+          <Crosshair />
+        </Button>
+        {canShare && sel.vehicle && (
+          <Button size="md" variant="secondary" className="px-3" onClick={() => setSharing(true)} aria-label="Share live location" title="Share live location">
+            <Share2 />
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+
   return (
-    <div className="absolute inset-0 flex">
+    <div ref={shellRef} className="absolute inset-0 flex bg-canvas">
       <div className="relative order-2 min-w-0 flex-1">
         {/* maplibre's CSS sets position:relative on the map element, so size it via a wrapper. */}
         <div className="absolute inset-0">
           <div ref={mapDiv} className="h-full w-full" />
         </div>
-        <div className="absolute left-3 top-3 z-[1] flex flex-wrap gap-2 pr-14">
-          <Button
-            size="sm"
-            variant="secondary"
-            className="hidden md:inline-flex"
-            aria-expanded={panelOpen}
-            aria-label={panelOpen ? "Hide vehicle panel" : "Show vehicle panel"}
-            title={panelOpen ? "Hide vehicle panel" : "Show vehicle panel"}
-            onClick={() => setPanelOpen((v) => !v)}
-          >
-            {panelOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => fitFleet(true)} disabled={counts.all === 0}>
-            <Maximize2 /> Fit all
-          </Button>
-          <Button size="sm" variant="secondary" aria-pressed={showLabels} className={cn(!showLabels && "text-muted-foreground")} onClick={() => setShowLabels((v) => !v)}>
-            <Tag /> <span className="sr-only sm:not-sr-only">Names</span>
-          </Button>
-          <Button size="sm" variant="secondary" aria-pressed={clustered} className={cn(!clustered && "text-muted-foreground")} title="Group nearby vehicles when zoomed out" onClick={() => setClustered((v) => !v)}>
-            <CircleDotDashed /> <span className="sr-only">Group nearby vehicles</span>
-          </Button>
-          <Button size="sm" variant="secondary" aria-pressed={showZones} className={cn(!showZones && "text-muted-foreground")} onClick={() => setShowZones((v) => !v)}>
-            <Hexagon /> <span className="sr-only sm:not-sr-only">Zones</span>
-          </Button>
+
+        {/* Top bar: view tools on the left, base map on the right. */}
+        <div className="pointer-events-none absolute inset-x-3 top-3 z-[1] flex flex-wrap items-start gap-2">
+          <div className="pointer-events-auto flex flex-wrap gap-2">
+            <Button
+              size="md"
+              variant="secondary"
+              className="hidden border-0 shadow-pop md:inline-flex"
+              aria-expanded={panelOpen}
+              aria-label={panelOpen ? "Hide vehicle panel" : "Show vehicle panel"}
+              title={panelOpen ? "Hide vehicle panel" : "Show vehicle panel"}
+              onClick={() => setPanelOpen((v) => !v)}
+            >
+              {panelOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+            </Button>
+            <Button size="md" variant="secondary" className="border-0 shadow-pop" onClick={() => fitFleet(true)} disabled={counts.all === 0}>
+              <Maximize2 /> Fit all
+            </Button>
+            <Button size="md" variant="secondary" aria-pressed={showLabels} className={cn("border-0 shadow-pop", showLabels ? "text-primary" : "text-muted-foreground")} onClick={() => setShowLabels((v) => !v)}>
+              <Tag /> <span className="sr-only sm:not-sr-only">Names</span>
+            </Button>
+            <Button size="md" variant="secondary" aria-pressed={clustered} className={cn("border-0 shadow-pop", clustered ? "text-primary" : "text-muted-foreground")} title="Group nearby vehicles when zoomed out" onClick={() => setClustered((v) => !v)}>
+              <CircleDotDashed /> <span className="sr-only">Group nearby vehicles</span>
+            </Button>
+            <Button size="md" variant="secondary" aria-pressed={showZones} className={cn("border-0 shadow-pop", showZones ? "text-primary" : "text-muted-foreground")} onClick={() => setShowZones((v) => !v)}>
+              <Hexagon /> <span className="sr-only sm:not-sr-only">Zones</span>
+            </Button>
+          </div>
+          <div className="flex-1" />
+          <div role="radiogroup" aria-label="Map style" className="pointer-events-auto flex gap-0.5 rounded-lg bg-background p-1 shadow-pop">
+            {MAP_STYLES.map((st) => {
+              const on = mapStyle === st.id;
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => !on && switchStyle(st.id)}
+                  className={cn(
+                    "h-7 cursor-pointer rounded-md border-0 px-3 text-[13px] font-semibold transition-colors",
+                    on ? "bg-primary text-primary-foreground" : "bg-transparent text-foreground hover:bg-muted"
+                  )}
+                >
+                  {st.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
+
+        {/* Right rail: zoom, north, my location, full screen. */}
+        <div className="absolute right-3 top-1/2 z-[1] hidden -translate-y-1/2 flex-col gap-2 sm:flex">
+          <div className="flex flex-col overflow-hidden rounded-lg shadow-pop">
+            <button type="button" aria-label="Zoom in" title="Zoom in" className={cn(MAP_BTN, "border-b border-border")} onClick={() => map?.zoomIn()}>
+              <Plus className="size-[18px]" aria-hidden="true" />
+            </button>
+            <button type="button" aria-label="Zoom out" title="Zoom out" className={MAP_BTN} onClick={() => map?.zoomOut()}>
+              <Minus className="size-[18px]" aria-hidden="true" />
+            </button>
+          </div>
+          <button type="button" aria-label="Reset bearing to north" title="Reset bearing to north" className={cn(MAP_BTN, "rounded-lg shadow-pop")} onClick={() => map?.resetNorthPitch()}>
+            <Navigation2 className="size-[18px] fill-danger text-danger transition-transform" style={{ transform: `rotate(${-bearing}deg)` }} aria-hidden="true" />
+          </button>
+          <button type="button" aria-label="Show my location" title="Show my location" className={cn(MAP_BTN, "rounded-lg shadow-pop")} onClick={locateMe}>
+            <Locate className="size-[18px]" aria-hidden="true" />
+          </button>
+          <button type="button" aria-label={fullscreen ? "Exit full screen" : "Full screen"} title={fullscreen ? "Exit full screen" : "Full screen"} className={cn(MAP_BTN, "rounded-lg shadow-pop")} onClick={toggleFullscreen}>
+            {fullscreen ? <Shrink className="size-[18px]" aria-hidden="true" /> : <Expand className="size-[18px]" aria-hidden="true" />}
+          </button>
+        </div>
+
+        {vehicleCard}
+
         {follow && sel && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-[160px] z-[1] flex justify-center md:bottom-4">
+          <div className="pointer-events-none absolute inset-x-0 top-16 z-[1] flex justify-center">
             <span role="status" className="pointer-events-auto inline-flex animate-in items-center gap-2 rounded-full bg-foreground px-3 py-1.5 text-xs font-medium text-background shadow-pop">
               <LocateFixed className="size-3.5" aria-hidden="true" /> Following {deviceLabel(sel)}
               <button type="button" className="cursor-pointer border-0 bg-transparent p-0 text-xs font-medium text-background underline" onClick={() => setFollow(false)}>
@@ -705,7 +861,7 @@ export function LiveMap({
           </div>
         )}
         {mapError && (
-          <div className="absolute inset-x-3 top-14 z-[1] md:right-14">
+          <div className="absolute inset-x-3 top-16 z-[1] md:right-16">
             <Alert tone="warning">{mapError}</Alert>
           </div>
         )}
@@ -717,7 +873,7 @@ export function LiveMap({
         className={cn(
           "absolute inset-x-0 bottom-0 z-[2] flex flex-col rounded-t-xl border-t border-border bg-background shadow-pop transition-[height] duration-200",
           sheetOpen || historyFor ? "h-[70%]" : "h-[148px]",
-          "md:static md:order-1 md:h-auto md:w-[340px] md:shrink-0 md:rounded-none md:border-r md:border-t-0 md:shadow-none md:transition-none",
+          "md:static md:order-1 md:h-auto md:w-[380px] md:shrink-0 md:rounded-none md:border-r md:border-t-0 md:shadow-none md:transition-none",
           !panelOpen && "md:hidden"
         )}
       >
