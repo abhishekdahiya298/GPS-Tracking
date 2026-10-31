@@ -86,6 +86,7 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
           <div className="min-w-0">
             <div className="font-medium">{row.original.msisdn ?? "No phone number"}</div>
             <div className="font-mono text-xs text-muted-foreground">{row.original.iccid}</div>
+            {row.original.providerName && <div className="truncate text-xs text-muted-foreground" title="Name in Hologram">“{row.original.providerName}”</div>}
           </div>
         )
       },
@@ -205,7 +206,7 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
         <RefreshCw className="size-4 shrink-0 text-primary" aria-hidden="true" />
         {hologram.configured ? (
           <span className="min-w-0 flex-1">
-            <strong>Synced with Hologram</strong> every 6 hours{hologram.lastSync ? <> · last <RelativeTime iso={hologram.lastSync} /></> : " · not yet"}. Status, plan and tracker come from Hologram; manage SIMs there.
+            <strong>Synced with Hologram</strong> every 6 hours{hologram.lastSync ? <> · last <RelativeTime iso={hologram.lastSync} /></> : " · not yet"}. Status, plan and tracker come from Hologram; manage SIMs there. Tip: put the tracker&apos;s IMEI in the SIM&apos;s name in Hologram (spaces or dashes are fine) and it links to that tracker on its own.
           </span>
         ) : (
           <span className="min-w-0 flex-1">
@@ -257,7 +258,7 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
           mobileRow={(s) => (
             <div className="flex items-center justify-between gap-3 text-sm">
               <div className="min-w-0">
-                <div className="truncate font-medium">{s.msisdn ?? `…${s.iccid.slice(-6)}`}</div>
+                <div className="truncate font-medium">{s.providerName ?? s.msisdn ?? `…${s.iccid.slice(-6)}`}</div>
                 <div className="truncate text-xs text-muted-foreground">
                   {s.customer?.name ?? (s.device ? "RIO stock" : "Not in a tracker")} · {s.carrier ?? "—"}
                 </div>
@@ -309,7 +310,7 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
       {dialog?.kind === "edit" && dialog.sim.provider === "hologram" && (
         <FormDialog
           title="Edit SIM"
-          description={`ICCID ${dialog.sim.iccid} · ${dialog.sim.plan ?? "Hologram"}`}
+          description={`ICCID ${dialog.sim.iccid} · ${dialog.sim.providerName ? `“${dialog.sim.providerName}” · ` : ""}${dialog.sim.plan ?? "Hologram"}`}
           intro={<p className="m-0 text-sm text-muted-foreground">Status, plan, phone number and tracker come from Hologram (activate, pause or cancel the SIM there). Here you keep the cost and your notes.</p>}
           fields={simFields(dialog.sim).filter((f) => f.name === "monthlyCost" || f.name === "notes")}
           confirmLabel="Save"

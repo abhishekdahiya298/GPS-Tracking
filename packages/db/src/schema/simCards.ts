@@ -34,6 +34,8 @@ export const simCards = pgTable(
     provider: text("provider"),
     /** The carrier's own id for the SIM (Hologram device id). */
     providerRef: text("provider_ref"),
+    /** The SIM's name in the carrier's dashboard, as typed there (e.g. "GPS-<IMEI>"). */
+    providerName: text("provider_name"),
     /** Last time the carrier sync saw this SIM. */
     syncedAt: timestamp("synced_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
