@@ -22,6 +22,7 @@ import type { PlatformTrackerQuery, PlatformTrackerRow } from "@/lib/platform";
 import { FormDialog } from "../_shared/form-dialog";
 import { PasteImportDialog } from "../_shared/paste-import";
 import { SIM_STATUS } from "../_shared/sim-meta";
+import { SimNumbers } from "../_shared/sim-numbers";
 import { TrackerActionDialog, type TrackerAction } from "../_shared/tracker-actions";
 
 type Data = { items: PlatformTrackerRow[]; total: number; page: number; pageSize: number; counts: Record<PlatformTrackerQuery["state"], number> };
@@ -98,7 +99,7 @@ export function TrackersView({ data, query, onlineSeconds }: { data: Data; query
           const m = SIM_STATUS[s.status as keyof typeof SIM_STATUS];
           return (
             <div className="min-w-0 text-xs">
-              <div className="font-medium text-foreground">{s.msisdn ?? `ICCID …${s.iccid.slice(-6)}`}</div>
+              <SimNumbers msisdn={s.msisdn} iccid={s.iccid} />
               <div className="flex items-center gap-1.5 text-muted-foreground">
                 {s.carrier ?? "SIM"} {m && s.status !== "active" && <StatusBadge tone={m.tone} label={m.label} />}
               </div>
