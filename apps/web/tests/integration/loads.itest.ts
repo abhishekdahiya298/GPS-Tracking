@@ -73,6 +73,12 @@ describe("loads: broker side", () => {
     expect(res.status).toBe(201);
     expect(json.driverLink).toMatch(/^http:\/\/localhost:3000\/d#[A-Za-z0-9_-]{43}$/);
     expect(json.sms).toBeNull(); // SMS not configured in tests
+    // Ready to send from the broker's own WhatsApp / Messages app: the driver's number and the text with the link.
+    const share = (json as unknown as { share: { phone: string; message: string } }).share;
+    expect(share.phone).toBe("+14165550123");
+    expect(share.message).toContain("Northbound Brokerage");
+    expect(share.message).toContain(json.driverLink);
+    expect(share.message).not.toContain("STOP");
     const [row] = await getDb().select().from(schema.loads).where(eq(schema.loads.id, json.id));
     expect(row!.driverPhone).toBe("+14165550123");
     expect(row!.status).toBe("invited");
@@ -228,3 +234,4 @@ describe("loads: decline and manual outcomes", () => {
     expect(d.events.at(-1)?.type).toBe("updated");
   });
 });
+

@@ -3,7 +3,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { circleRing } from "@rio-gps/core/geo";
 import { LOAD_RADIUS_DEFAULT_M } from "@rio-gps/core/loads";
 import { toWallTime, wallTimeToUtc } from "@rio-gps/core/timezones";
-import { Check, Copy, MapPin, Search } from "lucide-react";
+import { Check, Copy, MapPin, MessageCircle, MessageSquareText, Search, Share2 } from "lucide-react";
 import maplibregl, { type GeoJSONSource, type Map as MlMap, type Marker } from "maplibre-gl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -18,7 +18,7 @@ import { Field, Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import type { GeocodeResult } from "@/lib/geocode";
-import type { LoadDetailDto } from "@/lib/loads";
+import type { DriverShare, LoadDetailDto } from "@/lib/loads";
 import type { SmsResult } from "@/lib/sms";
 
 const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
@@ -238,13 +238,63 @@ function CopyLink({ link, label }: { link: string; label: string }) {
 }
 export { CopyLink };
 
+/** wa.me takes the number as digits only (country code included, no "+"). */
+export function whatsappHref(phone: string | null, message: string): string {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}
+
+/** "sms:" with "?&body=" opens the Messages app with the text filled in on both iPhone and Android. */
+export function smsHref(phone: string | null, message: string): string {
+  return `sms:${phone ?? ""}?&body=${encodeURIComponent(message)}`;
+}
+
+/**
+ * Send the driver link from your own phone or computer: WhatsApp, the Messages app, the phone's share
+ * sheet, or copy. The message and the driver's number are filled in; you only press Send.
+ */
+export function ShareDriverLink({ link, share }: { link: string; share: DriverShare | null }) {
+  const [canShare, setCanShare] = useState(false);
+  useEffect(() => setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function"), []);
+  const message = share?.message ?? link;
+  const phone = share?.phone ?? null;
+  return (
+    <div className="grid gap-3">
+      <div className="flex flex-wrap gap-2">
+        <Button asChild className="bg-[#1f9d55] text-white hover:bg-[#178048]">
+          <a href={whatsappHref(phone, message)} target="_blank" rel="noopener noreferrer">
+            <MessageCircle aria-hidden="true" /> Send by WhatsApp
+          </a>
+        </Button>
+        <Button asChild variant="secondary">
+          <a href={smsHref(phone, message)}>
+            <MessageSquareText aria-hidden="true" /> Send by text message
+          </a>
+        </Button>
+        {canShare && (
+          <Button
+            variant="secondary"
+            onClick={() => {
+              navigator.share({ text: message }).catch(() => undefined);
+            }}
+          >
+            <Share2 aria-hidden="true" /> Share…
+          </Button>
+        )}
+      </div>
+      {phone && <p className="m-0 text-xs text-muted-foreground">Opens with {phone} and the message filled in. Text messages open the Messages app on a phone, or on a computer linked to one.</p>}
+      <CopyLink link={link} label="Driver link" />
+    </div>
+  );
+}
+
 /** What happened to the text message, in one line. */
 export function SmsOutcome({ sms, smsAvailable }: { sms: SmsResult | null; smsAvailable: boolean }) {
   if (sms?.sent) return <Alert tone="success" title="Invite texted to the driver.">They tap the link and accept to start sharing their location.</Alert>;
   if (sms && !sms.sent) return <Alert tone="warning" title="The text was not sent.">{sms.message}</Alert>;
   return (
     <Alert tone="info" title="Send this link to the driver.">
-      {smsAvailable ? "You chose not to text it." : "Text messages are not set up yet, so send it yourself (SMS, WhatsApp or email)."} It only works once the driver opens it and accepts.
+      {smsAvailable ? "You chose not to text it automatically." : "Send it from your own WhatsApp or phone with the buttons below."} Tracking starts when the driver opens it and taps Share.
     </Alert>
   );
 }
@@ -256,12 +306,13 @@ export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDe
   const [pickup, setPickup] = useState<StopState>(initial ? fromDto(initial.pickup) : emptyStop());
   const [delivery, setDelivery] = useState<StopState>(initial ? fromDto(initial.delivery) : emptyStop());
   const [sendInvite, setSendInvite] = useState(smsAvailable);
+  const [driverConsent, setDriverConsent] = useState(false);
   const [mode, setMode] = useState<"phone" | "vehicle">(initial?.trackingMode ?? "phone");
   const [vehicleId, setVehicleId] = useState(initial?.vehicle?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stopErrors, setStopErrors] = useState<{ pickup: string | null; delivery: string | null }>({ pickup: null, delivery: null });
-  const [created, setCreated] = useState<{ id: string; reference: string; driverLink: string | null; sms: SmsResult | null } | null>(null);
+  const [created, setCreated] = useState<{ id: string; reference: string; driverLink: string | null; sms: SmsResult | null; share: DriverShare | null } | null>(null);
 
   const stopBody = (s: StopState) => ({
     name: s.name.trim() || null,
@@ -285,6 +336,10 @@ export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDe
       setError("Choose the vehicle that hauls this load.");
       return;
     }
+    if (!initial && mode === "phone" && smsAvailable && sendInvite && !driverConsent) {
+      setError("Tick that the driver agreed to receive a text, or untick the automatic text and send the link yourself.");
+      return;
+    }
     const body = {
       reference: String(f.get("reference") ?? "").trim(),
       carrierName: String(f.get("carrierName") ?? "").trim() || null,
@@ -304,7 +359,7 @@ export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDe
         router.push(`/loads/${initial.id}`);
         router.refresh();
       } else {
-        const r = await api<{ id: string; driverLink: string | null; sms: SmsResult | null }>("/api/loads", { method: "POST", json: { ...body, trackingMode: mode, sendInvite } });
+        const r = await api<{ id: string; driverLink: string | null; sms: SmsResult | null; share: DriverShare | null }>("/api/loads", { method: "POST", json: { ...body, trackingMode: mode, sendInvite, driverConsent } });
         setCreated({ ...r, reference: body.reference });
         window.scrollTo({ top: 0 });
       }
@@ -329,7 +384,7 @@ export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDe
         {created.driverLink && (
           <CardContent className="grid gap-3">
             <SmsOutcome sms={created.sms} smsAvailable={smsAvailable} />
-            <CopyLink link={created.driverLink} label="Driver link" />
+            <ShareDriverLink link={created.driverLink} share={created.share} />
           </CardContent>
         )}
         <CardFooter>
@@ -419,10 +474,21 @@ export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDe
           {initial || mode === "vehicle" ? (
             <span className="text-sm text-muted-foreground">{initial ? "Changes apply to tracking right away." : "Tracking starts as soon as you create the load."}</span>
           ) : (
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox checked={sendInvite} disabled={!smsAvailable} onChange={(e) => setSendInvite(e.target.checked)} />
-              {smsAvailable ? "Text the tracking link to the driver now" : "Text messages are not set up: you'll copy the link and send it yourself"}
-            </label>
+            <div className="grid gap-2">
+              <label className="flex items-center gap-2 text-sm">
+                <Checkbox checked={sendInvite} disabled={!smsAvailable} onChange={(e) => setSendInvite(e.target.checked)} />
+                {smsAvailable ? "Text the tracking link to the driver automatically" : "You'll send the link by WhatsApp or text after creating the load"}
+              </label>
+              {smsAvailable && sendInvite && (
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox required checked={driverConsent} onChange={(e) => setDriverConsent(e.target.checked)} className="mt-0.5" />
+                  <span>
+                    The driver agreed to receive a text from us about this load.
+                    <span className="block text-xs text-muted-foreground">One text with the tracking link. They can reply STOP to opt out.</span>
+                  </span>
+                </label>
+              )}
+            </div>
           )}
           <div className="flex gap-2">
             <Button variant="secondary" asChild>
