@@ -26,6 +26,8 @@ export interface PlatformOverview {
   loadsActive: number;
   alerts24h: number;
   newLeads: number;
+  /** Stock and SIM housekeeping. */
+  inventory: { inStock: number; deployedNoSim: number; simsActiveUnused: number; simsWastedCents: number; simsDeployedNotActive: number };
   attention: AttentionItem[];
   recentCustomers: { id: string; name: string; createdAt: string; trackers: number; status: OrganizationStatus }[];
 }
@@ -33,7 +35,7 @@ export interface PlatformOverview {
 export async function getPlatformOverview(onlineThresholdSeconds: number, now = new Date()): Promise<PlatformOverview> {
   const db = getDb();
   const at = now.toISOString();
-  const [[cust], [trk], [usr], [misc], attentionRows, recent] = await Promise.all([
+  const [[cust], [trk], [usr], [misc], attentionRows, recent, [inv]] = await Promise.all([
     db.execute<{ active: number; suspended: number; archived: number; new30: number }>(sql`
       select count(*) filter (where status = 'active')::int as active,
              count(*) filter (where status = 'suspended')::int as suspended,
@@ -71,7 +73,15 @@ export async function getPlatformOverview(onlineThresholdSeconds: number, now = 
       from organizations o where o.status <> 'archived'`),
     db.execute<{ id: string; name: string; created_at: Date; trackers: number; status: OrganizationStatus }>(sql`
       select o.id, o.name, o.created_at, o.status, (select count(*)::int from gps_devices d where d.organization_id = o.id) as trackers
-      from organizations o where o.status <> 'archived' order by o.created_at desc limit 5`)
+      from organizations o where o.status <> 'archived' order by o.created_at desc limit 5`),
+    db.execute<{ in_stock: number; no_sim: number; unused: number; wasted: number; off: number }>(sql`
+      select (select count(*)::int from gps_devices where organization_id is null and status <> 'retired') as in_stock,
+        (select count(*)::int from gps_devices d join organizations o on o.id = d.organization_id and o.status <> 'archived'
+           where d.status = 'active' and not exists (select 1 from sim_cards s where s.device_id = d.id)) as no_sim,
+        count(*) filter (where s.status = 'active' and (d.id is null or d.organization_id is null or d.status = 'retired'))::int as unused,
+        coalesce(sum(s.monthly_cost_cents) filter (where s.status = 'active' and (d.id is null or d.organization_id is null or d.status = 'retired')), 0)::int as wasted,
+        count(*) filter (where s.status <> 'active' and d.organization_id is not null and d.status = 'active')::int as off
+      from sim_cards s left join gps_devices d on d.id = s.device_id`)
   ]);
 
   const attention: (AttentionItem & { rank: number })[] = [];
@@ -94,20 +104,21 @@ export async function getPlatformOverview(onlineThresholdSeconds: number, now = 
     loadsActive: misc!.loads,
     alerts24h: misc!.alerts,
     newLeads: misc!.leads,
+    inventory: { inStock: inv?.in_stock ?? 0, deployedNoSim: inv?.no_sim ?? 0, simsActiveUnused: inv?.unused ?? 0, simsWastedCents: inv?.wasted ?? 0, simsDeployedNotActive: inv?.off ?? 0 },
     attention: attention.slice(0, 8).map(({ rank: _rank, ...a }) => a),
     recentCustomers: recent.map((r) => ({ id: r.id, name: r.name, createdAt: new Date(r.created_at).toISOString(), trackers: r.trackers, status: r.status }))
   };
 }
 
-// ---------- every tracker on the platform ----------
+// ---------- tracker inventory: every tracker, in stock or with a customer ----------
 
-export const TRACKER_STATES = ["all", "online", "silent", "never", "deactivated"] as const;
+export const TRACKER_STATES = ["all", "stock", "deployed", "online", "silent", "never", "nosim", "retired"] as const;
 export const PlatformTrackerQuery = z.object({
   page: z.coerce.number().int().min(1).max(100_000).default(1),
   pageSize: z.coerce.number().int().refine((n) => [10, 25, 50, 100].includes(n)).default(25),
   search: z.string().trim().max(100).default(""),
   state: z.enum(TRACKER_STATES).default("all"),
-  sort: z.enum(["lastSeen", "customer", "name"]).default("lastSeen"),
+  sort: z.enum(["lastSeen", "customer", "name", "changed"]).default("lastSeen"),
   direction: z.enum(["asc", "desc"]).default("desc")
 });
 export type PlatformTrackerQuery = z.infer<typeof PlatformTrackerQuery>;
@@ -116,72 +127,90 @@ export interface PlatformTrackerRow {
   id: string;
   name: string | null;
   model: string | null;
-  imeiLast4: string;
+  /** Full IMEI: platform admins match it against the label on the box. */
+  imei: string;
+  serialNumber: string | null;
+  notes: string | null;
   status: string;
   lastSeenAt: string | null;
-  customerId: string;
-  customerName: string;
-  customerStatus: OrganizationStatus;
+  inventoryChangedAt: string | null;
+  /** null = in RIO's stock. */
+  customer: { id: string; name: string; status: OrganizationStatus } | null;
   vehicleName: string | null;
+  sim: { id: string; iccid: string; msisdn: string | null; status: string; carrier: string | null } | null;
 }
 
-/** Every tracker with its customer. Search matches the customer, name, model or any part of the IMEI (never returned in full). */
+/** Every tracker, in stock or with a (non-archived) customer, with its SIM. */
 export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresholdSeconds: number, now = new Date()) {
   const at = now.toISOString();
-  const digits = /^\d{3,15}$/.test(q.search) ? sql` or d.imei like ${likeP(q.search)}` : sql``;
+  const digits = /^\d{3,22}$/.test(q.search) ? sql` or d.imei like ${likeP(q.search)} or coalesce(s.iccid, '') like ${likeP(q.search)} or coalesce(s.msisdn, '') like ${likeP(q.search)}` : sql``;
   const search = q.search
-    ? sql`and (coalesce(d.name, '') ilike ${likeP(q.search)} or coalesce(d.model, '') ilike ${likeP(q.search)} or o.name ilike ${likeP(q.search)}${digits})`
+    ? sql`and (coalesce(d.name, '') ilike ${likeP(q.search)} or coalesce(d.model, '') ilike ${likeP(q.search)} or coalesce(d.serial_number, '') ilike ${likeP(q.search)} or coalesce(o.name, '') ilike ${likeP(q.search)}${digits})`
     : sql``;
-  const online = sql`d.status = 'active' and d.last_seen_at > ${at}::timestamptz - make_interval(secs => ${onlineThresholdSeconds})`;
+  const deployed = sql`d.organization_id is not null`;
   const stateWhere = {
     all: sql`true`,
-    online,
-    silent: sql`d.status = 'active' and d.last_seen_at <= ${at}::timestamptz - interval '24 hours'`,
-    never: sql`d.status = 'active' and d.last_seen_at is null`,
-    deactivated: sql`d.status <> 'active'`
+    stock: sql`d.organization_id is null and d.status <> 'retired'`,
+    deployed,
+    online: sql`${deployed} and d.status = 'active' and d.last_seen_at > ${at}::timestamptz - make_interval(secs => ${onlineThresholdSeconds})`,
+    silent: sql`${deployed} and d.status = 'active' and d.last_seen_at <= ${at}::timestamptz - interval '24 hours'`,
+    never: sql`${deployed} and d.status = 'active' and d.last_seen_at is null`,
+    nosim: sql`d.status <> 'retired' and s.id is null`,
+    retired: sql`d.status = 'retired'`
   };
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
   const order = {
     lastSeen: sql`d.last_seen_at ${dir} nulls last`,
-    customer: sql`lower(o.name) ${dir}`,
-    name: sql`lower(coalesce(d.name, d.model, '')) ${dir}`
+    customer: sql`lower(o.name) ${dir} nulls first`,
+    name: sql`lower(coalesce(d.name, d.model, '')) ${dir}`,
+    changed: sql`coalesce(d.inventory_changed_at, d.created_at) ${dir}`
   }[q.sort];
-  const base = sql`from gps_devices d join organizations o on o.id = d.organization_id where o.status <> 'archived' ${search}`;
+  const base = sql`from gps_devices d left join organizations o on o.id = d.organization_id left join sim_cards s on s.device_id = d.id
+    where (o.id is null or o.status <> 'archived') ${search}`;
+  const db = getDb();
   const [rows, counts] = await Promise.all([
-    getDb().execute<{ id: string; name: string | null; model: string | null; imei: string; status: string; last_seen_at: Date | null; org_id: string; org_name: string; org_status: OrganizationStatus; vehicle_name: string | null; total: number }>(sql`
-      select d.id, d.name, d.model, d.imei, d.status, d.last_seen_at, o.id as org_id, o.name as org_name, o.status as org_status,
+    db.execute<Record<string, unknown>>(sql`
+      select d.id, d.name, d.model, d.imei, d.serial_number, d.platform_notes, d.status, d.last_seen_at, d.inventory_changed_at,
+        o.id as org_id, o.name as org_name, o.status as org_status,
+        s.id as sim_id, s.iccid, s.msisdn, s.status as sim_status, s.carrier,
         (select v.name from device_assignments a join vehicles v on v.id = a.vehicle_id and v.organization_id = a.organization_id
            where a.device_id = d.id and a.organization_id = d.organization_id and a.unassigned_at is null limit 1) as vehicle_name,
         count(*) over()::int as total
       ${base} and ${stateWhere[q.state]}
       order by ${order}, d.id limit ${q.pageSize} offset ${(q.page - 1) * q.pageSize}`),
-    getDb().execute<{ all: number; online: number; silent: number; never: number; deactivated: number }>(sql`
+    db.execute<Record<(typeof TRACKER_STATES)[number], number>>(sql`
       select count(*)::int as all,
+        count(*) filter (where ${stateWhere.stock})::int as stock,
+        count(*) filter (where ${stateWhere.deployed})::int as deployed,
         count(*) filter (where ${stateWhere.online})::int as online,
         count(*) filter (where ${stateWhere.silent})::int as silent,
         count(*) filter (where ${stateWhere.never})::int as never,
-        count(*) filter (where ${stateWhere.deactivated})::int as deactivated
+        count(*) filter (where ${stateWhere.nosim})::int as nosim,
+        count(*) filter (where ${stateWhere.retired})::int as retired
       ${base}`)
   ]);
+  const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
   return {
     items: rows.map(
       (r): PlatformTrackerRow => ({
-        id: r.id,
-        name: r.name,
-        model: r.model,
-        imeiLast4: r.imei.slice(-4),
-        status: r.status,
-        lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at).toISOString() : null,
-        customerId: r.org_id,
-        customerName: r.org_name,
-        customerStatus: r.org_status,
-        vehicleName: r.vehicle_name
+        id: String(r.id),
+        name: (r.name as string | null) ?? null,
+        model: (r.model as string | null) ?? null,
+        imei: String(r.imei),
+        serialNumber: (r.serial_number as string | null) ?? null,
+        notes: (r.platform_notes as string | null) ?? null,
+        status: String(r.status),
+        lastSeenAt: iso(r.last_seen_at),
+        inventoryChangedAt: iso(r.inventory_changed_at),
+        customer: r.org_id ? { id: String(r.org_id), name: String(r.org_name), status: r.org_status as OrganizationStatus } : null,
+        vehicleName: (r.vehicle_name as string | null) ?? null,
+        sim: r.sim_id ? { id: String(r.sim_id), iccid: String(r.iccid), msisdn: (r.msisdn as string | null) ?? null, status: String(r.sim_status), carrier: (r.carrier as string | null) ?? null } : null
       })
     ),
     total: rows.length ? Number(rows[0]!.total) : 0,
     page: q.page,
     pageSize: q.pageSize,
-    counts: counts[0] ?? { all: 0, online: 0, silent: 0, never: 0, deactivated: 0 }
+    counts: counts[0] ?? { all: 0, stock: 0, deployed: 0, online: 0, silent: 0, never: 0, nosim: 0, retired: 0 }
   };
 }
 
@@ -201,7 +230,7 @@ export type ActivityQuery = z.infer<typeof ActivityQuery>;
 const KIND_WHERE = {
   all: sql`true`,
   customers: sql`a.action like 'customer.%'`,
-  trackers: sql`a.action like 'device.%'`,
+  trackers: sql`(a.action like 'device.%' or a.action like 'sim.%')`,
   access: sql`(a.action like 'admin.%' or a.action like 'auth.%')`,
   people: sql`(a.action like 'member.%' or a.action like 'membership.%' or a.action like 'user.%')`
 };

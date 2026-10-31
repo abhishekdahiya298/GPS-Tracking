@@ -5,6 +5,8 @@ import { getOrganizationStatus } from "./organization-status";
 
 export type IngestOutcome =
   | { status: "unknown_device" }
+  /** In RIO's stock (no customer yet): the tracker is alive (last seen updated) but nothing is stored. */
+  | { status: "in_stock"; deviceId: string }
   | { status: "device_inactive"; deviceId: string; organizationId: string }
   /** The customer is archived (soft-deleted): the tracker is alive but nothing is stored. */
   | { status: "customer_archived"; deviceId: string; organizationId: string }
@@ -46,10 +48,12 @@ export async function ingestPosition(position: NormalizedPosition, options: Inge
     .returning({ id: schema.gpsDevices.id, organizationId: schema.gpsDevices.organizationId, status: schema.gpsDevices.status });
 
   if (!device) return { status: "unknown_device" };
-  const ids = { deviceId: device.id, organizationId: device.organizationId };
+  if (!device.organizationId) return { status: "in_stock", deviceId: device.id };
+  const organizationId = device.organizationId;
+  const ids = { deviceId: device.id, organizationId };
   // Deactivated by the customer: keep last_seen (the hardware is alive) but store no location.
   if (device.status !== "active") return { status: "device_inactive", ...ids };
-  if ((await getOrganizationStatus(device.organizationId)) === "archived") return { status: "customer_archived", ...ids };
+  if ((await getOrganizationStatus(organizationId)) === "archived") return { status: "customer_archived", ...ids };
   if (!isUsableFix(position)) return { status: "no_fix", ...ids };
 
   return db.transaction(async (tx) => {
@@ -59,7 +63,7 @@ export async function ingestPosition(position: NormalizedPosition, options: Inge
       .where(
         and(
           eq(schema.deviceAssignments.deviceId, device.id),
-          eq(schema.deviceAssignments.organizationId, device.organizationId),
+          eq(schema.deviceAssignments.organizationId, organizationId),
           isNull(schema.deviceAssignments.unassignedAt)
         )
       )
@@ -79,7 +83,7 @@ export async function ingestPosition(position: NormalizedPosition, options: Inge
     const [history] = await tx
       .insert(schema.locationHistory)
       .values({
-        organizationId: device.organizationId,
+        organizationId: organizationId,
         deviceId: device.id,
         vehicleId: assignment?.vehicleId ?? null,
         receivedAt: now,
@@ -92,7 +96,7 @@ export async function ingestPosition(position: NormalizedPosition, options: Inge
 
     const current = await tx
       .insert(schema.currentLocations)
-      .values({ deviceId: device.id, organizationId: device.organizationId, receivedAt: now, rawPayload: position, ...fields })
+      .values({ deviceId: device.id, organizationId: organizationId, receivedAt: now, rawPayload: position, ...fields })
       .onConflictDoUpdate({
         target: schema.currentLocations.deviceId,
         set: { ...fields, receivedAt: now, rawPayload: position },

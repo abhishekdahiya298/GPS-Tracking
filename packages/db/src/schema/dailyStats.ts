@@ -27,7 +27,8 @@ export const deviceDailyStats = pgTable(
     maxSpeedKph: integer("max_speed_kph").notNull().default(0),
     computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow()
   },
-  (t) => [primaryKey({ columns: [t.deviceId, t.day] }), index("device_daily_stats_org_day_idx").on(t.organizationId, t.day)]
+  // The organization is part of the key: a tracker moved to another customer mid-day has one row per customer.
+  (t) => [primaryKey({ columns: [t.organizationId, t.deviceId, t.day] }), index("device_daily_stats_org_day_idx").on(t.organizationId, t.day)]
 );
 
 /** Single-row bookkeeping for the summary job: the last `location_history.id` it has processed. */

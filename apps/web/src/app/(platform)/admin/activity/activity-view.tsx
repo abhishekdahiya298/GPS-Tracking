@@ -102,7 +102,7 @@ export function ActivityView({ data, query }: { data: Data; query: ActivityQuery
                 options={[
                   { value: "all", label: "All" },
                   { value: "customers", label: "Customers" },
-                  { value: "trackers", label: "Trackers" },
+                  { value: "trackers", label: "Trackers & SIMs" },
                   { value: "people", label: "Users" },
                   { value: "access", label: "Access" }
                 ]}

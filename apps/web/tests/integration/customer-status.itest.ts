@@ -182,8 +182,7 @@ describe("platform console read models", () => {
     expect(o.attention.map((a) => `${a.name}:${a.issue}`)).toContain("Beta Logistics:no_trackers");
 
     const t = await listPlatformTrackers(PlatformTrackerQuery.parse({ search: "6115" }), 3900);
-    expect(t.items).toEqual([expect.objectContaining({ customerName: "Acme Freight", imeiLast4: "6115" })]);
-    expect(JSON.stringify(t)).not.toContain(IMEI);
+    expect(t.items).toEqual([expect.objectContaining({ imei: IMEI, customer: expect.objectContaining({ name: "Acme Freight" }) })]);
 
     const a = await listActivity(ActivityQuery.parse({ kind: "customers" }));
     expect(a.items.map((r) => r.action)).toEqual(["customer.restored", "customer.archived", "customer.suspended"]);

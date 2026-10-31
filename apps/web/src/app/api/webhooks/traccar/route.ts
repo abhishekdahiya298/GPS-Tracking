@@ -62,6 +62,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: "ignored", reason: "unknown device" }, { status: 202 });
     case "device_inactive":
       return NextResponse.json({ status: "ignored", reason: "device inactive" }, { status: 202 });
+    case "in_stock":
+      // A tracker in RIO's stock (e.g. being tested before shipping): alive, nothing stored.
+      return NextResponse.json({ status: "ignored", reason: "tracker in stock" }, { status: 202 });
     case "customer_archived":
       return NextResponse.json({ status: "ignored", reason: "customer archived" }, { status: 202 });
     case "no_fix":

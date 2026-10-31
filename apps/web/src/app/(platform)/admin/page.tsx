@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, ArrowRight, Building2, CheckCircle2, CircleOff, Cpu, Database, Inbox, Package, Plus, Radio, Server, Users } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Boxes, Building2, CardSim, CheckCircle2, CircleOff, Cpu, Database, Inbox, Package, Plus, Radio, Server, Users } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
@@ -156,6 +156,14 @@ export default async function PlatformOverviewPage() {
           <div className="grid grid-cols-2 gap-3">
             <MiniStat href="/admin/leads" icon={Inbox} label="New leads" value={o.newLeads} highlight={o.newLeads > 0} />
             <MiniStat icon={Package} label="Loads in progress" value={o.loadsActive} />
+            <MiniStat href="/admin/trackers?state=stock" icon={Boxes} label="Trackers in stock" value={o.inventory.inStock} />
+            <MiniStat
+              href={o.inventory.simsActiveUnused + o.inventory.simsDeployedNotActive > 0 ? "/admin/sims?view=attention" : "/admin/trackers?state=nosim"}
+              icon={CardSim}
+              label={o.inventory.simsActiveUnused + o.inventory.simsDeployedNotActive > 0 ? "SIMs to fix" : "Trackers without SIM"}
+              value={o.inventory.simsActiveUnused + o.inventory.simsDeployedNotActive > 0 ? o.inventory.simsActiveUnused + o.inventory.simsDeployedNotActive : o.inventory.deployedNoSim}
+              highlight={o.inventory.simsActiveUnused + o.inventory.simsDeployedNotActive > 0}
+            />
           </div>
         </div>
       </div>
