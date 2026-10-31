@@ -17,7 +17,11 @@ import {
   UserCircle,
   Users,
   Wrench,
-  type LucideIcon, Inbox } from "lucide-react";
+  Activity,
+  ShieldCheck,
+  type LucideIcon,
+  Inbox
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -46,7 +50,11 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   wrench: Wrench,
   users: Users,
   building: Building2,
-  settings: Settings
+  settings: Settings,
+  inbox: Inbox,
+  activity: Activity,
+  shield: ShieldCheck,
+  user: UserCircle
 };
 
 /** Routes whose page fills the content area edge to edge (maps). */
@@ -67,7 +75,14 @@ export interface ShellOrganization {
   current: boolean;
 }
 
+/**
+ * "tenant": one company's app (for a platform admin, while viewing that customer).
+ * "platform": the platform console; `viewAsName` is the customer still selected in this session.
+ */
+export type ShellMode = { kind: "tenant"; orgStatus?: "active" | "suspended" | "archived" } | { kind: "platform"; viewAsName: string | null };
+
 export function AppShell({
+  mode = { kind: "tenant" },
   nav,
   user,
   orgName,
@@ -80,6 +95,7 @@ export function AppShell({
   timeFormat,
   children
 }: {
+  mode?: ShellMode;
   nav: NavSection[];
   user: ShellUser;
   orgName: string;
@@ -96,6 +112,7 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => setMobileOpen(false), [pathname]);
   const fullBleed = FULL_BLEED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  const home = mode.kind === "platform" ? "/admin" : "/dashboard";
 
   return (
     <TimeProvider timeZone={timeZone} timeFormat={timeFormat}>
@@ -105,12 +122,12 @@ export function AppShell({
       </a>
 
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col lg:flex" aria-label="Main navigation">
-        <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} />
+        <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} home={home} />
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent side="left" title="RIO GPS" className="w-72 p-0 lg:hidden">
-          <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} hideBrand />
+          <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} home={home} hideBrand />
         </SheetContent>
       </Sheet>
 
@@ -119,10 +136,13 @@ export function AppShell({
           <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open menu" onClick={() => setMobileOpen(true)}>
             <Menu aria-hidden="true" />
           </Button>
-          <Link href="/dashboard" className="flex items-center gap-2 text-[15px] font-semibold text-foreground no-underline lg:hidden">
+          <Link href={home} className="flex items-center gap-2 text-[15px] font-semibold text-foreground no-underline lg:hidden">
             <Brand />
           </Link>
-          <div className="hidden min-w-0 flex-1 truncate text-sm text-muted-foreground lg:block">{orgName}</div>
+          <div className="hidden min-w-0 flex-1 items-center gap-2 truncate text-sm text-muted-foreground lg:flex">
+            {mode.kind === "platform" && <ShieldCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />}
+            <span className="truncate">{orgName}</span>
+          </div>
           <div className="ml-auto flex items-center gap-1">
             <CommandPalette nav={nav} />
             {canSeeAlerts && (
@@ -137,11 +157,12 @@ export function AppShell({
                 </Link>
               </Button>
             )}
-            <UserMenu user={user} orgName={orgName} organizations={organizations} viewingAs={viewingAs} />
+            <UserMenu user={user} orgName={orgName} organizations={organizations} viewingAs={viewingAs} platform={mode.kind === "platform"} />
           </div>
         </header>
 
-        {viewingAs && <ViewAsBanner orgName={orgName} />}
+        {viewingAs && mode.kind === "tenant" && <ViewAsBanner orgName={orgName} orgStatus={mode.orgStatus ?? "active"} />}
+        {mode.kind === "platform" && mode.viewAsName && <StillViewingBanner name={mode.viewAsName} />}
 
         <main id="main" className={cn("flex-1", fullBleed && "relative h-[calc(100dvh-3.5rem)] overflow-hidden")}>
           <UnitsProvider system={unitSystem}>{fullBleed ? children : <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-6">{children}</div>}</UnitsProvider>
@@ -156,7 +177,7 @@ function Brand({ large }: { large?: boolean }) {
   return <BrandMark className={large ? "h-[58px]" : "h-9"} />;
 }
 
-function SidebarContent({ nav, pathname, orgName, user, hideBrand }: { nav: NavSection[]; pathname: string; orgName: string; user: ShellUser; hideBrand?: boolean }) {
+function SidebarContent({ nav, pathname, orgName, user, home, hideBrand }: { nav: NavSection[]; pathname: string; orgName: string; user: ShellUser; home: string; hideBrand?: boolean }) {
   const initials = user.name
     .split(/\s+/)
     .map((p) => p[0])
@@ -173,7 +194,7 @@ function SidebarContent({ nav, pathname, orgName, user, hideBrand }: { nav: NavS
       </svg>
       {!hideBrand && (
         <div className="relative shrink-0 px-3 pb-2 pt-3">
-          <Link href="/dashboard" aria-label="RIO GPS home" className="flex h-[74px] items-center justify-center rounded-xl bg-white px-3 no-underline shadow-card transition-transform duration-200 hover:scale-[1.02] focus-visible:outline-white">
+          <Link href={home} aria-label="RIO GPS home" className="flex h-[74px] items-center justify-center rounded-xl bg-white px-3 no-underline shadow-card transition-transform duration-200 hover:scale-[1.02] focus-visible:outline-white">
             <Brand large />
           </Link>
         </div>
@@ -222,7 +243,7 @@ function SidebarContent({ nav, pathname, orgName, user, hideBrand }: { nav: NavS
   );
 }
 
-function UserMenu({ user, orgName, organizations, viewingAs }: { user: ShellUser; orgName: string; organizations: ShellOrganization[]; viewingAs: boolean }) {
+function UserMenu({ user, orgName, organizations, viewingAs, platform }: { user: ShellUser; orgName: string; organizations: ShellOrganization[]; viewingAs: boolean; platform: boolean }) {
   const initials = user.name
     .split(/\s+/)
     .map((p) => p[0])
@@ -269,17 +290,10 @@ function UserMenu({ user, orgName, organizations, viewingAs }: { user: ShellUser
             <UserCircle aria-hidden="true" /> My account
           </Link>
         </DropdownMenuItem>
-        {user.isSuperAdmin && (
+        {user.isSuperAdmin && !platform && (
           <DropdownMenuItem asChild>
-            <Link href="/admin/customers">
-              <Building2 aria-hidden="true" /> Customers
-            </Link>
-          </DropdownMenuItem>
-        )}
-        {user.isSuperAdmin && (
-          <DropdownMenuItem asChild>
-            <Link href="/admin/leads">
-              <Inbox aria-hidden="true" /> Leads
+            <Link href="/admin">
+              <ShieldCheck aria-hidden="true" /> Platform console
             </Link>
           </DropdownMenuItem>
         )}
@@ -313,21 +327,51 @@ async function switchCompany(organizationId: string) {
 async function exitViewAs() {
   try {
     await api("/api/admin/view-as", { method: "POST", json: { organizationId: null } });
-    window.location.assign("/admin/customers");
+    window.location.assign("/admin");
   } catch (err) {
     toast.error(errorMessage(err));
   }
 }
 
-function ViewAsBanner({ orgName }: { orgName: string }) {
+const STATUS_NOTE: Record<"suspended" | "archived", string> = {
+  suspended: "This customer is suspended: its users can't sign in and no alerts go out.",
+  archived: "This customer is archived: its users can't sign in and tracker positions aren't stored."
+};
+
+function ViewAsBanner({ orgName, orgStatus }: { orgName: string; orgStatus: "active" | "suspended" | "archived" }) {
   return (
     <div role="status" className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-warning/30 bg-warning-soft px-4 py-2 text-center text-sm text-foreground">
       <span>
         Viewing as customer <strong>{orgName}</strong>. You have full access here and every action is audited.
+        {orgStatus !== "active" && <strong className="ml-1 text-danger">{STATUS_NOTE[orgStatus]}</strong>}
       </span>
-      <Button size="sm" variant="secondary" onClick={() => void exitViewAs()}>
-        Exit customer view
-      </Button>
+      <span className="flex gap-2">
+        <Button asChild size="sm" variant="ghost">
+          <Link href="/admin">Platform console</Link>
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => void exitViewAs()}>
+          Exit customer view
+        </Button>
+      </span>
+    </div>
+  );
+}
+
+/** In the platform console while a customer is still selected for this session. */
+function StillViewingBanner({ name }: { name: string }) {
+  return (
+    <div role="status" className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-border bg-muted px-4 py-2 text-center text-sm text-foreground">
+      <span>
+        Customer view is still open for <strong>{name}</strong>.
+      </span>
+      <span className="flex gap-2">
+        <Button asChild size="sm" variant="ghost">
+          <Link href="/dashboard">Back to {name}</Link>
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => void exitViewAs()}>
+          Exit customer view
+        </Button>
+      </span>
     </div>
   );
 }

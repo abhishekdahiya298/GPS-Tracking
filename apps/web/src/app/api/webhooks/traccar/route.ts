@@ -1,3 +1,4 @@
+import { isOrganizationActive } from "@/lib/organization-status";
 import { locationChannel } from "@rio-gps/core";
 import { TraccarWebhookAuthError, TraccarWebhookPayloadError, parseWebhookPosition, verifyWebhookSecret } from "@rio-gps/traccar-client";
 import { NextResponse } from "next/server";
@@ -61,6 +62,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: "ignored", reason: "unknown device" }, { status: 202 });
     case "device_inactive":
       return NextResponse.json({ status: "ignored", reason: "device inactive" }, { status: 202 });
+    case "customer_archived":
+      return NextResponse.json({ status: "ignored", reason: "customer archived" }, { status: 202 });
     case "no_fix":
       // No GNSS fix (or the 0,0 placeholder): device is alive (last_seen updated) but no location is stored.
       return NextResponse.json({ status: "ignored", reason: "no valid fix" }, { status: 202 });
@@ -85,6 +88,9 @@ export async function POST(request: Request) {
     countIngest("publish_failed");
     logger.error("ingest.redis_publish_failed", { deviceId: device.id, organizationId: device.organizationId }, err);
   }
+
+  // A suspended customer keeps its history (above) but gets no alerts or load updates.
+  if (!(await isOrganizationActive(device.organizationId))) return NextResponse.json({ status: "ok" });
 
   // Alerts run after the position is committed and never fail the ingest.
   await evaluateAlertsForPosition(device, {

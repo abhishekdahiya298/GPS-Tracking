@@ -11,6 +11,7 @@ import { logger } from "./logger";
 import { addMember } from "./team";
 import { getTraccarAdmin } from "./traccar";
 import { BULK_IMPORT_MAX } from "./imei-list";
+import type { OrganizationStatus } from "./organization-status";
 
 /**
  * Platform (super admin) operations: create customer organizations, register
@@ -60,13 +61,16 @@ export async function listCustomers(): Promise<CustomerDto[]> {
   const rows = await getDb().execute<{ id: string; name: string; slug: string; created_at: Date; devices: number; members: number }>(sql`
     select o.id, o.name, o.slug, o.created_at,
       (select count(*)::int from gps_devices d where d.organization_id = o.id) as devices,
-      (select count(*)::int from memberships m where m.organization_id = o.id) as members
+      (select count(*)::int from memberships m join users u on u.id = m.user_id where m.organization_id = o.id and not u.is_super_admin) as members
     from organizations o order by o.name`);
   return rows.map((r) => ({ id: r.id, name: r.name, slug: r.slug, createdAt: new Date(r.created_at).toISOString(), devices: r.devices, members: r.members }));
 }
 
 export async function createCustomer(actorUserId: string, input: z.infer<typeof CreateCustomerSchema>, meta: Meta) {
   const db = getDb();
+  // Checked before anything is created, so a refused admin never leaves an empty customer behind.
+  const [adminUser] = await db.select({ isSuperAdmin: schema.users.isSuperAdmin }).from(schema.users).where(eq(schema.users.email, input.admin.email)).limit(1);
+  if (adminUser?.isSuperAdmin) throw new ValidationError("That email is a RIO GPS platform admin. Enter the customer's own administrator; you can open any customer with View as customer.");
   let orgId: string;
   try {
     orgId = await db.transaction(async (tx) => {
@@ -88,8 +92,9 @@ export async function createCustomer(actorUserId: string, input: z.infer<typeof 
 export async function registerDevice(actorUserId: string, organizationId: string, input: z.infer<typeof RegisterDeviceSchema>, meta: Meta) {
   const db = getDb();
   const [provider] = await db.select({ id: schema.gpsProviders.id }).from(schema.gpsProviders).where(eq(schema.gpsProviders.organizationId, organizationId)).limit(1);
-  const [org] = await db.select({ id: schema.organizations.id, slug: schema.organizations.slug }).from(schema.organizations).where(eq(schema.organizations.id, organizationId));
+  const [org] = await db.select({ id: schema.organizations.id, slug: schema.organizations.slug, status: schema.organizations.status }).from(schema.organizations).where(eq(schema.organizations.id, organizationId));
   if (!org) throw new NotFoundError("Customer not found");
+  if (org.status === "archived") throw new ConflictError("This customer is archived. Restore it before adding trackers.");
   if (!isValidImei(input.imei) && !input.allowUncheckedImei) {
     throw new ValidationError("This number does not pass the IMEI check, which usually means one digit is mistyped. Compare it with the device label.", { code: "IMEI_CHECK_DIGIT" });
   }
@@ -148,8 +153,9 @@ export type BulkRowStatus = "registered" | "already_registered" | "other_custome
  * digit are refused here: in bulk there is nobody to confirm a typo.
  */
 export async function registerDevicesBulk(actorUserId: string, organizationId: string, input: z.infer<typeof BulkRegisterSchema>, meta: Meta) {
-  const [org] = await getDb().select({ id: schema.organizations.id }).from(schema.organizations).where(eq(schema.organizations.id, organizationId));
+  const [org] = await getDb().select({ id: schema.organizations.id, status: schema.organizations.status }).from(schema.organizations).where(eq(schema.organizations.id, organizationId));
   if (!org) throw new NotFoundError("Customer not found");
+  if (org.status === "archived") throw new ConflictError("This customer is archived. Restore it before adding trackers.");
   const results: { imei: string; status: BulkRowStatus; message?: string }[] = [];
   const seen = new Set<string>();
   for (const row of input.rows) {
@@ -201,36 +207,59 @@ export const CustomerListQuery = z.object({
   pageSize: z.coerce.number().int().refine((n) => [10, 25, 50, 100].includes(n)).default(25),
   search: z.string().trim().max(100).default(""),
   sort: z.enum(["name", "created", "devices", "members"]).default("name"),
-  direction: z.enum(["asc", "desc"]).default("asc")
+  direction: z.enum(["asc", "desc"]).default("asc"),
+  /** current = active + suspended (the default); archived customers only show when asked for. */
+  view: z.enum(["current", "suspended", "archived", "all"]).default("current")
 });
 export type CustomerListQuery = z.infer<typeof CustomerListQuery>;
 
 export interface CustomerRow extends CustomerDto {
   /** Devices that reported in the last 24 h. */
   activeDevices: number;
+  status: OrganizationStatus;
+  statusReason: string | null;
 }
 
 const likeP = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 /** Super-admin only (callers check isSuperAdmin): every organization, paged in SQL. */
-export async function listCustomersPage(q: CustomerListQuery): Promise<{ items: CustomerRow[]; total: number; page: number; pageSize: number }> {
-  const search = q.search ? sql`where o.name ilike ${likeP(q.search)} or o.slug ilike ${likeP(q.search)}` : sql``;
+export async function listCustomersPage(
+  q: CustomerListQuery
+): Promise<{ items: CustomerRow[]; total: number; page: number; pageSize: number; counts: Record<"current" | "suspended" | "archived" | "all", number> }> {
+  const viewWhere = { current: sql`o.status <> 'archived'`, suspended: sql`o.status = 'suspended'`, archived: sql`o.status = 'archived'`, all: sql`true` }[q.view];
+  const search = q.search ? sql`where (o.name ilike ${likeP(q.search)} or o.slug ilike ${likeP(q.search)}) and ${viewWhere}` : sql`where ${viewWhere}`;
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
   const order = { name: sql`lower(name) ${dir}`, created: sql`created_at ${dir}`, devices: sql`devices ${dir}`, members: sql`members ${dir}` }[q.sort];
-  const rows = await getDb().execute<{ id: string; name: string; slug: string; created_at: Date; devices: number; members: number; active_devices: number; total: number }>(sql`
+  const statusCounts = getDb().execute<{ status: OrganizationStatus; n: number }>(sql`select status, count(*)::int as n from organizations group by status`);
+  const rows = await getDb().execute<{ id: string; name: string; slug: string; created_at: Date; devices: number; members: number; active_devices: number; total: number; status: OrganizationStatus; status_reason: string | null }>(sql`
     with f as (
-      select o.id, o.name, o.slug, o.created_at,
+      select o.id, o.name, o.slug, o.created_at, o.status, o.status_reason,
         (select count(*)::int from gps_devices d where d.organization_id = o.id) as devices,
         (select count(*)::int from gps_devices d where d.organization_id = o.id and d.last_seen_at > now() - interval '24 hours') as active_devices,
-        (select count(*)::int from memberships m where m.organization_id = o.id) as members
+        (select count(*)::int from memberships m join users u on u.id = m.user_id where m.organization_id = o.id and not u.is_super_admin) as members
       from organizations o ${search}
     )
     select *, count(*) over()::int as total from f order by ${order}, id limit ${q.pageSize} offset ${(q.page - 1) * q.pageSize}`);
+  const n = new Map((await statusCounts).map((c) => [c.status, c.n]));
+  const active = n.get("active") ?? 0,
+    suspended = n.get("suspended") ?? 0,
+    archived = n.get("archived") ?? 0;
   return {
-    items: rows.map((r) => ({ id: r.id, name: r.name, slug: r.slug, createdAt: new Date(r.created_at).toISOString(), devices: r.devices, members: r.members, activeDevices: r.active_devices })),
+    items: rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      slug: r.slug,
+      createdAt: new Date(r.created_at).toISOString(),
+      devices: r.devices,
+      members: r.members,
+      activeDevices: r.active_devices,
+      status: r.status,
+      statusReason: r.status_reason
+    })),
     total: rows.length ? Number(rows[0]!.total) : 0,
     page: q.page,
-    pageSize: q.pageSize
+    pageSize: q.pageSize,
+    counts: { current: active + suspended, suspended, archived, all: active + suspended + archived }
   };
 }
 
@@ -239,6 +268,10 @@ export interface CustomerDetail {
   name: string;
   slug: string;
   createdAt: string;
+  status: OrganizationStatus;
+  statusReason: string | null;
+  statusChangedAt: string | null;
+  statusChangedBy: string | null;
   members: { userId: string; name: string; email: string; role: string; lastSignInAt: string | null }[];
   devices: { id: string; name: string | null; model: string | null; imeiLast4: string; status: string; lastSeenAt: string | null; vehicleName: string | null }[];
 }
@@ -248,10 +281,11 @@ export async function getCustomerDetail(organizationId: string): Promise<Custome
   const db = getDb();
   const [org] = await db.select().from(schema.organizations).where(eq(schema.organizations.id, organizationId));
   if (!org) return null;
+  const [changedBy] = org.statusChangedBy ? await db.select({ name: schema.users.name, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, org.statusChangedBy)) : [];
   const [members, devices] = await Promise.all([
     db.execute<{ user_id: string; name: string; email: string; role: string; last_sign_in: Date | null }>(sql`
       select u.id as user_id, u.name, u.email, m.role, (select max(s.created_at) from sessions s where s.user_id = u.id) as last_sign_in
-      from memberships m join users u on u.id = m.user_id where m.organization_id = ${organizationId}
+      from memberships m join users u on u.id = m.user_id where m.organization_id = ${organizationId} and not u.is_super_admin
       order by case m.role when 'ORG_ADMIN' then 0 when 'FLEET_MANAGER' then 1 when 'DISPATCHER' then 2 else 3 end, lower(u.name)`),
     db.execute<{ id: string; name: string | null; model: string | null; imei: string; status: string; last_seen_at: Date | null; vehicle_name: string | null }>(sql`
       select d.id, d.name, d.model, d.imei, d.status, d.last_seen_at, v.name as vehicle_name
@@ -265,6 +299,10 @@ export async function getCustomerDetail(organizationId: string): Promise<Custome
     name: org.name,
     slug: org.slug,
     createdAt: org.createdAt.toISOString(),
+    status: org.status,
+    statusReason: org.statusReason,
+    statusChangedAt: org.statusChangedAt?.toISOString() ?? null,
+    statusChangedBy: changedBy ? changedBy.name || changedBy.email : null,
     members: members.map((m) => ({ userId: m.user_id, name: m.name, email: m.email, role: m.role, lastSignInAt: m.last_sign_in ? new Date(m.last_sign_in).toISOString() : null })),
     devices: devices.map((d) => ({ id: d.id, name: d.name, model: d.model, imeiLast4: d.imei.slice(-4), status: d.status, lastSeenAt: d.last_seen_at ? new Date(d.last_seen_at).toISOString() : null, vehicleName: d.vehicle_name }))
   };

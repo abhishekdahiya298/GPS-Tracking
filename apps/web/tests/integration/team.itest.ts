@@ -65,7 +65,8 @@ describe("team: read", () => {
     const res = await teamGET(req("GET", "/api/team", "fleet"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.members.map((m: { email: string }) => m.email).sort()).toEqual(["admin@a.test", "fleet@a.test", "root@platform.test", "viewer@a.test"]);
+    // Platform admins are never organization members, so they are never listed.
+    expect(body.members.map((m: { email: string }) => m.email).sort()).toEqual(["admin@a.test", "fleet@a.test", "viewer@a.test"]);
     expect(JSON.stringify(body)).not.toContain("bob@b.test");
     expect((await teamPOST(req("POST", "/api/team", "fleet", { email: "x@a.test", name: "x", role: "VIEWER" }))).status).toBe(403);
   });
@@ -156,8 +157,14 @@ describe("team: password reset", () => {
     await signIn("bob@b.test"); // untouched
   });
 
-  it("refuses to reset a platform super admin (non-super actor)", async () => {
-    expect((await resetPOST(req("POST", `/api/team/${ids.root}/reset-password`, "admin"), p(ids.root!))).status).toBe(403);
+  it("a platform admin is not a member, so an org admin can't reset them", async () => {
+    expect((await resetPOST(req("POST", `/api/team/${ids.root}/reset-password`, "admin"), p(ids.root!))).status).toBe(404);
+  });
+
+  it("refuses to add a platform admin as a member", async () => {
+    const res = await teamPOST(req("POST", "/api/team", "admin", { email: "root@platform.test", name: "Root", role: "VIEWER" }));
+    expect(res.status).toBe(409);
+    expect(await getDb().select().from(schema.memberships).where(eq(schema.memberships.userId, ids.root!))).toEqual([]);
   });
 });
 

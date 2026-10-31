@@ -28,6 +28,20 @@ export class ForbiddenError extends AppError {
   }
 }
 
+/** A platform admin with no customer selected: platform pages only (they are never an organization member). */
+export class PlatformOnlyError extends AppError {
+  constructor() {
+    super("PLATFORM_ADMIN", 403, "Choose a customer to view first");
+  }
+}
+
+/** Every organization this person belongs to is suspended or archived. */
+export class OrganizationUnavailableError extends AppError {
+  constructor(public readonly organizationStatus: "suspended" | "archived") {
+    super("ORGANIZATION_UNAVAILABLE", 403, "Your company's RIO GPS account is not active. Contact RIO GPS support.");
+  }
+}
+
 /** Also used for resources in another tenant, so existence is never leaked. */
 export class NotFoundError extends AppError {
   constructor(message = "Resource not found") {

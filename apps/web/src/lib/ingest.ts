@@ -1,10 +1,13 @@
 import { isUsableFix, type NormalizedPosition } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
+import { getOrganizationStatus } from "./organization-status";
 
 export type IngestOutcome =
   | { status: "unknown_device" }
   | { status: "device_inactive"; deviceId: string; organizationId: string }
+  /** The customer is archived (soft-deleted): the tracker is alive but nothing is stored. */
+  | { status: "customer_archived"; deviceId: string; organizationId: string }
   | { status: "no_fix"; deviceId: string; organizationId: string }
   | { status: "duplicate"; deviceId: string; organizationId: string }
   | { status: "stored"; deviceId: string; organizationId: string; historyId: number; currentUpdated: boolean };
@@ -46,6 +49,7 @@ export async function ingestPosition(position: NormalizedPosition, options: Inge
   const ids = { deviceId: device.id, organizationId: device.organizationId };
   // Deactivated by the customer: keep last_seen (the hardware is alive) but store no location.
   if (device.status !== "active") return { status: "device_inactive", ...ids };
+  if ((await getOrganizationStatus(device.organizationId)) === "archived") return { status: "customer_archived", ...ids };
   if (!isUsableFix(position)) return { status: "no_fix", ...ids };
 
   return db.transaction(async (tx) => {

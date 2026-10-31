@@ -3,10 +3,9 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app/app-shell";
 import { buildNav } from "@/components/app/nav-config";
-import { Card } from "@/components/ui/card";
+import { PlatformFrame } from "@/components/app/platform-frame";
 import { listMyOrganizations } from "@/lib/my-organizations";
 import { getRequestContext, getUnacknowledgedAlertCount } from "@/lib/request-context";
-import { SignOutButton } from "./sign-out-button";
 
 const ROLE_LABEL: Record<string, string> = { ORG_ADMIN: "Org admin", FLEET_MANAGER: "Fleet manager", DISPATCHER: "Dispatcher", VIEWER: "Viewer" };
 
@@ -17,23 +16,23 @@ const ROLE_LABEL: Record<string, string> = { ORG_ADMIN: "Org admin", FLEET_MANAG
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const rc = await getRequestContext();
   if (rc.status === "unauthenticated") redirect("/login");
-  if (rc.status === "no_organization") {
+  if (rc.status === "platform") {
+    // A platform admin with no customer chosen, on a page that works without one (My account).
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-canvas p-4">
-        <Card className="max-w-md p-6 text-center">
-          <h1 className="m-0 text-lg font-semibold">No organization yet</h1>
-          <p className="mb-4 mt-2 text-sm text-muted-foreground">Your account isn&apos;t a member of any organization. Ask your administrator to invite you.</p>
-          <SignOutButton />
-        </Card>
-      </main>
+      <PlatformFrame user={rc.user} viewAsName={null}>
+        {children}
+      </PlatformFrame>
     );
   }
-  const { user, ctx, orgName, unitSystem, timeZone, timeFormat } = rc;
+  if (rc.status !== "ok") redirect("/no-access");
+  const { user, ctx, orgName, orgStatus, unitSystem, timeZone, timeFormat } = rc;
   const canSeeAlerts = contextHasPermission(ctx, "alerts.read");
-  const [unack, mine] = await Promise.all([canSeeAlerts ? getUnacknowledgedAlertCount(ctx.organizationId) : 0, listMyOrganizations(user.userId)]);
+  // A platform admin has no companies of their own: the switcher stays empty for them.
+  const [unack, mine] = await Promise.all([canSeeAlerts ? getUnacknowledgedAlertCount(ctx.organizationId) : 0, user.isSuperAdmin ? [] : listMyOrganizations(user.userId)]);
   const viewingAs = ctx.isSuperAdmin && ctx.role === null;
   return (
     <AppShell
+      mode={{ kind: "tenant", orgStatus }}
       nav={buildNav(ctx)}
       user={{ name: user.name || user.email, email: user.email, roleLabel: ctx.role ? ROLE_LABEL[ctx.role] ?? ctx.role : "Platform admin", isSuperAdmin: user.isSuperAdmin }}
       orgName={orgName}

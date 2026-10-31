@@ -90,12 +90,15 @@ export async function globalSearch(ctx: TenantContext, q: string): Promise<Searc
         .then((rows) => rows.map((r) => ({ group: "team" as const, id: r.id, title: r.name, subtitle: r.email, href: `/settings/team?${qs({ search: r.email })}` })))
     );
   }
-  if (ctx.isSuperAdmin) {
-    jobs.push(
-      db
-        .execute<{ id: string; name: string; slug: string }>(sql`select id, name, slug from organizations where name ilike ${p} or slug ilike ${p} order by lower(name) limit ${PER_GROUP}`)
-        .then((rows) => rows.map((r) => ({ group: "customers" as const, id: r.id, title: r.name, subtitle: r.slug, href: `/admin/customers/${r.id}` })))
-    );
-  }
+  if (ctx.isSuperAdmin) jobs.push(searchCustomers(q));
   return (await Promise.all(jobs)).flat();
+}
+
+/** Platform admins only (callers check): customers by name or short name, archived ones included and labelled. */
+export async function searchCustomers(q: string): Promise<SearchHit[]> {
+  const p = like(q);
+  const rows = await getDb().execute<{ id: string; name: string; slug: string; status: string }>(
+    sql`select id, name, slug, status from organizations where name ilike ${p} or slug ilike ${p} order by status = 'archived', lower(name) limit ${PER_GROUP}`
+  );
+  return rows.map((r) => ({ group: "customers" as const, id: r.id, title: r.name, subtitle: r.status === "active" ? r.slug : `${r.slug} · ${r.status}`, href: `/admin/customers/${r.id}` }));
 }

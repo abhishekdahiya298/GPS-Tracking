@@ -1,7 +1,7 @@
 import { contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/app/page-header";
-import { getRequestContext } from "@/lib/request-context";
+import { requireTenantPage } from "@/lib/request-context";
 import { smsConfigured } from "@/lib/sms";
 import { listVehicles } from "@/lib/vehicles";
 import { LoadForm } from "../load-form";
@@ -15,8 +15,7 @@ async function loadVehicleOptions(organizationId: string) {
 export const metadata = { title: "New load · RIO GPS" };
 
 export default async function NewLoadPage() {
-  const rc = await getRequestContext();
-  if (rc.status !== "ok") redirect("/login?next=/loads/new");
+  const rc = await requireTenantPage("/loads/new");
   if (!contextHasPermission(rc.ctx, "loads.write")) redirect("/loads");
   return (
     <>

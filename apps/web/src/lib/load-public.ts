@@ -1,3 +1,4 @@
+import { isOrganizationActive } from "./organization-status";
 import type { UnitSystem } from "@rio-gps/core";
 import { estimateLoadEta, isLoadEnded, isLoadTracking, nextLoadStatus, type LoadEventType, type LoadStatus } from "@rio-gps/core/loads";
 import type { TimeFormat } from "@rio-gps/core/timezones";
@@ -42,7 +43,7 @@ async function rowByDriverToken(token: string) {
   const [r] = await getDb()
     .select({ load: schema.loads, org: { name: schema.organizations.name, unitSystem: schema.organizations.unitSystem, timeZone: schema.organizations.timeZone, timeFormat: schema.organizations.timeFormat } })
     .from(schema.loads)
-    .innerJoin(schema.organizations, eq(schema.organizations.id, schema.loads.organizationId))
+    .innerJoin(schema.organizations, and(eq(schema.organizations.id, schema.loads.organizationId), eq(schema.organizations.status, "active")))
     .where(and(eq(schema.loads.driverTokenHash, hashLoadToken(token)), eq(schema.loads.trackingMode, "phone")));
   return r ?? null;
 }
@@ -145,7 +146,8 @@ export async function recordDriverPositions(token: string, input: z.infer<typeof
       .from(schema.loads)
       .where(and(eq(schema.loads.driverTokenHash, hashLoadToken(token)), eq(schema.loads.trackingMode, "phone")))
       .for("update");
-    if (!l) return null;
+    // Suspended or archived customer: the link answers like an unknown one.
+    if (!l || !(await isOrganizationActive(l.organizationId))) return null;
     const result = (accepted: number, status: LoadStatus, phase: DriverView["phase"]): PingResult => ({ accepted, status, phase, pingIntervalSeconds: DRIVER_PING_INTERVAL_SECONDS });
     if (!isLoadTracking(l.status) || l.sharingStoppedAt || !l.acceptedAt) return result(0, l.status, driverPhase(l));
 
@@ -211,7 +213,7 @@ export async function viewAsShipper(token: string): Promise<ShipperView | null> 
   const [r] = await getDb()
     .select({ load: schema.loads, org: { name: schema.organizations.name, unitSystem: schema.organizations.unitSystem, timeZone: schema.organizations.timeZone, timeFormat: schema.organizations.timeFormat } })
     .from(schema.loads)
-    .innerJoin(schema.organizations, eq(schema.organizations.id, schema.loads.organizationId))
+    .innerJoin(schema.organizations, and(eq(schema.organizations.id, schema.loads.organizationId), eq(schema.organizations.status, "active")))
     .where(eq(schema.loads.shipperTokenHash, hashLoadToken(token)));
   if (!r) return null;
   const l = r.load;

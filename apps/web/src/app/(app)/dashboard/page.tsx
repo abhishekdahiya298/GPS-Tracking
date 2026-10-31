@@ -3,7 +3,6 @@ import { Activity, AlertTriangle, PieChart, Zap, CheckCircle2, CalendarClock, Ar
 import Link from "next/link";
 import { CHART_RANGES, type ChartRange } from "@/lib/daily-stats";
 import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
-import { redirect } from "next/navigation";
 import { cache, Suspense } from "react";
 import { LocalTime } from "@/components/app/local-time";
 import { PageHeader } from "@/components/app/page-header";
@@ -22,7 +21,7 @@ import { listCurrentLocations, type CurrentDeviceLocation } from "@/lib/location
 import { dueCounts } from "@/lib/maintenance";
 import { renewalCounts } from "@/lib/renewals";
 import { buildTripReport } from "@/lib/reports";
-import { getRequestContext, getUnacknowledgedAlertCount } from "@/lib/request-context";
+import { requireTenantPage, getUnacknowledgedAlertCount } from "@/lib/request-context";
 import { FleetGlance } from "./fleet-glance";
 import { FleetTrends, TrendsSkeleton } from "./fleet-trends";
 import { IconTitle } from "@/components/app/icon-title";
@@ -36,8 +35,7 @@ const TRIP_SUMMARY_MAX_DEVICES = 25;
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const rangeParam = Number((await searchParams).range);
   const chartDays: ChartRange = (CHART_RANGES as readonly number[]).includes(rangeParam) ? (rangeParam as ChartRange) : 30;
-  const rc = await getRequestContext();
-  if (rc.status !== "ok") redirect("/login?next=/dashboard");
+  const rc = await requireTenantPage("/dashboard");
   const { ctx, user, unitSystem } = rc;
   const u = units(unitSystem);
   const now = new Date();

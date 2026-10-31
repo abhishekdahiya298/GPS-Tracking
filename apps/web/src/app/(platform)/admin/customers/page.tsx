@@ -12,6 +12,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   if (rc.status === "unauthenticated") redirect("/login?next=/admin/customers");
   // Platform admins only; every API behind this page re-checks isSuperAdmin.
   if (!rc.user.isSuperAdmin) redirect("/dashboard");
-  const q = parseListQuery(CustomerListQuery, await searchParams);
-  return <CustomersView data={await listCustomersPage(q)} query={q} viewingAs={rc.user.activeOrganizationId} />;
+  const sp = await searchParams;
+  const q = parseListQuery(CustomerListQuery, sp);
+  return <CustomersView data={await listCustomersPage(q)} query={q} startCreating={sp.new === "1"} />;
 }

@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/app/page-header";
 import { AppError } from "@/lib/errors";
 import { getLoad } from "@/lib/loads";
-import { getRequestContext } from "@/lib/request-context";
+import { requireTenantPage } from "@/lib/request-context";
 import { smsConfigured } from "@/lib/sms";
 import { listVehicles } from "@/lib/vehicles";
 import { LoadForm } from "../../load-form";
@@ -18,8 +18,7 @@ export const metadata = { title: "Edit load · RIO GPS" };
 
 export default async function EditLoadPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const rc = await getRequestContext();
-  if (rc.status !== "ok") redirect(`/login?next=/loads/${id}/edit`);
+  const rc = await requireTenantPage(`/loads/${id}/edit`);
   if (!contextHasPermission(rc.ctx, "loads.write")) redirect(`/loads/${id}`);
   const load = await getLoad(rc.ctx.organizationId, id).catch((err) => {
     if (err instanceof AppError && err.status === 404) notFound();

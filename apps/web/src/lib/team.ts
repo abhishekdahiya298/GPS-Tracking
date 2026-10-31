@@ -131,6 +131,9 @@ export async function addMember(ctx: TenantContext, input: z.infer<typeof AddMem
   const result = await db.transaction(async (tx) => {
     const [existing] = await tx.select().from(schema.users).where(eq(schema.users.email, input.email)).limit(1);
     if (existing) {
+      // Platform admins reach every customer through "View as customer"; a membership would
+      // only blur who belongs to the company (and is ignored by resolveTenantContext anyway).
+      if (existing.isSuperAdmin) throw new ConflictError("This is a RIO GPS platform admin account. Platform admins already have access to every customer and can't be added as members.");
       const [already] = await tx
         .select({ id: schema.memberships.id })
         .from(schema.memberships)

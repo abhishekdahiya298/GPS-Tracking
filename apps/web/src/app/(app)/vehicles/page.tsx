@@ -2,7 +2,7 @@ import { contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
 import { getServerEnv } from "@/lib/env";
 import { listVehiclesPage, parseListQuery, VehicleListQuery } from "@/lib/fleet-list";
-import { getRequestContext } from "@/lib/request-context";
+import { requireTenantPage } from "@/lib/request-context";
 import { listGroups } from "@/lib/vehicle-groups";
 import { VehiclesView } from "./vehicles-view";
 
@@ -10,8 +10,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Vehicles · RIO GPS" };
 
 export default async function VehiclesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const rc = await getRequestContext();
-  if (rc.status !== "ok") redirect("/login?next=/vehicles");
+  const rc = await requireTenantPage("/vehicles");
   const { ctx } = rc;
   if (!contextHasPermission(ctx, "vehicles.read")) redirect("/dashboard");
   const q = parseListQuery(VehicleListQuery, await searchParams);

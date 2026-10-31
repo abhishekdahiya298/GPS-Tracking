@@ -1,3 +1,4 @@
+import { isOrganizationActive } from "./organization-status";
 import { duePeriod, latestCompletedPeriod, type DuePeriod, type TenantContext } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
@@ -207,6 +208,8 @@ export async function runReportSchedules(now = new Date()): Promise<number> {
       continue;
     }
     if (!period || period.key === s.lastPeriodKey) continue;
+    // Suspended or archived customers get no emails; the period stays unclaimed for a restore.
+    if (!(await isOrganizationActive(s.organizationId))) continue;
     const claimed = await db
       .update(schema.reportSchedules)
       .set({ lastPeriodKey: period.key })
