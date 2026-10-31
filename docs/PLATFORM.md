@@ -71,6 +71,7 @@ Platform pages show the full IMEI (staff match it against labels); customers' ow
 With `HOLOGRAM_API_KEY` (and `HOLOGRAM_ORG_ID`) in the server's `.env`, the SIM cards page fills itself from Hologram every 6 hours (first run a minute after start; **Sync now** on the page). Read-only: SIMs are still activated, paused and paid for in Hologram.
 
 - Copied per SIM (by ICCID): phone number, status (LIVE → active, PAUSED/FROZEN → suspended, DEAD → cancelled, inactive/test → not activated), plan, APN, carrier "Hologram".
-- Tracker: the IMEI Hologram last saw the SIM in, else a 15-digit IMEI in the SIM's Hologram name (name SIMs `GPS-<IMEI>`). One SIM per tracker: a different SIM recorded in that tracker is taken out of it.
+- Tracker, first match wins: (1) the IMEI Hologram last saw the SIM in; (2) an IMEI typed anywhere in the SIM's Hologram name, spaces/dashes allowed (`GPS-868038076566455`, `8680 3807 6566 455`, `Truck 12 / 868038076566455`); (3) a name equal to exactly one tracker's name or serial number in RIO (case, spaces and dashes ignored). One SIM per tracker: a different SIM recorded in that tracker is taken out of it.
+- The Hologram name is shown under the ICCID on the SIM cards page and is searchable.
 - Kept from RIO: monthly cost (**Set monthly cost…** applies one price to every Hologram SIM) and notes. A SIM Hologram stops listing is never deleted, just no longer refreshed.
 - One `sim.synced` activity entry per sync that changed something (or that a person started).

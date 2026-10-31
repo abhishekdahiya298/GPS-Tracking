@@ -11,8 +11,13 @@ import type { SimStatus } from "./sims";
  * paid for; RIO only copies what it needs to tie each SIM to a tracker and a customer:
  * ICCID, phone number, status, plan, APN, and the tracker it is in.
  *
- * Which tracker: the IMEI Hologram last saw the SIM in, else a 15-digit IMEI in the SIM's name
- * in Hologram (RIO names them "GPS-<IMEI>"). Monthly cost and notes stay as entered in RIO.
+ * Which tracker, first match wins:
+ *   1. the IMEI Hologram last saw the SIM in (works once the tracker has connected);
+ *   2. an IMEI typed anywhere in the SIM's name in Hologram, with or without spaces or dashes
+ *      ("GPS-868038076566455", "8680 3807 6566 455", "Truck 12 / 868038076566455");
+ *   3. a name equal to a tracker's name or serial number in RIO (ignoring case, spaces, dashes).
+ * The name is kept so the SIM cards page shows what was typed. Monthly cost and notes stay as
+ * entered in RIO.
  * Runs every 6 hours (one process, advisory lock) and from the "Sync now" button.
  */
 
@@ -40,12 +45,26 @@ export function mapHologramState(state: string): SimStatus {
   return "inventory"; // INACTIVE, FACTORY, TEST-*: not billed as a live line
 }
 
-/** The tracker IMEI for a SIM: Hologram's last seen IMEI, else 15 digits in its name. */
+/** A 15-digit IMEI typed in a name, allowing spaces, dots, dashes or slashes between digits. */
+export function imeiInName(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const plain = name.match(/(?<!\d)(\d{15})(?!\d)/);
+  if (plain) return plain[1]!;
+  for (const run of name.match(/\d[\d\s.\-_/]*\d/g) ?? []) {
+    const digits = run.replace(/\D/g, "");
+    if (digits.length === 15) return digits;
+  }
+  return null;
+}
+
+/** The tracker IMEI for a SIM: Hologram's last seen IMEI, else an IMEI typed in its name. */
 export function imeiForSim(sim: Pick<HologramSim, "imei" | "name">): string | null {
   if (sim.imei && /^\d{15}$/.test(sim.imei)) return sim.imei;
-  const m = sim.name?.match(/(?<!\d)(\d{15})(?!\d)/);
-  return m ? m[1]! : null;
+  return imeiInName(sim.name);
 }
+
+/** Name comparison key: lower case, letters and digits only ("Truck-12 " → "truck12"). */
+export const nameKey = (v: string | null | undefined) => (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export function isHologramConfigured(): boolean {
   return Boolean(getServerEnv().HOLOGRAM_API_KEY);
@@ -125,10 +144,26 @@ export async function syncHologramSims(actorUserId: string | null, now = new Dat
     const imeis = [...new Set(sims.map(imeiForSim).filter((v): v is string => Boolean(v)))];
     const devices = imeis.length ? await tx.select({ id: schema.gpsDevices.id, imei: schema.gpsDevices.imei }).from(schema.gpsDevices).where(inArray(schema.gpsDevices.imei, imeis)) : [];
     const deviceByImei = new Map(devices.map((d) => [d.imei, d.id]));
+    // Names without an IMEI: match a tracker's name or serial number, only when exactly one fits.
+    const nameKeys = [...new Set(sims.filter((s) => !imeiForSim(s)).map((s) => nameKey(s.name)).filter((k) => k.length >= 2))];
+    const deviceByName = new Map<string, string | null>();
+    if (nameKeys.length) {
+      const named = await tx
+        .select({ id: schema.gpsDevices.id, name: schema.gpsDevices.name, serial: schema.gpsDevices.serialNumber })
+        .from(schema.gpsDevices)
+        .where(sql`${schema.gpsDevices.status} <> 'retired' and (${schema.gpsDevices.name} is not null or ${schema.gpsDevices.serialNumber} is not null)`);
+      for (const d of named) {
+        for (const k of new Set([nameKey(d.name), nameKey(d.serial)])) {
+          if (!nameKeys.includes(k)) continue;
+          const prev = deviceByName.get(k);
+          deviceByName.set(k, prev === undefined || prev === d.id ? d.id : null); // null = ambiguous
+        }
+      }
+    }
     for (const s of sims) {
       if (!/^\d{18,22}$/.test(s.iccid)) continue;
       const status = mapHologramState(s.state);
-      const fields = { msisdn: s.msisdn, carrier: "Hologram", plan: s.plan, apn: s.apn, status, provider: "hologram", providerRef: s.deviceId, syncedAt: now };
+      const fields = { providerName: s.name?.trim() || null, msisdn: s.msisdn, carrier: "Hologram", plan: s.plan, apn: s.apn, status, provider: "hologram", providerRef: s.deviceId, syncedAt: now };
       const [existing] = await tx.select().from(schema.simCards).where(eq(schema.simCards.iccid, s.iccid)).for("update");
       let simId: string;
       if (!existing) {
@@ -137,7 +172,7 @@ export async function syncHologramSims(actorUserId: string | null, now = new Dat
         r.added++;
       } else {
         simId = existing.id;
-        const changed = existing.status !== status || existing.plan !== s.plan || existing.msisdn !== s.msisdn || existing.apn !== s.apn || existing.provider !== "hologram";
+        const changed = existing.status !== status || existing.plan !== s.plan || existing.msisdn !== s.msisdn || existing.apn !== s.apn || existing.provider !== "hologram" || existing.providerName !== fields.providerName;
         await tx
           .update(schema.simCards)
           .set({ ...fields, ...(status === "active" && existing.status !== "active" ? { activatedAt: now } : {}), ...(changed ? { updatedAt: now } : {}) })
@@ -145,9 +180,9 @@ export async function syncHologramSims(actorUserId: string | null, now = new Dat
         if (changed) r.updated++;
       }
       const imei = imeiForSim(s);
-      const deviceId = imei ? deviceByImei.get(imei) : undefined;
+      const deviceId = imei ? deviceByImei.get(imei) : deviceByName.get(nameKey(s.name)) ?? undefined;
       if (!deviceId) {
-        if (imei) r.unmatched.push(imei);
+        if (imei || s.name?.trim()) r.unmatched.push(imei ?? s.name!.trim());
         continue;
       }
       if (existing?.deviceId === deviceId) continue;

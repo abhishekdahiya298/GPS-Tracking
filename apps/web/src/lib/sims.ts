@@ -218,6 +218,8 @@ export interface SimRow {
   activatedAt: string | null;
   /** "hologram" when kept in sync from Hologram (status, plan, phone, tracker come from there). */
   provider: string | null;
+  /** The SIM's name in Hologram, as typed there. */
+  providerName: string | null;
   syncedAt: string | null;
   device: { id: string; imei: string; name: string | null; model: string | null; status: string } | null;
   customer: { id: string; name: string } | null;
@@ -232,7 +234,7 @@ const DEPLOYED_NOT_ACTIVE = sql`(s.status in ('suspended', 'cancelled', 'invento
 
 export async function listSims(q: SimListQuery) {
   const search = q.search
-    ? sql`and (s.iccid like ${likeP(q.search.replace(/\s/g, ""))} or coalesce(s.msisdn, '') like ${likeP(q.search.replace(/[\s()-]/g, ""))} or coalesce(s.carrier, '') ilike ${likeP(q.search)} or coalesce(d.imei, '') like ${likeP(q.search)} or coalesce(o.name, '') ilike ${likeP(q.search)})`
+    ? sql`and (s.iccid like ${likeP(q.search.replace(/\s/g, ""))} or coalesce(s.msisdn, '') like ${likeP(q.search.replace(/[\s()-]/g, ""))} or coalesce(s.carrier, '') ilike ${likeP(q.search)} or coalesce(s.provider_name, '') ilike ${likeP(q.search)} or coalesce(d.imei, '') like ${likeP(q.search)} or coalesce(o.name, '') ilike ${likeP(q.search)})`
     : sql``;
   const view = {
     all: sql`true`,
@@ -277,6 +279,7 @@ export async function listSims(q: SimListQuery) {
         notes: (r.notes as string | null) ?? null,
         activatedAt: r.activated_at ? new Date(r.activated_at as string).toISOString() : null,
         provider: (r.provider as string | null) ?? null,
+        providerName: (r.provider_name as string | null) ?? null,
         syncedAt: r.synced_at ? new Date(r.synced_at as string).toISOString() : null,
         device: r.device_id ? { id: String(r.device_id), imei: String(r.d_imei), name: (r.d_name as string | null) ?? null, model: (r.d_model as string | null) ?? null, status: String(r.d_status) } : null,
         customer: r.o_id ? { id: String(r.o_id), name: String(r.o_name) } : null,

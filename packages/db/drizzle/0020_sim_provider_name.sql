@@ -1,0 +1,1 @@
+ALTER TABLE "sim_cards" ADD COLUMN "provider_name" text;
