@@ -7,7 +7,15 @@ import { haversineMeters } from "./geo.js";
  * the vehicle moves at >= MOVING_KPH. A trip is a run of active points; it
  * ends after STOP_MINUTES of inactivity or a data gap longer than GAP_MINUTES.
  * Very short runs (< MIN_TRIP_METERS and < MIN_TRIP_MINUTES) are GPS noise.
+ *
+ * A run only counts as a trip when the vehicle actually moved: at least MIN_TRIP_METERS and
+ * (when the tracker reports speed) a speed of MOVING_KPH or more. Engine-on runs that never
+ * moved (warming up, idling in place) are not trips; their time still counts as idling in
+ * `mileageByDay`.
  */
+
+/** Bump when trip rules change so stored daily summaries are rebuilt with the new rules. */
+export const TRIP_ENGINE_VERSION = 2;
 export const TRIP_DEFAULTS = {
   MOVING_KPH: 5,
   STOP_MINUTES: 5,
@@ -45,13 +53,25 @@ function active(p: TrackPoint, movingKph: number) {
 }
 
 export function detectTrips(points: TrackPoint[], opts: Partial<typeof TRIP_DEFAULTS> = {}): Trip[] {
-  return splitTrips(points, opts).map((t) => t.trip);
+  return splitTrips(points, opts)
+    .filter((t) => t.moved)
+    .map((t) => t.trip);
 }
 
-/** The same trips as `detectTrips`, each with the points it is made of (for per-day splits). */
-export function splitTrips(points: TrackPoint[], opts: Partial<typeof TRIP_DEFAULTS> = {}): { trip: Trip; points: TrackPoint[] }[] {
+/** True when the run is real driving rather than the engine running in place. */
+function didMove(trip: Trip, pts: TrackPoint[], o: typeof TRIP_DEFAULTS): boolean {
+  if (trip.distanceM < o.MIN_TRIP_METERS) return false;
+  const hasSpeed = pts.some((p) => p.speedKph !== null);
+  return !hasSpeed || trip.maxSpeedKph >= o.MOVING_KPH;
+}
+
+/**
+ * Every engine-on run with the points it is made of (for per-day splits). `moved` is false
+ * for runs that never went anywhere: those are idling, not trips (`detectTrips` drops them).
+ */
+export function splitTrips(points: TrackPoint[], opts: Partial<typeof TRIP_DEFAULTS> = {}): { trip: Trip; points: TrackPoint[]; moved: boolean }[] {
   const o = { ...TRIP_DEFAULTS, ...opts };
-  const trips: { trip: Trip; points: TrackPoint[] }[] = [];
+  const trips: { trip: Trip; points: TrackPoint[]; moved: boolean }[] = [];
   let cur: TrackPoint[] = [];
   let lastActiveT = -Infinity;
 
@@ -60,7 +80,7 @@ export function splitTrips(points: TrackPoint[], opts: Partial<typeof TRIP_DEFAU
     while (cur.length && !active(cur[cur.length - 1]!, o.MOVING_KPH)) cur.pop();
     if (cur.length >= 2) {
       const t = summarize(cur, o);
-      if (t.distanceM >= o.MIN_TRIP_METERS || t.durationS >= o.MIN_TRIP_MINUTES * 60) trips.push({ trip: t, points: cur });
+      if (t.distanceM >= o.MIN_TRIP_METERS || t.durationS >= o.MIN_TRIP_MINUTES * 60) trips.push({ trip: t, points: cur, moved: didMove(t, cur, o) });
     }
     cur = [];
   };

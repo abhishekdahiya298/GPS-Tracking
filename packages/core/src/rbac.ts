@@ -74,6 +74,43 @@ export function roleHasPermission(role: OrgRole, permission: Permission): boolea
   return ROLE_PERMISSIONS[role].has(permission);
 }
 
+/**
+ * Product modules a customer's plan switches on. A permission that belongs to a module is only
+ * granted when the organization's plan includes it, for everyone (platform admins viewing the
+ * customer included, so they see exactly what the customer bought). Permissions outside every
+ * module (team, settings, alerts, billing) are always available.
+ */
+export const MODULES = ["gps", "loads"] as const;
+export type Module = (typeof MODULES)[number];
+
+export const MODULE_PERMISSIONS: Readonly<Record<Module, readonly Permission[]>> = {
+  gps: [
+    "vehicles.read",
+    "vehicles.create",
+    "vehicles.update",
+    "vehicles.delete",
+    "devices.read",
+    "devices.assign",
+    "devices.unassign",
+    "devices.manage",
+    "locations.read",
+    "history.read",
+    "geofences.read",
+    "geofences.write",
+    "reports.manage",
+    "maintenance.read",
+    "maintenance.write"
+  ],
+  loads: ["loads.read", "loads.write"]
+};
+
+const PERMISSION_MODULE = new Map<Permission, Module>(MODULES.flatMap((m) => MODULE_PERMISSIONS[m].map((p) => [p, m] as const)));
+
+/** The module a permission belongs to, or null when every plan has it. */
+export function moduleOf(permission: Permission): Module | null {
+  return PERMISSION_MODULE.get(permission) ?? null;
+}
+
 /** Server-derived authorization context for one request. Never built from client input. */
 export interface TenantContext {
   userId: string;
@@ -81,9 +118,21 @@ export interface TenantContext {
   /** null only for a SUPER_ADMIN acting in an organization they are not a member of. */
   role: OrgRole | null;
   isSuperAdmin: boolean;
+  /**
+   * Modules in the organization's plan. Every request context is built with it
+   * (resolveTenantContext); internal helpers that act for the platform may leave it out,
+   * which means "not limited by plan".
+   */
+  modules?: readonly Module[];
+}
+
+export function contextHasModule(ctx: TenantContext, module: Module): boolean {
+  return ctx.modules === undefined || ctx.modules.includes(module);
 }
 
 export function contextHasPermission(ctx: TenantContext, permission: Permission): boolean {
+  const m = moduleOf(permission);
+  if (m && !contextHasModule(ctx, m)) return false;
   if (ctx.isSuperAdmin) return true;
   return ctx.role !== null && roleHasPermission(ctx.role, permission);
 }

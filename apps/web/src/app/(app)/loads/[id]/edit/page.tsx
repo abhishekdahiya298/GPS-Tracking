@@ -1,4 +1,4 @@
-import { contextHasPermission, isLoadEnded } from "@rio-gps/core";
+import { contextHasModule, contextHasPermission, isLoadEnded } from "@rio-gps/core";
 import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/app/page-header";
 import { AppError } from "@/lib/errors";
@@ -28,7 +28,7 @@ export default async function EditLoadPage({ params }: { params: Promise<{ id: s
   return (
     <>
       <PageHeader title={`Edit load ${load.reference}`} breadcrumbs={[{ label: "Loads", href: "/loads" }, { label: load.reference, href: `/loads/${id}` }, { label: "Edit" }]} />
-      <LoadForm initial={load} smsAvailable={smsConfigured()} vehicles={await loadVehicleOptions(rc.ctx.organizationId)} />
+      <LoadForm initial={load} smsAvailable={smsConfigured()} fleet={contextHasModule(rc.ctx, "gps")} vehicles={contextHasModule(rc.ctx, "gps") ? await loadVehicleOptions(rc.ctx.organizationId) : []} />
     </>
   );
 }

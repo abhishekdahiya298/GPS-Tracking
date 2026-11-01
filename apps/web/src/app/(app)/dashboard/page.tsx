@@ -1,6 +1,7 @@
 import { contextHasPermission, units, type TenantContext, type Units } from "@rio-gps/core";
 import { Activity, AlertTriangle, PieChart, Zap, CheckCircle2, CalendarClock, ArrowRight, Bell, CircleOff, CircleParking, Hexagon, Map as MapIcon, Navigation, Plus, Route, Truck, Wrench } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CHART_RANGES, type ChartRange } from "@/lib/daily-stats";
 import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
 import { cache, Suspense } from "react";
@@ -40,6 +41,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const u = units(unitSystem);
   const now = new Date();
   const can = (p: Parameters<typeof contextHasPermission>[1]) => contextHasPermission(ctx, p);
+  // A Loads-only plan has no fleet to show here: Loads is its home page.
+  if (!can("locations.read") && can("loads.read")) redirect("/loads");
 
   const [devices, unack, maint, renewals, recentAlerts] = await Promise.all([
     can("locations.read") ? listCurrentLocations(ctx.organizationId, now, getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS) : Promise.resolve([] as CurrentDeviceLocation[]),

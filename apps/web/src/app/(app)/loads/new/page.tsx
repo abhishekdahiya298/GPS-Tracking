@@ -1,4 +1,6 @@
-import { contextHasPermission } from "@rio-gps/core";
+import { contextHasModule, contextHasPermission } from "@rio-gps/core";
+import { LoadAllowanceNotice } from "@/components/app/load-allowance-notice";
+import { loadAllowanceNotice } from "@/lib/plans";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/app/page-header";
 import { requireTenantPage } from "@/lib/request-context";
@@ -17,10 +19,17 @@ export const metadata = { title: "New load · RIO GPS" };
 export default async function NewLoadPage() {
   const rc = await requireTenantPage("/loads/new");
   if (!contextHasPermission(rc.ctx, "loads.write")) redirect("/loads");
+  const fleet = contextHasModule(rc.ctx, "gps");
+  const [vehicles, allowance] = await Promise.all([fleet ? loadVehicleOptions(rc.ctx.organizationId) : Promise.resolve([]), loadAllowanceNotice(rc.ctx.organizationId)]);
   return (
     <>
       <PageHeader title="New load" description="The driver gets a link; tracking starts when they accept and stops when the load is delivered." breadcrumbs={[{ label: "Loads", href: "/loads" }, { label: "New load" }]} />
-      <LoadForm smsAvailable={smsConfigured()} vehicles={await loadVehicleOptions(rc.ctx.organizationId)} />
+      <LoadForm
+        smsAvailable={smsConfigured()}
+        vehicles={vehicles}
+        fleet={fleet}
+        notice={<LoadAllowanceNotice allowance={allowance} planLink={contextHasPermission(rc.ctx, "billing.read")} />}
+      />
     </>
   );
 }

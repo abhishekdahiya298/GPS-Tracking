@@ -6,6 +6,7 @@ import { getDb, schema } from "@rio-gps/db";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { ValidationError } from "./errors";
+import { recordBillableLoad } from "./plans";
 import { hashLoadToken, LoadTokenSchema } from "./loads";
 import { alertsForEvents, applyLoadPositions, raiseLoadAlerts, type AppliedPositions } from "./load-tracking";
 
@@ -103,6 +104,8 @@ export async function driverAction(token: string, action: "accept" | "decline" |
     if (l.status === "invited") {
       await db.update(schema.loads).set({ status: "tracking", acceptedAt: now, consentUserAgent: meta.userAgent?.slice(0, 300) ?? null, sharingStoppedAt: null, updatedAt: now }).where(eq(schema.loads.id, l.id));
       await event("accepted");
+      // Tracking starts now: this is when a load counts toward the customer's monthly usage.
+      await recordBillableLoad(db, l, now);
     } else if (l.sharingStoppedAt) {
       await db.update(schema.loads).set({ sharingStoppedAt: null, updatedAt: now }).where(eq(schema.loads.id, l.id));
       await event("sharing_resumed");

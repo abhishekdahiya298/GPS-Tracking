@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { TenantContext } from "@rio-gps/core";
+import { contextHasModule, type TenantContext } from "@rio-gps/core";
 import {
   LOAD_RADIUS_DEFAULT_M,
   LOAD_RADIUS_MAX_M,
@@ -18,6 +18,7 @@ import { z } from "zod";
 import { writeAudit } from "./audit";
 import { getServerEnv } from "./env";
 import { ConflictError, NotFoundError, ValidationError } from "./errors";
+import { recordBillableLoad } from "./plans";
 import { assertRateLimit } from "./rate-limit";
 import { sendSms, smsConfigured, type SmsResult } from "./sms";
 
@@ -377,6 +378,7 @@ async function vehicleForLoad(organizationId: string, vehicleId: string) {
 export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Meta, now = new Date()): Promise<CreatedLoad> {
   const token = newToken();
   const byVehicle = input.trackingMode === "vehicle";
+  if (byVehicle && !contextHasModule(ctx, "gps")) throw new ValidationError("Tracking a load with your own vehicle needs a GPS plan. Use the driver's phone instead.");
   // A vehicle-mode load is tracked from the start (the organization's own tracker, no consent step);
   // it starts from the tracker's current fix so the map isn't empty until the next report.
   const vehicle = byVehicle ? await vehicleForLoad(ctx.organizationId, input.vehicleId!) : null;
@@ -411,6 +413,8 @@ export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Met
     throw err;
   }
   await addEvent(ctx.organizationId, id, "created", ctx.userId, now, willText ? { driverTextConsent: true } : null);
+  // A vehicle-tracked load starts tracking at once, so it counts now (a phone load counts when the driver accepts).
+  if (byVehicle) await recordBillableLoad(getDb(), { organizationId: ctx.organizationId, id, reference: input.reference }, now);
   await writeAudit({ action: "load.created", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, metadata: { reference: input.reference, ...(willText ? { driverTextConsent: true } : {}) }, ...meta });
   if (byVehicle) return { id, driverLink: null, sms: null, share: null };
   const link = driverLink(token);
@@ -421,6 +425,8 @@ export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Met
 export async function updateLoad(ctx: TenantContext, id: string, patch: z.infer<typeof LoadPatchSchema>, meta: Meta, now = new Date()): Promise<void> {
   const row = await loadRow(ctx.organizationId, id);
   if (isLoadEnded(row.status)) throw new ValidationError("This load has ended and can no longer be changed");
+  // After pickup the trip is under way: the pickup stays as it happened (a new shipment is a new load).
+  if (patch.pickup && (row.status === "in_transit" || row.status === "at_delivery")) throw new ValidationError("The pickup can't be changed after the load was picked up. Create a new load for a new shipment.");
   if (row.trackingMode === "phone" && patch.driverPhone === null) throw new ValidationError("A load tracked by phone needs the driver's mobile number");
   if (patch.vehicleId !== undefined) {
     if (row.trackingMode !== "vehicle") throw new ValidationError("This load is tracked by the driver's phone");

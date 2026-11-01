@@ -25,8 +25,11 @@ const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,48}[a-z0-9])?$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Company → first admin → review → create. The server re-validates everything. */
-export function CreateCustomerWizard({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (id: string) => void }) {
+export type PlanOption = { id: string; name: string; summary: string };
+
+export function CreateCustomerWizard({ open, onOpenChange, onCreated, plans }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (id: string) => void; plans: PlanOption[] }) {
   const [step, setStep] = useState(0);
+  const [planId, setPlanId] = useState(plans[plans.length - 1]?.id ?? "");
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
@@ -71,7 +74,7 @@ export function CreateCustomerWizard({ open, onOpenChange, onCreated }: { open: 
     try {
       const out = await api<{ organizationId: string; admin: { temporaryPassword: string | null; emailed: boolean } }>("/api/admin/customers", {
         method: "POST",
-        json: { name: name.trim(), slug, timeZone, unitSystem, admin: { name: adminName.trim(), email: adminEmail.trim() } }
+        json: { name: name.trim(), slug, timeZone, unitSystem, planId: planId || undefined, admin: { name: adminName.trim(), email: adminEmail.trim() } }
       });
       setDone({ id: out.organizationId, password: out.admin.temporaryPassword, emailed: out.admin.emailed });
       toast.success(`${name.trim()} created.`);
@@ -180,6 +183,15 @@ export function CreateCustomerWizard({ open, onOpenChange, onCreated }: { open: 
                     </Select>
                   </Field>
                 </div>
+                <Field id="cw-plan" label="Plan" description={plans.find((p) => p.id === planId)?.summary ?? "You can change the plan or its price later on the customer's page."}>
+                  <Select id="cw-plan" value={planId} onChange={(e) => setPlanId(e.target.value)}>
+                    {plans.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
               </>
             )}
             {step === 1 && (
@@ -205,6 +217,8 @@ export function CreateCustomerWizard({ open, onOpenChange, onCreated }: { open: 
                 </dd>
                 <dt className="text-muted-foreground">Units</dt>
                 <dd className="m-0">{unitSystem === "metric" ? "Kilometres · km/h" : "Miles · mph"}</dd>
+                <dt className="text-muted-foreground">Plan</dt>
+                <dd className="m-0">{plans.find((p) => p.id === planId)?.name ?? "—"}</dd>
                 <dt className="text-muted-foreground">First admin</dt>
                 <dd className="m-0">
                   {adminName} &lt;{adminEmail}&gt;

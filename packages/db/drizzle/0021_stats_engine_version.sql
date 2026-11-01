@@ -1,0 +1,1 @@
+ALTER TABLE "daily_stats_state" ADD COLUMN "engine_version" integer DEFAULT 1 NOT NULL;

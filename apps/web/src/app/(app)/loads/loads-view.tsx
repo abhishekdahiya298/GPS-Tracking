@@ -2,7 +2,7 @@
 import { AlertTriangle, ArrowRight, Map as MapIcon, PackagePlus, PauseCircle, Package } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { FilterBar, SegmentedFilter } from "@/components/app/filter-bar";
 import { RelativeTime } from "@/components/app/local-time";
 import { PageHeader } from "@/components/app/page-header";
@@ -64,7 +64,7 @@ export function fmtMinutes(min: number): string {
   return r ? `${h} h ${r} min` : `${h} h`;
 }
 
-export function LoadsView({ loads, counts, filter, q, canWrite }: { loads: LoadSummaryDto[]; counts: { active: number; ended: number }; filter: "active" | "ended" | "all"; q: string; canWrite: boolean }) {
+export function LoadsView({ loads, counts, filter, q, canWrite, notice, fleet = true }: { loads: LoadSummaryDto[]; counts: { active: number; ended: number }; filter: "active" | "ended" | "all"; q: string; canWrite: boolean; notice?: ReactNode; fleet?: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
   const go = (next: { filter?: string; q?: string }) => {
@@ -104,7 +104,8 @@ export function LoadsView({ loads, counts, filter, q, canWrite }: { loads: LoadS
 
   return (
     <>
-      <PageHeader title="Loads" description="Track each shipment from pickup to delivery, by the driver's phone or your own trackers." actions={headerActions} />
+      <PageHeader title="Loads" description={fleet ? "Track each shipment from pickup to delivery, by the driver's phone or your own trackers." : "Track each shipment from pickup to delivery with the driver's phone."} actions={headerActions} />
+      {notice && <div className="mb-4">{notice}</div>}
       <Card>
         <FilterBar>
           <SegmentedFilter

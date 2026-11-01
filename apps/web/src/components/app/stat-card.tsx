@@ -1,4 +1,4 @@
-import { Activity, CircleParking, Clock, Gauge, Hash, Route, Timer, Truck, type LucideIcon } from "lucide-react";
+import { Activity, CircleParking, Clock, Gauge, Hash, Route, Timer, Truck, type LucideIcon, Building2, Cpu, Package, ReceiptText } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
@@ -10,7 +10,11 @@ const LOOKS: { match: RegExp; icon: LucideIcon; tint: string }[] = [
   { match: /stop|parked/i, icon: CircleParking, tint: "bg-[#e8f4fb] text-[#0369a1]" },
   { match: /longest|over limit/i, icon: Timer, tint: "bg-[#f1edff] text-[#5b3fd6]" },
   { match: /time/i, icon: Clock, tint: "bg-[#e9f7ee] text-[#15803d]" },
-  { match: /vehicle/i, icon: Truck, tint: "bg-[#e8f8f5] text-[#0f766e]" }
+  { match: /vehicle/i, icon: Truck, tint: "bg-[#e8f8f5] text-[#0f766e]" },
+  { match: /customer/i, icon: Building2, tint: "bg-[#e9eefb] text-[#133a8f]" },
+  { match: /tracker/i, icon: Cpu, tint: "bg-[#e8f4fb] text-[#0369a1]" },
+  { match: /load/i, icon: Package, tint: "bg-[#e9f7ee] text-[#15803d]" },
+  { match: /total|amount/i, icon: ReceiptText, tint: "bg-[#fff5e1] text-[#b45309]" }
 ];
 const FALLBACK = { icon: Hash, tint: "bg-[#e9eefb] text-[#133a8f]" };
 

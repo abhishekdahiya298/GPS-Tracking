@@ -1,6 +1,8 @@
-import { contextHasPermission } from "@rio-gps/core";
+import { contextHasModule, contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
+import { LoadAllowanceNotice } from "@/components/app/load-allowance-notice";
 import { listLoads, loadCounts, LOAD_LIST_FILTERS } from "@/lib/loads";
+import { loadAllowanceNotice } from "@/lib/plans";
 import { requireTenantPage } from "@/lib/request-context";
 import { LoadsView } from "./loads-view";
 
@@ -15,6 +17,17 @@ export default async function LoadsPage({ searchParams }: { searchParams: Promis
   const f = typeof sp.filter === "string" ? sp.filter : "active";
   const filter = (LOAD_LIST_FILTERS as readonly string[]).includes(f) ? (f as (typeof LOAD_LIST_FILTERS)[number]) : "active";
   const q = typeof sp.q === "string" ? sp.q.slice(0, 80) : "";
-  const [loads, counts] = await Promise.all([listLoads(ctx.organizationId, { filter, q }), loadCounts(ctx.organizationId)]);
-  return <LoadsView loads={loads} counts={counts} filter={filter} q={q} canWrite={contextHasPermission(ctx, "loads.write")} />;
+  const canWrite = contextHasPermission(ctx, "loads.write");
+  const [loads, counts, allowance] = await Promise.all([listLoads(ctx.organizationId, { filter, q }), loadCounts(ctx.organizationId), canWrite ? loadAllowanceNotice(ctx.organizationId) : Promise.resolve(null)]);
+  return (
+    <LoadsView
+      loads={loads}
+      counts={counts}
+      filter={filter}
+      q={q}
+      canWrite={canWrite}
+      notice={allowance ? <LoadAllowanceNotice allowance={allowance} planLink={contextHasPermission(ctx, "billing.read")} /> : undefined}
+      fleet={contextHasModule(ctx, "gps")}
+    />
+  );
 }

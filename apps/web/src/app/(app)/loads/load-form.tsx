@@ -8,7 +8,7 @@ import maplibregl, { type GeoJSONSource, type Map as MlMap, type Marker } from "
 import { preferredStyleUrl } from "@/lib/map-style";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
 import { Alert } from "@/components/ui/alert";
@@ -299,7 +299,7 @@ export function SmsOutcome({ sms, smsAvailable }: { sms: SmsResult | null; smsAv
   );
 }
 
-export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDetailDto; smsAvailable: boolean; vehicles: { id: string; name: string }[] }) {
+export function LoadForm({ initial, smsAvailable, vehicles, fleet = true, notice }: { initial?: LoadDetailDto; smsAvailable: boolean; vehicles: { id: string; name: string }[]; /** The plan includes GPS (own vehicles can haul a load). */ fleet?: boolean; notice?: ReactNode }) {
   const router = useRouter();
   const t = useTime();
   const fromDto = (s: LoadDetailDto["pickup"]): StopState => ({ name: s.name ?? "", address: s.address, latitude: s.latitude, longitude: s.longitude, radiusM: s.radiusM, appointment: s.appointmentAt ? toWallTime(s.appointmentAt, t.timeZone) : "" });
@@ -401,13 +401,14 @@ export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDe
 
   return (
     <form onSubmit={submit} noValidate className="grid gap-4">
+      {notice}
       {error && <Alert tone="danger">{error}</Alert>}
       <Card>
         <CardHeader>
           <CardTitle>Load and driver</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
-          <fieldset className="m-0 grid gap-2 border-0 p-0 sm:col-span-2">
+          {fleet && <fieldset className="m-0 grid gap-2 border-0 p-0 sm:col-span-2">
             <legend className="mb-1 p-0 text-sm font-medium">Track with</legend>
             <div className="flex flex-wrap gap-2" role="radiogroup">
               {([
@@ -427,7 +428,7 @@ export function LoadForm({ initial, smsAvailable, vehicles }: { initial?: LoadDe
               ))}
             </div>
             {initial && <p className="m-0 text-xs text-muted-foreground">How a load is tracked can&apos;t be changed after it is created.</p>}
-          </fieldset>
+          </fieldset>}
           {mode === "vehicle" && (
             <Field id="vehicleId" label="Vehicle" required className="sm:col-span-2">
               <Select id="vehicleId" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}>

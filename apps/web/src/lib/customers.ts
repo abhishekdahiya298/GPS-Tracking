@@ -12,6 +12,7 @@ import { addMember } from "./team";
 import { getTraccarAdmin } from "./traccar";
 import { BULK_IMPORT_MAX } from "./imei-list";
 import { assignToCustomer } from "./inventory";
+import { recordTrackerMonth } from "./plans";
 import { TIME_FORMATS } from "@rio-gps/core/timezones";
 import type { OrganizationStatus } from "./organization-status";
 
@@ -33,7 +34,9 @@ export const CreateCustomerSchema = z.object({
   admin: z.object({ email: z.string().trim().toLowerCase().email().max(254), name: z.string().trim().min(1).max(200) }),
   /** The customer's home zone (their dispatch office); users can still override it. */
   timeZone: TimeZoneSchema.default(DEFAULT_TIME_ZONE),
-  unitSystem: z.enum(UNIT_SYSTEMS).default("imperial")
+  unitSystem: z.enum(UNIT_SYSTEMS).default("imperial"),
+  /** Catalog plan to start on; when left out, the active plan with the most modules. */
+  planId: z.string().uuid().optional()
 });
 
 export const RegisterDeviceSchema = z.object({
@@ -78,6 +81,22 @@ export async function createCustomer(actorUserId: string, input: z.infer<typeof 
     orgId = await db.transaction(async (tx) => {
       const [org] = await tx.insert(schema.organizations).values({ name: input.name, slug: input.slug, timeZone: input.timeZone, unitSystem: input.unitSystem }).returning({ id: schema.organizations.id });
       await tx.insert(schema.gpsProviders).values({ organizationId: org!.id, kind: "traccar", name: "Traccar", apiBaseUrl: "http://traccar:8082" });
+      // Every customer starts on a plan (its terms copied from the catalog).
+      const [plan] = input.planId
+        ? await tx.select().from(schema.plans).where(eq(schema.plans.id, input.planId))
+        : await tx.select().from(schema.plans).where(eq(schema.plans.active, true)).orderBy(sql`cardinality(${schema.plans.modules}) desc`, schema.plans.sortOrder).limit(1);
+      if (!plan) throw new ValidationError("Choose a plan for this customer");
+      await tx.insert(schema.subscriptions).values({
+        organizationId: org!.id,
+        planId: plan.id,
+        planName: plan.name,
+        modules: plan.modules,
+        includedLoads: plan.includedLoads,
+        extraLoadCents: plan.extraLoadCents,
+        monthlyFeeCents: plan.monthlyFeeCents,
+        perTrackerCents: plan.perTrackerCents,
+        changedBy: actorUserId
+      });
       return org!.id;
     });
   } catch (err) {
@@ -85,7 +104,7 @@ export async function createCustomer(actorUserId: string, input: z.infer<typeof 
     if (e?.code === "23505" || e?.cause?.code === "23505") throw new ConflictError("That short name (slug) is already taken");
     throw err;
   }
-  await writeAudit({ action: "customer.created", actorUserId, organizationId: orgId, targetType: "organization", targetId: orgId, metadata: { slug: input.slug }, ...meta });
+  await writeAudit({ action: "customer.created", actorUserId, organizationId: orgId, targetType: "organization", targetId: orgId, metadata: { slug: input.slug, planId: input.planId }, ...meta });
   // First Org Admin: invitation email (or a one-time temporary password if email is unavailable).
   const admin = await addMember({ userId: actorUserId, organizationId: orgId, role: null, isSuperAdmin: true }, { email: input.admin.email, name: input.admin.name, role: "ORG_ADMIN" }, meta);
   return { organizationId: orgId, admin };
@@ -148,6 +167,7 @@ export async function registerDevice(actorUserId: string, organizationId: string
     metadata: { model: input.model, imeiLast4: input.imei.slice(-4), traccarCreated: traccar.created, ...(isValidImei(input.imei) ? {} : { uncheckedImei: true }) },
     ...meta
   });
+  await recordTrackerMonth(dev!.id);
   return { deviceId: dev!.id, traccarCreated: traccar.created, fromStock: false };
 }
 

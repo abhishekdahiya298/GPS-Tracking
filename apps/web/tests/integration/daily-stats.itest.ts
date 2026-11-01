@@ -87,6 +87,16 @@ describe("daily stats", () => {
     expect(quiet).toMatchObject({ recomputed: 0, rebuiltOrganizations: 0, watermark: first.watermark });
   });
 
+  it("new trip rules (engine version) rebuild every organization once, keeping rows meanwhile", async () => {
+    const at = new Date(NOW.getTime() + 3_600_000);
+    const before = (await rows(orgA)).length;
+    await getDb().update(schema.dailyStatsState).set({ engineVersion: 1 });
+    const r = await refreshDailyStats(at);
+    expect(r).toMatchObject({ failed: 0, rebuiltOrganizations: 2 });
+    expect((await rows(orgA)).length).toBe(before);
+    expect((await refreshDailyStats(at)).rebuiltOrganizations).toBe(0);
+  });
+
   it("changing an organization's time zone rebuilds only that organization's days", async () => {
     await getDb().update(schema.organizations).set({ timeZone: "UTC" }).where(eq(schema.organizations.id, orgA));
     const r = await refreshDailyStats(new Date(NOW.getTime() + 3_600_000));

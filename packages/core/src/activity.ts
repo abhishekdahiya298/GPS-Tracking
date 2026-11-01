@@ -131,6 +131,7 @@ export interface DayMileage {
  * Distance and driving time per local calendar day. Each segment of each trip is credited
  * to the day it starts in, so a trip across midnight is split between both days, and the
  * total equals the Trip report's total for the same range. `trips` counts trips by start day.
+ * Engine-on runs that never moved add only idle time (they are not trips).
  */
 export function mileageByDay(points: TrackPoint[], timeZone: string, opts: Partial<typeof TRIP_DEFAULTS> = {}): DayMileage[] {
   const o = { ...TRIP_DEFAULTS, ...opts };
@@ -149,7 +150,15 @@ export function mileageByDay(points: TrackPoint[], timeZone: string, opts: Parti
     if (!d) cache.set(k, (d = localDay(t, timeZone)));
     return d;
   };
-  for (const { points: pts } of splitTrips(points, opts)) {
+  for (const { points: pts, moved } of splitTrips(points, opts)) {
+    if (!moved) {
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1]!;
+        const dt = (pts[i]!.t - a.t) / 1000;
+        if (dt > 0 && a.ignition === true) get(dayOf(a.t)).idleS += dt;
+      }
+      continue;
+    }
     get(dayOf(pts[0]!.t)).trips++;
     for (const p of pts) {
       const v = p.speedKph ?? 0;

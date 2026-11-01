@@ -97,6 +97,11 @@ describe("mileageByDay", () => {
     expect(tor.map((d) => d.trips)).toEqual([1, 0]); // the trip is counted on the day it started
     expect(mileageByDay(pts, "UTC").map((d) => d.day)).toEqual(["2026-09-26"]);
   });
+  it("engine on in place adds idle time only, not a trip or distance", () => {
+    const parked = [pt(0, 0, 0, true), pt(5, 0, 0, true), pt(10, 0, 0, true), pt(11, 0, 0, false)];
+    const [d] = mileageByDay(parked, "UTC");
+    expect(d).toMatchObject({ trips: 0, distanceM: 0, drivingS: 0, idleS: 600, maxSpeedKph: 0 });
+  });
   it("no trips, no rows", () => {
     expect(mileageByDay([pt(0, 0, 0, false), pt(60, 0, 0, false)], "UTC")).toEqual([]);
   });

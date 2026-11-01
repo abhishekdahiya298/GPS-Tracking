@@ -21,11 +21,13 @@ import { viewAs } from "./_shared/view-as";
 import { StatusDialog, type StatusAction } from "./_shared/status-dialog";
 import { CUSTOMER_STATUS } from "./_shared/status-meta";
 
+import type { PlanOption } from "./_shared/create-wizard";
+
 const CreateCustomerWizard = dynamic(() => import("./_shared/create-wizard").then((m) => m.CreateCustomerWizard));
 
 type Data = { items: CustomerRow[]; total: number; page: number; pageSize: number; counts: Record<CustomerListQuery["view"], number> };
 
-export function CustomersView({ data, query, startCreating }: { data: Data; query: CustomerListQuery; startCreating: boolean }) {
+export function CustomersView({ data, query, startCreating, plans }: { data: Data; query: CustomerListQuery; startCreating: boolean; plans: PlanOption[] }) {
   const router = useRouter();
   const { set, refresh, pending } = useListParams();
   const [creating, setCreating] = useState(startCreating);
@@ -196,6 +198,7 @@ export function CustomersView({ data, query, startCreating }: { data: Data; quer
       )}
       {creating && (
       <CreateCustomerWizard
+        plans={plans}
         open={creating}
         onOpenChange={setCreating}
         onCreated={(id) => {
