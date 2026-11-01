@@ -5,7 +5,7 @@ import { contextHasPermission, type Permission, type TenantContext } from "@rio-
  * server with the same permission checks the pages and APIs enforce: hiding a
  * link is a convenience, never the security boundary.
  */
-export type NavIcon = "dashboard" | "map" | "truck" | "package" | "cpu" | "zones" | "bell" | "reports" | "wrench" | "users" | "building" | "settings" | "inbox" | "activity" | "shield" | "user" | "sim" | "receipt";
+export type NavIcon = "dashboard" | "map" | "truck" | "package" | "cpu" | "zones" | "bell" | "reports" | "wrench" | "users" | "building" | "settings" | "inbox" | "activity" | "shield" | "user" | "sim" | "receipt" | "home" | "target" | "layers";
 
 export interface NavItem {
   href: string;
@@ -24,8 +24,8 @@ export interface NavSection {
 type Rule = NavItem & { permission?: Permission; superAdminOnly?: boolean };
 
 const SECTIONS: { title?: string; items: Rule[] }[] = [
-  // Fleet overview; a Loads-only plan starts at Loads instead.
-  { items: [{ href: "/dashboard", label: "Dashboard", icon: "dashboard", permission: "locations.read" }] },
+  // Every plan has a dashboard: fleet, loads, or both.
+  { items: [{ href: "/dashboard", label: "Dashboard", icon: "home" }] },
   {
     title: "Tracking",
     items: [
@@ -62,12 +62,12 @@ const PLATFORM_LINK: Rule = { href: "/admin", label: "Platform console", icon: "
 
 /** The platform console (platform admins only; every page and API re-checks). */
 export const PLATFORM_NAV: NavSection[] = [
-  { items: [{ href: "/admin", label: "Overview", icon: "dashboard", exact: true }] },
+  { items: [{ href: "/admin", label: "Overview", icon: "home", exact: true }] },
   {
     title: "Customers",
     items: [
-      { href: "/admin/customers", label: "Customers", icon: "building" },
-      { href: "/admin/leads", label: "Leads", icon: "inbox" }
+      { href: "/admin/customers", label: "Customers", icon: "users" },
+      { href: "/admin/leads", label: "Leads", icon: "target" }
     ]
   },
   {
@@ -81,7 +81,7 @@ export const PLATFORM_NAV: NavSection[] = [
     title: "Billing",
     items: [
       { href: "/admin/billing", label: "Usage & billing", icon: "receipt" },
-      { href: "/admin/plans", label: "Plans", icon: "package" }
+      { href: "/admin/plans", label: "Plans", icon: "layers" }
     ]
   },
   {

@@ -162,6 +162,20 @@
       "when": 1793517190704,
       "tag": "0022_plans_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793520382665,
+      "tag": "0023_free_plan",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793520887985,
+      "tag": "0024_nav_theme",
+      "breakpoints": true
     }
   ]
 }

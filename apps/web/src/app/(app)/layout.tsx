@@ -25,7 +25,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     );
   }
   if (rc.status !== "ok") redirect("/no-access");
-  const { user, ctx, orgName, orgStatus, unitSystem, timeZone, timeFormat } = rc;
+  const { user, ctx, orgName, orgStatus, unitSystem, timeZone, timeFormat, navTheme } = rc;
   const canSeeAlerts = contextHasPermission(ctx, "alerts.read");
   // A platform admin has no companies of their own: the switcher stays empty for them.
   const [unack, mine] = await Promise.all([canSeeAlerts ? getUnacknowledgedAlertCount(ctx.organizationId) : 0, user.isSuperAdmin ? [] : listMyOrganizations(user.userId)]);
@@ -43,6 +43,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       unitSystem={unitSystem}
       timeZone={timeZone}
       timeFormat={timeFormat}
+      navTheme={navTheme}
     >
       {children}
     </AppShell>

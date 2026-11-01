@@ -179,7 +179,7 @@ export function CustomerDetailView({ c, billing }: { c: CustomerDetail; billing:
         </Card>
 
         <div className="grid h-fit min-w-0 gap-4">
-          <CustomerPlanCard customerId={c.id} customerName={c.name} billing={billing} />
+          <CustomerPlanCard customerId={c.id} customerName={c.name} billing={billing} archived={c.status === "archived"} />
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <CardTitle>Account details</CardTitle>

@@ -301,6 +301,8 @@ export interface UsageLine {
   trackers: number;
   /** Loads tracked longer than LONG_LOAD_DAYS (worth a look before invoicing). */
   longLoads: number;
+  /** False for a customer archived before the month ended: nothing is charged for that month or later. */
+  billed: boolean;
   amounts: { monthlyFeeCents: number; trackersCents: number; extraLoadsCents: number; totalCents: number };
 }
 
@@ -319,8 +321,10 @@ export async function usageStatement(period: string, organizationId?: string, no
     loads_used: number;
     trackers: number;
     long_loads: number;
+    archived: boolean;
   }>(sql`
     select o.id, o.name, o.status,
+      (o.status = 'archived' and coalesce(o.status_changed_at, o.created_at) < ((${period} || '-01')::date + interval '1 month')::timestamp at time zone o.time_zone) as archived,
       s.plan_name, s.modules::text[] as modules, s.included_loads, s.extra_load_cents, s.monthly_fee_cents, s.per_tracker_cents,
       (select count(*)::int from billable_loads b where b.organization_id = o.id and b.period = ${period}) as loads_used,
       (select count(*)::int from billable_trackers t where t.organization_id = o.id and t.period = ${period}) as trackers,
@@ -342,9 +346,10 @@ export async function usageStatement(period: string, organizationId?: string, no
       : null;
     const extraLoads = plan?.modules.includes("loads") ? Math.max(0, r.loads_used - plan.includedLoads) : 0;
     const billedTrackers = plan?.modules.includes("gps") ? r.trackers : 0;
-    const monthlyFeeCents = plan?.monthlyFeeCents ?? 0;
-    const trackersCents = billedTrackers * (plan?.perTrackerCents ?? 0);
-    const extraLoadsCents = extraLoads * (plan?.extraLoadCents ?? 0);
+    const billed = !r.archived;
+    const monthlyFeeCents = billed ? (plan?.monthlyFeeCents ?? 0) : 0;
+    const trackersCents = billed ? billedTrackers * (plan?.perTrackerCents ?? 0) : 0;
+    const extraLoadsCents = billed ? extraLoads * (plan?.extraLoadCents ?? 0) : 0;
     return {
       organizationId: r.id,
       customerName: r.name,
@@ -355,6 +360,7 @@ export async function usageStatement(period: string, organizationId?: string, no
       extraLoads,
       trackers: r.trackers,
       longLoads: r.long_loads,
+      billed,
       amounts: { monthlyFeeCents, trackersCents, extraLoadsCents, totalCents: monthlyFeeCents + trackersCents + extraLoadsCents }
     };
   });

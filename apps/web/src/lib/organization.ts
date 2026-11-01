@@ -6,6 +6,7 @@ import { z } from "zod";
 import { writeAudit } from "./audit";
 import { NotFoundError } from "./errors";
 import { logger } from "./logger";
+import { NAV_THEMES, type NavTheme } from "@/components/app/nav-themes";
 
 type Meta = { ipAddress: string | null; userAgent: string | null };
 
@@ -66,13 +67,13 @@ export async function updateOrgSettings(ctx: TenantContext, patch: z.infer<typeo
 // ---------- personal display preferences ----------
 
 export const UserPrefsPatchSchema = z
-  .object({ timeZone: TimeZoneSchema.nullable(), timeFormat: z.enum(TIME_FORMATS).nullable() })
+  .object({ timeZone: TimeZoneSchema.nullable(), timeFormat: z.enum(TIME_FORMATS).nullable(), navTheme: z.enum(NAV_THEMES).nullable() })
   .partial()
   .refine((v) => Object.keys(v).length > 0, "Nothing to update");
 
 /** The caller's own row only (userId comes from the session, never the request). */
-export async function getUserPrefs(userId: string): Promise<{ timeZone: string | null; timeFormat: TimeFormat | null }> {
-  const [u] = await getDb().select({ timeZone: schema.users.timeZone, timeFormat: schema.users.timeFormat }).from(schema.users).where(eq(schema.users.id, userId));
+export async function getUserPrefs(userId: string): Promise<{ timeZone: string | null; timeFormat: TimeFormat | null; navTheme: NavTheme | null }> {
+  const [u] = await getDb().select({ timeZone: schema.users.timeZone, timeFormat: schema.users.timeFormat, navTheme: schema.users.navTheme }).from(schema.users).where(eq(schema.users.id, userId));
   if (!u) throw new NotFoundError("User not found");
   return u;
 }
@@ -87,7 +88,7 @@ export async function updateUserPrefs(userId: string, organizationId: string | n
     targetType: "user",
     targetId: userId,
     metadata: Object.fromEntries(
-      (["timeZone", "timeFormat"] as const).filter((k) => patch[k] !== undefined && patch[k] !== before[k]).map((k) => [k, { from: before[k], to: patch[k] }])
+      (["timeZone", "timeFormat", "navTheme"] as const).filter((k) => patch[k] !== undefined && patch[k] !== before[k]).map((k) => [k, { from: before[k], to: patch[k] }])
     ),
     ...meta
   });

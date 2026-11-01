@@ -1,7 +1,6 @@
 import { contextHasPermission, units, type TenantContext, type Units } from "@rio-gps/core";
-import { Activity, AlertTriangle, PieChart, Zap, CheckCircle2, CalendarClock, ArrowRight, Bell, CircleOff, CircleParking, Hexagon, Map as MapIcon, Navigation, Plus, Route, Truck, Wrench } from "lucide-react";
+import { Activity, AlertTriangle, PieChart, Zap, CheckCircle2, CalendarClock, ArrowRight, Bell, CircleOff, CircleParking, Hexagon, Map as MapIcon, Navigation, Package, Plus, Route, Truck, Users, Wrench } from "lucide-react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { CHART_RANGES, type ChartRange } from "@/lib/daily-stats";
 import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
 import { cache, Suspense } from "react";
@@ -24,6 +23,10 @@ import { renewalCounts } from "@/lib/renewals";
 import { buildTripReport } from "@/lib/reports";
 import { requireTenantPage, getUnacknowledgedAlertCount } from "@/lib/request-context";
 import { FleetGlance } from "./fleet-glance";
+import { greeting, Hero, QuickAction, Tile } from "./parts";
+import { DeliveriesCard, LoadAttentionCard, LoadTiles, LoadUsageCard, TodayStopsCard } from "./loads-panels";
+import { getLoadDashboard } from "@/lib/load-dashboard";
+import { currentUsage } from "@/lib/plans";
 import { FleetTrends, TrendsSkeleton } from "./fleet-trends";
 import { IconTitle } from "@/components/app/icon-title";
 
@@ -41,16 +44,76 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const u = units(unitSystem);
   const now = new Date();
   const can = (p: Parameters<typeof contextHasPermission>[1]) => contextHasPermission(ctx, p);
-  // A Loads-only plan has no fleet to show here: Loads is its home page.
-  if (!can("locations.read") && can("loads.read")) redirect("/loads");
+  const hasGps = can("locations.read");
+  const hasLoads = can("loads.read");
 
-  const [devices, unack, maint, renewals, recentAlerts] = await Promise.all([
+  const [devices, unack, maint, renewals, recentAlerts, loadsDash, usage] = await Promise.all([
     can("locations.read") ? listCurrentLocations(ctx.organizationId, now, getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS) : Promise.resolve([] as CurrentDeviceLocation[]),
     can("alerts.read") ? getUnacknowledgedAlertCount(ctx.organizationId) : Promise.resolve(0),
     can("maintenance.read") ? dueCounts(ctx.organizationId, now) : Promise.resolve(null),
     can("maintenance.read") ? renewalCounts(ctx.organizationId, now) : Promise.resolve(null),
-    can("alerts.read") ? listEvents(ctx.organizationId, { limit: 5, unacknowledgedOnly: false }) : Promise.resolve([])
+    can("alerts.read") ? listEvents(ctx.organizationId, { limit: 5, unacknowledgedOnly: false }) : Promise.resolve([]),
+    hasLoads ? getLoadDashboard(ctx.organizationId, rc.timeZone, now) : Promise.resolve(null),
+    hasLoads && can("billing.read") ? currentUsage(ctx.organizationId, now) : Promise.resolve(null)
   ]);
+  const loadUsage = usage?.plan?.modules.includes("loads") ? { loadsUsed: usage.loadsUsed, included: usage.plan.includedLoads, extraLoadCents: usage.plan.extraLoadCents } : null;
+  const dateLabel = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: rc.timeZone }).format(now);
+  const hello = `${greeting(now, rc.timeZone)}${(user.name || "").split(" ")[0] ? `, ${(user.name || "").split(" ")[0]}` : ""}`;
+  const loadsSummary = loadsDash ? `${loadsDash.active} active load${loadsDash.active === 1 ? "" : "s"}${loadsDash.counts.attention ? ` · ${loadsDash.counts.attention} need${loadsDash.counts.attention === 1 ? "s" : ""} attention` : ""}` : "";
+
+  // Loads plan: the dashboard is about loads (same building blocks as the fleet dashboard).
+  if (!hasGps && loadsDash) {
+    return (
+      <>
+        <Hero greeting={hello} orgName={rc.orgName} dateLabel={dateLabel} summary={`${loadsSummary}${unack > 0 ? ` · ${unack} unread alert${unack === 1 ? "" : "s"}` : ""}`} action={{ href: "/loads/map", label: "Open loads map", icon: MapIcon }} />
+        <div className="mb-5">
+          <LoadTiles d={loadsDash} />
+        </div>
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+          <div className="grid min-w-0 content-start gap-5 lg:col-span-3">
+            <LoadAttentionCard d={loadsDash} />
+            <DeliveriesCard d={loadsDash} timeZone={rc.timeZone} timeFormat={rc.timeFormat} />
+            {can("alerts.read") && <RecentAlertsCard alerts={recentAlerts} now={now} timeZone={rc.timeZone} canWrite={can("alerts.write")} emptyHint="Late, no-signal and delivery alerts will appear here." />}
+          </div>
+          <div className="grid min-w-0 content-start gap-5 lg:col-span-2">
+            <TodayStopsCard d={loadsDash} timeZone={rc.timeZone} timeFormat={rc.timeFormat} />
+            <LoadUsageCard used={loadUsage} />
+            <Card>
+              <CardHeader>
+                <IconTitle icon={Zap}>Quick actions</IconTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
+                {can("loads.write") && <QuickAction href="/loads/new" icon={Plus} label="New load" hint="Send the driver a link" tone="green" />}
+                <QuickAction href="/loads/map" icon={MapIcon} label="Loads map" hint="Every active load now" tone="navy" />
+                <QuickAction href="/loads" icon={Package} label="All loads" hint="Search, filter, share" tone="purple" />
+                {can("users.manage") && <QuickAction href="/settings/team" icon={Users} label="Invite your team" hint="Dispatchers and viewers" tone="amber" />}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  /** GPS + Loads: the loads at a glance, between the fleet overview and the trends. */
+  const loadsSection = loadsDash ? (
+    <section aria-label="Loads" className="mt-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[#0a2463]">
+          <Package className="size-5" aria-hidden="true" /> Loads
+          <span className="text-sm font-normal text-muted-foreground">{loadsSummary}</span>
+        </h2>
+        <Link href="/loads" className="text-sm text-primary no-underline hover:underline">
+          All loads
+        </Link>
+      </div>
+      <LoadTiles d={loadsDash} />
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <LoadAttentionCard d={loadsDash} limit={4} />
+        <TodayStopsCard d={loadsDash} timeZone={rc.timeZone} timeFormat={rc.timeFormat} />
+      </div>
+    </section>
+  ) : null;
 
   const states = devices.map((d) => ({ d, s: fleetState(d) }));
   const count = (s: FleetState) => states.filter((x) => x.s === s).length;
@@ -85,6 +148,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             }
           />
         </Card>
+        {loadsSection}
       </>
     );
   }
@@ -95,8 +159,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         greeting={`${greeting(now, rc.timeZone)}${firstName ? `, ${firstName}` : ""}`}
         orgName={rc.orgName}
         dateLabel={new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: rc.timeZone }).format(now)}
-        summary={`${count("moving")} of ${devices.length} vehicle${devices.length === 1 ? "" : "s"} on the road${unack > 0 ? ` · ${unack} unread alert${unack === 1 ? "" : "s"}` : ""}`}
-        showMap={can("locations.read")}
+        summary={`${count("moving")} of ${devices.length} vehicle${devices.length === 1 ? "" : "s"} on the road${loadsDash ? ` · ${loadsSummary}` : ""}${unack > 0 ? ` · ${unack} unread alert${unack === 1 ? "" : "s"}` : ""}`}
+        action={can("locations.read") ? { href: "/map", label: "Open live map" } : undefined}
       />
 
       <section aria-label="Fleet summary" className={cn("stagger-in mb-5 grid grid-cols-2 gap-3", tileCount === 5 ? "md:grid-cols-5" : "md:grid-cols-4")}>
@@ -189,53 +253,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </Card>
 
         <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-2">
-          {can("alerts.read") && (
-            <Card>
-              <CardHeader>
-                <IconTitle icon={Bell} tone="red">Recent alerts</IconTitle>
-                <Link href="/alerts" className="text-sm text-primary no-underline hover:underline">
-                  View all
-                </Link>
-              </CardHeader>
-              {recentAlerts.length === 0 ? (
-                <CardContent className="flex flex-col items-center px-6 py-7 text-center">
-                  <span className="relative grid size-14 place-items-center rounded-full bg-success-soft text-success">
-                    <span aria-hidden="true" className="absolute inset-0 animate-ping rounded-full bg-success/15 [animation-duration:2.6s] motion-reduce:hidden" />
-                    <CheckCircle2 className="relative size-7" aria-hidden="true" />
-                  </span>
-                  <p className="m-0 mt-3 text-base font-semibold text-[#0a2463]">You&apos;re all caught up</p>
-                  <p className="m-0 mt-1 max-w-xs text-sm text-muted-foreground">No new alerts. Speeding, zone and offline alerts will appear here.</p>
-                  {can("alerts.write") && (
-                    <Link href="/alerts" className="mt-3 text-sm font-medium text-primary no-underline hover:underline">
-                      Manage alert rules
-                    </Link>
-                  )}
-                </CardContent>
-              ) : (
-                <ul className="m-0 list-none divide-y divide-border p-0">
-                  {recentAlerts.map((a) => {
-                    const m = alertMeta(a.type);
-                    return (
-                      <li key={a.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-primary-soft/40 sm:px-5">
-                        <span className={cn("grid size-8 shrink-0 place-items-center rounded-full", m.severity === "high" ? "bg-danger-soft text-danger" : m.severity === "medium" ? "bg-warning-soft text-warning" : "bg-info-soft text-info")}>
-                          <AlertTriangle className="size-4" aria-hidden="true" />
-                        </span>
-                        <div className="min-w-0 flex-1 text-sm">
-                          <p className="m-0 truncate">
-                            <strong className="font-medium">{a.vehicleName ?? "A device"}</strong> {m.short}
-                          </p>
-                          <p className="m-0 truncate text-xs text-muted-foreground">
-                            {a.ruleName} · {relativeTime(a.occurredAt, now.getTime(), rc.timeZone)}
-                          </p>
-                        </div>
-                        {!a.acknowledgedAt && <StatusBadge tone="danger" label="New" />}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </Card>
-          )}
+          {can("alerts.read") && <RecentAlertsCard alerts={recentAlerts} now={now} timeZone={rc.timeZone} canWrite={can("alerts.write")} emptyHint={loadsDash ? "Speeding, zone, offline and load alerts will appear here." : "Speeding, zone and offline alerts will appear here."} />}
 
           <Card>
             <CardHeader>
@@ -243,6 +261,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
               {can("locations.read") && <QuickAction href="/map" icon={MapIcon} label="Live map" hint="Every vehicle now" tone="navy" />}
+              {can("loads.write") && <QuickAction href="/loads/new" icon={Package} label="New load" hint="Track a shipment" tone="red" />}
               {can("vehicles.create") && <QuickAction href="/vehicles" icon={Plus} label="Add vehicle" hint="Truck, trailer, van" tone="green" />}
               {can("geofences.write") && <QuickAction href="/geofences" icon={Hexagon} label="Create zone" hint="Yards and sites" tone="purple" />}
               {can("history.read") && <QuickAction href="/reports" icon={Route} label="Trip reports" hint="Trips, stops, miles" tone="amber" />}
@@ -251,6 +270,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </Card>
         </div>
       </div>
+
+      {loadsSection}
 
       {can("history.read") && (
         <Suspense fallback={<TrendsSkeleton />}>
@@ -267,72 +288,60 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   );
 }
 
+
+/** Latest alerts (fleet and load alerts alike), shared by every dashboard. */
+function RecentAlertsCard({ alerts, now, timeZone, canWrite, emptyHint }: { alerts: Awaited<ReturnType<typeof listEvents>>; now: Date; timeZone: string; canWrite: boolean; emptyHint: string }) {
+  return (
+    <Card>
+              <CardHeader>
+                <IconTitle icon={Bell} tone="red">Recent alerts</IconTitle>
+                <Link href="/alerts" className="text-sm text-primary no-underline hover:underline">
+                  View all
+                </Link>
+              </CardHeader>
+              {alerts.length === 0 ? (
+                <CardContent className="flex flex-col items-center px-6 py-7 text-center">
+                  <span className="relative grid size-14 place-items-center rounded-full bg-success-soft text-success">
+                    <span aria-hidden="true" className="absolute inset-0 animate-ping rounded-full bg-success/15 [animation-duration:2.6s] motion-reduce:hidden" />
+                    <CheckCircle2 className="relative size-7" aria-hidden="true" />
+                  </span>
+                  <p className="m-0 mt-3 text-base font-semibold text-[#0a2463]">You&apos;re all caught up</p>
+                  <p className="m-0 mt-1 max-w-xs text-sm text-muted-foreground">No new alerts. {emptyHint}</p>
+                  {canWrite && (
+                    <Link href="/alerts" className="mt-3 text-sm font-medium text-primary no-underline hover:underline">
+                      Manage alert rules
+                    </Link>
+                  )}
+                </CardContent>
+              ) : (
+                <ul className="m-0 list-none divide-y divide-border p-0">
+                  {alerts.map((a) => {
+                    const m = alertMeta(a.type);
+                    return (
+                      <li key={a.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-primary-soft/40 sm:px-5">
+                        <span className={cn("grid size-8 shrink-0 place-items-center rounded-full", m.severity === "high" ? "bg-danger-soft text-danger" : m.severity === "medium" ? "bg-warning-soft text-warning" : "bg-info-soft text-info")}>
+                          <AlertTriangle className="size-4" aria-hidden="true" />
+                        </span>
+                        <div className="min-w-0 flex-1 text-sm">
+                          <p className="m-0 truncate">
+                            <strong className="font-medium">{a.vehicleName ?? (a.ruleName.startsWith("Load ") ? a.ruleName : "A device")}</strong> {m.short}
+                          </p>
+                          <p className="m-0 truncate text-xs text-muted-foreground">
+                            {a.ruleName} · {relativeTime(a.occurredAt, now.getTime(), timeZone)}
+                          </p>
+                        </div>
+                        {!a.acknowledgedAt && <StatusBadge tone="danger" label="New" />}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+  );
+}
+
 function rank(s: FleetState) {
   return { moving: 0, idle: 1, stopped: 2, parked: 3, offline: 4, never_seen: 5 }[s];
-}
-
-/** "Good morning" by the clock in the viewer's time zone. */
-function greeting(now: Date, timeZone: string): string {
-  const h = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone }).format(now));
-  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-}
-
-/** Page banner in the brand colours: navy field, red and white stripes echoing the logo. */
-function Hero({ greeting, orgName, dateLabel, summary, showMap }: { greeting: string; orgName: string; dateLabel: string; summary: string; showMap: boolean }) {
-  return (
-    <header className="relative mb-5 overflow-hidden rounded-xl bg-[linear-gradient(120deg,#0a2463_0%,#12357f_55%,#1d4fb8_100%)] px-5 py-5 text-white shadow-card sm:px-7 sm:py-6">
-      <svg aria-hidden="true" viewBox="0 0 400 160" preserveAspectRatio="xMaxYMid slice" className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-1/2 sm:block">
-        <path d="M150 160 230 0h34l-80 160z" fill="#ffffff" opacity="0.07" />
-        <path d="M214 160 294 0h22l-80 160z" fill="#d81e2c" opacity="0.85" />
-        <path d="M258 160 338 0h34l-80 160z" fill="#ffffff" opacity="0.1" />
-        <path d="M322 160 402 0h60v160z" fill="#ffffff" opacity="0.05" />
-      </svg>
-      <div className="relative flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p className="m-0 text-[13px] font-medium text-white/75">
-            {dateLabel} · {orgName}
-          </p>
-          <h1 className="m-0 mt-1 text-2xl font-semibold tracking-tight sm:text-[28px] sm:leading-9">{greeting}</h1>
-          <p className="m-0 mt-1.5 text-sm text-white/85">{summary}</p>
-        </div>
-        {showMap && (
-          <Link href="/map" className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md bg-white px-4 text-sm font-semibold text-[#0a2463] no-underline shadow-card transition-transform duration-150 hover:bg-white/90 active:scale-[0.97]">
-            <MapIcon className="size-4" aria-hidden="true" /> Open live map
-          </Link>
-        )}
-      </div>
-    </header>
-  );
-}
-
-/** Solid colour per status. Every pair is white text on a background of at least 4.5:1 contrast. */
-const TILE_LOOK = {
-  moving: "bg-[linear-gradient(135deg,#15803d,#166534)]",
-  idle: "bg-[linear-gradient(135deg,#b45309,#92400e)]",
-  stopped: "bg-[linear-gradient(135deg,#0369a1,#075985)]",
-  offline: "bg-[linear-gradient(135deg,#526079,#3b4558)]",
-  alert: "bg-[linear-gradient(135deg,#c81e2b,#991b1b)]",
-  calm: "bg-[linear-gradient(135deg,#0a2463,#12357f)]"
-} as const;
-
-function Tile({ label, value, total, icon: Icon, look, hint, href, className }: { label: string; value: number; total?: number; icon: typeof Truck; look: keyof typeof TILE_LOOK; hint?: string; href: string; className?: string }) {
-  const pct = total ? Math.round((value / total) * 100) : null;
-  return (
-    <Link
-      href={href}
-      className={cn("group relative block overflow-hidden rounded-xl p-4 text-white no-underline shadow-card transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-offset-2", TILE_LOOK[look], className)}
-    >
-      <Icon aria-hidden="true" className="pointer-events-none absolute -bottom-3 -right-2 size-20 text-white/15 transition-transform duration-300 group-hover:scale-110" strokeWidth={1.5} />
-      <p className="m-0 text-xs font-semibold uppercase tracking-wide text-white/85">{label}</p>
-      <p className="m-0 mt-1.5 text-[34px] font-semibold leading-10 tabular-nums">{value}</p>
-      <p className="m-0 mt-1 min-h-4 text-xs text-white/85">{pct !== null ? `${pct}% of fleet${hint ? ` · ${hint}` : ""}` : value === 0 ? "All caught up" : "Need a look"}</p>
-      {pct !== null && (
-        <span aria-hidden="true" className="relative mt-2.5 block h-1 overflow-hidden rounded-full bg-white/25">
-          <span className="block h-full origin-left animate-grow-x rounded-full bg-white" style={{ width: `${pct}%` }} />
-        </span>
-      )}
-    </Link>
-  );
 }
 
 /** Share of the fleet in each status: a ring with the total in the middle, and a labelled legend (no colour-only meaning). */
@@ -378,29 +387,6 @@ function StatusDonut({ total, parts }: { total: number; parts: { key: string; la
         ))}
       </ul>
     </div>
-  );
-}
-
-const QA_TONE = {
-  navy: "bg-primary-soft text-primary group-hover:bg-primary group-hover:text-white",
-  green: "bg-success-soft text-success group-hover:bg-success group-hover:text-white",
-  purple: "bg-[#f1edff] text-[#5b3fd6] group-hover:bg-[#5b3fd6] group-hover:text-white",
-  amber: "bg-warning-soft text-warning group-hover:bg-warning group-hover:text-white",
-  red: "bg-danger-soft text-danger group-hover:bg-danger group-hover:text-white"
-} as const;
-
-function QuickAction({ href, icon: Icon, label, hint, tone }: { href: string; icon: typeof Truck; label: string; hint: string; tone: keyof typeof QA_TONE }) {
-  return (
-    <Link href={href} className="group flex items-center gap-3 rounded-xl border border-border p-3 text-foreground no-underline transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-pop">
-      <span className={cn("grid size-10 shrink-0 place-items-center rounded-lg transition-colors duration-200", QA_TONE[tone])}>
-        <Icon className="size-[18px]" aria-hidden="true" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-[#0a2463]">{label}</span>
-        <span className="block truncate text-xs text-muted-foreground">{hint}</span>
-      </span>
-      <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
-    </Link>
   );
 }
 

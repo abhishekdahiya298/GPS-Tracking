@@ -1,6 +1,9 @@
 import { boolean, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { organizations, timeFormatEnum } from "./organizations";
 
+/** Look of the side menu, chosen per person (null = the default, "gradient"). */
+export const navThemeEnum = pgEnum("nav_theme", ["gradient", "light", "glass"]);
+
 /**
  * @deprecated Legacy v0 role enum, superseded by `memberships.role` (org_role).
  * Kept (unused) so migration 0001 stays non-destructive; drop in a later,
@@ -29,6 +32,8 @@ export const users = pgTable(
     timeZone: text("time_zone"),
     /** Personal clock; null = the organization's. */
     timeFormat: timeFormatEnum("time_format"),
+    /** Personal side-menu style; null = the default. */
+    navTheme: navThemeEnum("nav_theme"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     /** @deprecated v0 column; organization access is via memberships. Always NULL for new users. */

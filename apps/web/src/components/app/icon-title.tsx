@@ -7,7 +7,8 @@ const TONES = {
   green: "bg-success-soft text-success",
   amber: "bg-warning-soft text-warning",
   red: "bg-danger-soft text-danger",
-  blue: "bg-info-soft text-info"
+  blue: "bg-info-soft text-info",
+  purple: "bg-[#f1edff] text-[#5b3fd6]"
 } as const;
 
 /** Card title with a small tinted icon, so every dashboard card reads the same way. */

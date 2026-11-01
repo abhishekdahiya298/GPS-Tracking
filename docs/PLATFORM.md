@@ -78,7 +78,7 @@ With `HOLOGRAM_API_KEY` (and `HOLOGRAM_ORG_ID`) in the server's `.env`, the SIM 
 
 ## Plans, modules and usage (manual invoicing)
 
-**Modules.** A plan switches on `gps` (live map, vehicles, trackers, trips, zones, reports, maintenance) and/or `loads`. Each module owns a set of permissions (`MODULE_PERMISSIONS` in `packages/core/src/rbac.ts`); `resolveTenantContext` adds the customer's modules to every request context, so the same `contextHasPermission` check that guards pages, APIs and the menu also enforces the plan, for platform admins viewing the customer too. Team, settings, alerts and billing are in every plan. A Loads-only customer starts at `/loads`, has no Dashboard/fleet menu items, and can only track loads by the driver's phone.
+**Modules.** A plan switches on `gps` (live map, vehicles, trackers, trips, zones, reports, maintenance) and/or `loads`. Each module owns a set of permissions (`MODULE_PERMISSIONS` in `packages/core/src/rbac.ts`); `resolveTenantContext` adds the customer's modules to every request context, so the same `contextHasPermission` check that guards pages, APIs and the menu also enforces the plan, for platform admins viewing the customer too. Team, settings, alerts and billing are in every plan. Every plan has a dashboard built from the same parts (`dashboard/parts.tsx`): GPS shows the fleet; Loads shows load tiles (waiting, to pickup, in transit, at delivery, need attention), the attention list, today's appointments, deliveries per day with on-time rate, loads used this month and alerts; GPS + Loads shows the fleet plus a Loads section. A Loads-only customer has no fleet menu items and tracks loads by the driver's phone only.
 
 **Catalog vs customer terms.** `plans` is the catalog (console → Billing → Plans). Assigning a plan copies its terms into `subscriptions` (one open row per customer, history kept), where they can be adjusted per customer (e.g. more included loads). Editing a catalog plan never changes what existing customers pay. Every new customer is created on a plan; existing customers were put on "GPS + Loads" when plans were introduced (migration 0022).
 
@@ -88,6 +88,12 @@ With `HOLOGRAM_API_KEY` (and `HOLOGRAM_ORG_ID`) in the server's `.env`, the SIM 
 - Months are calendar months in the customer's time zone.
 - After pickup, a load's pickup can't be edited (a new shipment is a new load). Loads tracked longer than 14 days are flagged on the statement for review.
 
+**Archived customers are never billed** for the month they were archived in or later, and are left out of the statement and CSV. The **Free (internal & testing)** plan ($0, every module) is for RIO's own account and test customers.
+
 **Over the allowance** work never stops: extra loads are billed at the customer's extra-load price. The Loads list and New load page show a notice at 80% and 100% of the month's included loads.
 
 **Statement.** Console → Billing → Usage & billing: per customer and month (terms in effect at month end), trackers × price, loads used / included, extra loads × price, monthly fee, total; CSV download (`GET /api/admin/billing?month=YYYY-MM`). Customers see their own plan, this month's usage, an estimate and the counting rules on **Plan & usage** (Org admins).
+
+## Side menu styles
+
+Each person picks a menu style in **My account → Menu style**: Modern gradient (default), Minimal light, Dark glass. Saved on the user (`users.nav_theme`, migration 0024), so it follows them to any device; customer app and platform console share the same menu component (`components/app/app-shell.tsx`, styles in `components/app/nav-themes.ts`). Only colours and surfaces change, never the layout or order.

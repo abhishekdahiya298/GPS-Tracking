@@ -13,7 +13,7 @@ import { PLATFORM_NAV } from "./nav-config";
  * `viewAsName` is the customer still selected for this session, if any.
  */
 export async function PlatformFrame({ user, viewAsName, children }: { user: AuthenticatedUser; viewAsName: string | null; children: ReactNode }) {
-  const [prefs] = await getDb().select({ timeZone: schema.users.timeZone, timeFormat: schema.users.timeFormat }).from(schema.users).where(eq(schema.users.id, user.userId));
+  const [prefs] = await getDb().select({ timeZone: schema.users.timeZone, timeFormat: schema.users.timeFormat, navTheme: schema.users.navTheme }).from(schema.users).where(eq(schema.users.id, user.userId));
   const time = effectiveTimePrefs({ timeZone: DEFAULT_TIME_ZONE, timeFormat: DEFAULT_TIME_FORMAT }, prefs);
   return (
     <AppShell
@@ -28,6 +28,7 @@ export async function PlatformFrame({ user, viewAsName, children }: { user: Auth
       unitSystem="imperial"
       timeZone={time.timeZone}
       timeFormat={time.timeFormat}
+      navTheme={prefs?.navTheme ?? null}
     >
       {children}
     </AppShell>

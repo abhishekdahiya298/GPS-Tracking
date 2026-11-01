@@ -22,7 +22,11 @@ import {
   CardSim,
   ReceiptText,
   type LucideIcon,
-  Inbox
+  Inbox,
+  ChevronRight,
+  Home,
+  Target,
+  Layers
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -36,6 +40,7 @@ import { Sheet, SheetContent } from "../ui/dialog";
 import { toast } from "../ui/toaster";
 import { CommandPalette } from "./command-palette";
 import { isActive, type NavIcon, type NavSection } from "./nav-config";
+import { NAV_THEME_CLASSES, navTheme as toNavTheme, type NavTheme } from "./nav-themes";
 import { TimeProvider } from "./time-context";
 import { UnitsProvider } from "./units-context";
 import type { TimeFormat, UnitSystem } from "@rio-gps/core";
@@ -58,7 +63,10 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   shield: ShieldCheck,
   user: UserCircle,
   sim: CardSim,
-  receipt: ReceiptText
+  receipt: ReceiptText,
+  home: Home,
+  target: Target,
+  layers: Layers
 };
 
 /** Routes whose page fills the content area edge to edge (maps). */
@@ -97,6 +105,7 @@ export function AppShell({
   unitSystem,
   timeZone,
   timeFormat,
+  navTheme,
   children
 }: {
   mode?: ShellMode;
@@ -110,8 +119,11 @@ export function AppShell({
   unitSystem: UnitSystem;
   timeZone: string;
   timeFormat: TimeFormat;
+  /** The person's menu style (My account); null = default. */
+  navTheme?: string | null;
   children: ReactNode;
 }) {
+  const theme = toNavTheme(navTheme);
   const pathname = usePathname() ?? "/";
   const [mobileOpen, setMobileOpen] = useState(false);
   useEffect(() => setMobileOpen(false), [pathname]);
@@ -125,13 +137,13 @@ export function AppShell({
         Skip to content
       </a>
 
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col lg:flex" aria-label="Main navigation">
-        <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} home={home} />
+      <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col lg:flex" aria-label="Main navigation">
+        <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} home={home} theme={theme} />
       </aside>
 
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" title="RIO GPS" className="w-72 p-0 lg:hidden">
-          <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} home={home} hideBrand />
+        <SheetContent side="left" title="RIO GPS" className="w-[18rem] p-0 lg:hidden">
+          <SidebarContent nav={nav} pathname={pathname} orgName={orgName} user={user} home={home} hideBrand theme={theme} />
         </SheetContent>
       </Sheet>
 
@@ -181,7 +193,53 @@ function Brand({ large }: { large?: boolean }) {
   return <BrandMark className={large ? "h-[58px]" : "h-9"} />;
 }
 
-function SidebarContent({ nav, pathname, orgName, user, home, hideBrand }: { nav: NavSection[]; pathname: string; orgName: string; user: ShellUser; home: string; hideBrand?: boolean }) {
+/** Bottom decoration per style: the logo's stripes, a soft wave, or a night road with light trails. */
+function SidebarDecor({ theme }: { theme: NavTheme }) {
+  if (theme === "light")
+    return (
+      <svg aria-hidden="true" viewBox="0 0 240 120" preserveAspectRatio="none" className="pointer-events-none absolute inset-x-0 bottom-0 h-40 w-full">
+        <path d="M0 60 C 60 30, 120 90, 240 40 L240 120 L0 120 Z" fill="#dbe7fb" opacity="0.7" />
+        <path d="M0 85 C 70 60, 150 110, 240 70 L240 120 L0 120 Z" fill="#c7d9f7" opacity="0.6" />
+      </svg>
+    );
+  if (theme === "glass")
+    return (
+      <svg aria-hidden="true" viewBox="0 0 240 160" preserveAspectRatio="xMidYMax slice" className="pointer-events-none absolute inset-x-0 bottom-0 h-72 w-full">
+        <defs>
+          <linearGradient id="nav-sky" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor="#0c1426" stopOpacity="0" />
+            <stop offset="1" stopColor="#1b2a4a" stopOpacity="0.9" />
+          </linearGradient>
+          <linearGradient id="nav-trail" x1="0" x2="1">
+            <stop offset="0" stopColor="#ff6a3d" stopOpacity="0" />
+            <stop offset="0.6" stopColor="#ff8a3d" />
+            <stop offset="1" stopColor="#ffd08a" />
+          </linearGradient>
+        </defs>
+        <rect width="240" height="160" fill="url(#nav-sky)" />
+        <path d="M0 95 L40 70 L70 85 L110 55 L150 80 L190 60 L240 85 L240 160 L0 160 Z" fill="#0a1222" />
+        <path d="M0 150 C 80 140, 160 120, 240 96" stroke="url(#nav-trail)" strokeWidth="2.2" fill="none" />
+        <path d="M0 157 C 90 148, 170 128, 240 104" stroke="#ff3b47" strokeOpacity="0.7" strokeWidth="1.4" fill="none" />
+        <path d="M0 160 C 100 155, 180 138, 240 114" stroke="#ffe2b0" strokeOpacity="0.5" strokeWidth="1" fill="none" />
+      </svg>
+    );
+  return (
+    <svg aria-hidden="true" viewBox="0 0 240 300" preserveAspectRatio="xMaxYMax slice" className="pointer-events-none absolute bottom-0 right-0 h-72 w-full">
+      <path d="M70 300 190 60h26L96 300z" fill="#ffffff" opacity="0.05" />
+      <path d="M118 300 238 60h12L130 300z" fill="#d81e2c" opacity="0.55" />
+      <path d="M150 300 270 60h26L176 300z" fill="#ffffff" opacity="0.05" />
+    </svg>
+  );
+}
+
+/**
+ * The menu: brand card, a standalone home item, then each section as one rounded group with
+ * a row per page (icon tile, label, chevron). The current page is highlighted with an accent
+ * bar. Same component for the customer app and the platform console; `theme` (My account →
+ * Menu style) only changes colours and surfaces.
+ */
+function SidebarContent({ nav, pathname, orgName, user, home, hideBrand, theme }: { nav: NavSection[]; pathname: string; orgName: string; user: ShellUser; home: string; hideBrand?: boolean; theme: NavTheme }) {
+  const t = NAV_THEME_CLASSES[theme];
   const initials = user.name
     .split(/\s+/)
     .map((p) => p[0])
@@ -189,41 +247,54 @@ function SidebarContent({ nav, pathname, orgName, user, home, hideBrand }: { nav
     .slice(0, 2)
     .toUpperCase();
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,#0a2463_0%,#0b2a72_55%,#123a8f_100%)] text-white">
-      {/* The logo's stripes, faint, behind the menu. */}
-      <svg aria-hidden="true" viewBox="0 0 240 300" preserveAspectRatio="xMaxYMax slice" className="pointer-events-none absolute bottom-0 right-0 h-72 w-full">
-        <path d="M70 300 190 60h26L96 300z" fill="#ffffff" opacity="0.05" />
-        <path d="M118 300 238 60h12L130 300z" fill="#d81e2c" opacity="0.5" />
-        <path d="M150 300 270 60h26L176 300z" fill="#ffffff" opacity="0.05" />
-      </svg>
+    <div data-nav-theme={theme} className={cn("relative flex h-full min-h-0 flex-col overflow-hidden", t.root)}>
+      <div aria-hidden="true" className={cn("pointer-events-none absolute inset-x-0 top-0 h-64 [background-size:10px_10px] [mask-image:linear-gradient(180deg,#000,transparent)]", t.dots)} />
+      <SidebarDecor theme={theme} />
       {!hideBrand && (
-        <div className="relative shrink-0 px-3 pb-2 pt-3">
-          <Link href={home} aria-label="RIO GPS home" className="flex h-[74px] items-center justify-center rounded-xl bg-white px-3 no-underline shadow-card transition-transform duration-200 hover:scale-[1.02] focus-visible:outline-white">
-            <Brand large />
+        <div className="relative shrink-0 px-3.5 pb-2 pt-3.5">
+          <Link href={home} aria-label="RIO GPS home" className={cn("group relative block overflow-hidden rounded-2xl no-underline", t.brandOuter, t.focus)}>
+            <span className={cn("relative flex h-[76px] items-center justify-center overflow-hidden rounded-[14px] px-3", t.brandInner)}>
+              {theme === "gradient" && (
+                <svg aria-hidden="true" viewBox="0 0 200 80" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 h-full w-full">
+                  <path d="M150 80 C 178 78, 194 66, 200 46 L200 80 Z" fill="#d81e2c" />
+                  <path d="M158 80 C 182 76, 196 63, 200 52 L200 56 C 195 68, 183 78, 166 80 Z" fill="#ffffff" opacity="0.9" />
+                  <path d="M0 0 L42 0 C 22 3, 8 10, 0 22 Z" fill="#0a2463" opacity="0.12" />
+                </svg>
+              )}
+              <span className="relative transition-transform duration-200 group-hover:scale-[1.03]">
+                <Brand large />
+              </span>
+            </span>
           </Link>
         </div>
       )}
-      <nav className="relative min-h-0 flex-1 overflow-y-auto px-3 py-3 [scrollbar-color:rgb(255_255_255/0.3)_transparent]" aria-label="Primary">
+      <nav className="relative min-h-0 flex-1 overflow-y-auto px-3.5 py-3 [scrollbar-color:rgb(127_127_127/0.35)_transparent]" aria-label="Primary">
         {nav.map((section, si) => (
-          <div key={section.title ?? si} className={cn(si > 0 && "mt-5")}>
-            {section.title && <p className="m-0 mb-1.5 px-2.5 text-[11px] font-semibold uppercase tracking-wider text-white/60">{section.title}</p>}
-            <ul className="m-0 list-none space-y-0.5 p-0">
-              {section.items.map((item) => {
+          <div key={section.title ?? si} className={cn(si > 0 && "mt-4")}>
+            {section.title && <p className={cn("m-0 mb-2 px-1.5 text-[11px] font-semibold uppercase tracking-[0.09em]", t.sectionTitle)}>{section.title}</p>}
+            {/* Titled sections are one group; a lone item (home) stands on its own. */}
+            <ul className={cn("m-0 list-none p-0", section.title && cn("overflow-hidden rounded-xl p-1", t.group))}>
+              {section.items.map((item, ii) => {
                 const Icon = ICONS[item.icon];
                 const active = isActive(pathname, item);
                 return (
-                  <li key={item.href}>
+                  <li key={item.href} className={cn(section.title && ii > 0 && cn("border-t", t.divider))}>
                     <Link
                       href={item.href}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "group relative flex h-10 items-center gap-3 rounded-lg px-2.5 text-sm no-underline transition-colors focus-visible:outline-white",
-                        active ? "bg-white font-semibold text-[#0a2463] shadow-card" : "text-white/85 hover:bg-white/10 hover:text-white"
+                        "group relative flex items-center gap-3 rounded-lg px-2 text-[14px] no-underline transition-all duration-150",
+                        t.focus,
+                        section.title ? "h-11 border border-transparent" : cn("h-12", t.lone),
+                        active ? t.active : t.idle
                       )}
                     >
-                      {active && <span aria-hidden="true" className="absolute -left-3 top-2 h-6 w-1 rounded-r-full bg-[#ff4b57]" />}
-                      <Icon className={cn("size-[18px] shrink-0 transition-transform duration-200 group-hover:scale-110", active ? "text-[#d81e2c]" : "text-white/70 group-hover:text-white")} aria-hidden="true" />
-                      {item.label}
+                      {active && <span aria-hidden="true" className={cn("absolute inset-y-1.5 left-0 w-1 rounded-r-full", t.accent)} />}
+                      <span className={cn("grid size-8 shrink-0 place-items-center rounded-lg transition-colors", active ? t.tileActive : t.tileIdle)}>
+                        <Icon className="size-[17px] transition-transform duration-200 group-hover:scale-110" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      {section.title && <ChevronRight className={cn("size-4 shrink-0 transition-transform duration-150 group-hover:translate-x-0.5", active ? t.chevronActive : t.chevronIdle)} aria-hidden="true" />}
                     </Link>
                   </li>
                 );
@@ -232,13 +303,13 @@ function SidebarContent({ nav, pathname, orgName, user, home, hideBrand }: { nav
           </div>
         ))}
       </nav>
-      <div className="relative m-3 flex shrink-0 items-center gap-2.5 rounded-lg bg-white/10 px-3 py-2.5 backdrop-blur">
-        <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full bg-white text-xs font-semibold text-[#0a2463]">
+      <div className={cn("relative m-3.5 flex shrink-0 items-center gap-2.5 rounded-xl border px-3 py-2.5 backdrop-blur", t.footer)}>
+        <span aria-hidden="true" className={cn("grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold ring-2", t.avatar)}>
           {initials || "?"}
         </span>
         <div className="min-w-0">
-          <p className="m-0 truncate text-sm font-medium text-white">{orgName}</p>
-          <p className="m-0 truncate text-xs text-white/70">
+          <p className={cn("m-0 truncate text-sm font-semibold", t.footerTitle)}>{orgName}</p>
+          <p className={cn("m-0 truncate text-xs", t.footerSub)}>
             {user.name} · {user.roleLabel}
           </p>
         </div>
