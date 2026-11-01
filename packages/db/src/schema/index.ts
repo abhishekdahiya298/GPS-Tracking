@@ -20,3 +20,4 @@ export * from "./leads";
 export * from "./pushDevices";
 export * from "./loads";
 export * from "./simCards";
+export * from "./billing";

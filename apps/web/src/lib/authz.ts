@@ -3,6 +3,7 @@ import { getDb, schema } from "@rio-gps/db";
 import { and, asc, eq } from "drizzle-orm";
 import { getAuth } from "./auth";
 import { ForbiddenError, OrganizationUnavailableError, PlatformOnlyError, UnauthenticatedError } from "./errors";
+import { organizationModules } from "./plans";
 
 /**
  * The single authorization choke point. Every tenant-scoped route calls
@@ -54,6 +55,9 @@ function isOrgRole(value: string): value is OrgRole {
  *
  * Everyone else can only act in an active organization they belong to; suspended and archived
  * organizations are skipped, and if nothing is left the request is refused.
+ *
+ * The context carries the modules of the organization's plan, so every permission check
+ * (pages, APIs, menu) also enforces what the customer bought.
  */
 export async function resolveTenantContext(user: AuthenticatedUser): Promise<TenantContext> {
   const db = getDb();
@@ -64,7 +68,7 @@ export async function resolveTenantContext(user: AuthenticatedUser): Promise<Ten
         .from(schema.organizations)
         .where(eq(schema.organizations.id, user.activeOrganizationId))
         .limit(1);
-      if (org) return { userId: user.userId, organizationId: org.id, role: null, isSuperAdmin: true };
+      if (org) return { userId: user.userId, organizationId: org.id, role: null, isSuperAdmin: true, modules: await organizationModules(org.id) };
     }
     throw new PlatformOnlyError();
   }
@@ -79,7 +83,7 @@ export async function resolveTenantContext(user: AuthenticatedUser): Promise<Ten
 
   const membership = (user.activeOrganizationId ? usable.find((m) => m.organizationId === user.activeOrganizationId) : undefined) ?? usable[0];
   if (membership && isOrgRole(membership.role)) {
-    return { userId: user.userId, organizationId: membership.organizationId, role: membership.role, isSuperAdmin: false };
+    return { userId: user.userId, organizationId: membership.organizationId, role: membership.role, isSuperAdmin: false, modules: await organizationModules(membership.organizationId) };
   }
   if (rows.length > 0) throw new OrganizationUnavailableError(rows.some((r) => r.status === "suspended") ? "suspended" : "archived");
   throw new ForbiddenError("Your account is not a member of any organization");

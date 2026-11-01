@@ -19,6 +19,7 @@ export default async function MapPage() {
     if (err instanceof AppError && err.status === 403) redirect("/dashboard");
     throw err;
   }
+  if (!contextHasPermission(ctx, "locations.read")) redirect("/dashboard");
   // No location data is rendered on the server: the client loads it through the
   // session-authenticated stream, scoped to the caller's organization.
   // Groups are only names and vehicle ids of the caller's own organization.

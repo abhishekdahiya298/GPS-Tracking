@@ -6,6 +6,7 @@ import { writeAudit } from "./audit";
 import { AppError, ConflictError, NotFoundError, ValidationError } from "./errors";
 import { isIccid, normalizeIccid, parseInventoryLines } from "./inventory-parse";
 import { logger } from "./logger";
+import { recordTrackerMonth } from "./plans";
 import { getTraccarAdmin } from "./traccar";
 
 /**
@@ -211,6 +212,7 @@ export async function assignToCustomer(actorUserId: string, deviceId: string, in
     return { imei: d.imei, org };
   });
   await writeAudit({ action: "device.assigned_to_customer", actorUserId, organizationId: out.org.id, targetType: "device", targetId: deviceId, metadata: { imeiLast4: out.imei.slice(-4) }, ...meta });
+  await recordTrackerMonth(deviceId);
   return { organizationId: out.org.id };
 }
 
@@ -233,6 +235,7 @@ export async function moveToCustomer(actorUserId: string, deviceId: string, inpu
   const md = { imeiLast4: out.imei.slice(-4), reason: input.reason };
   await writeAudit({ action: "device.moved_out", actorUserId, organizationId: out.from, targetType: "device", targetId: deviceId, metadata: { ...md, toOrganizationId: out.to }, ...meta });
   await writeAudit({ action: "device.moved_in", actorUserId, organizationId: out.to, targetType: "device", targetId: deviceId, metadata: { ...md, fromOrganizationId: out.from }, ...meta });
+  await recordTrackerMonth(deviceId);
   return out;
 }
 

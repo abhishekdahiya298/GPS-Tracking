@@ -75,3 +75,19 @@ With `HOLOGRAM_API_KEY` (and `HOLOGRAM_ORG_ID`) in the server's `.env`, the SIM 
 - The Hologram name is shown under the ICCID on the SIM cards page and is searchable.
 - Kept from RIO: monthly cost (**Set monthly cost…** applies one price to every Hologram SIM) and notes. A SIM Hologram stops listing is never deleted, just no longer refreshed.
 - One `sim.synced` activity entry per sync that changed something (or that a person started).
+
+## Plans, modules and usage (manual invoicing)
+
+**Modules.** A plan switches on `gps` (live map, vehicles, trackers, trips, zones, reports, maintenance) and/or `loads`. Each module owns a set of permissions (`MODULE_PERMISSIONS` in `packages/core/src/rbac.ts`); `resolveTenantContext` adds the customer's modules to every request context, so the same `contextHasPermission` check that guards pages, APIs and the menu also enforces the plan, for platform admins viewing the customer too. Team, settings, alerts and billing are in every plan. A Loads-only customer starts at `/loads`, has no Dashboard/fleet menu items, and can only track loads by the driver's phone.
+
+**Catalog vs customer terms.** `plans` is the catalog (console → Billing → Plans). Assigning a plan copies its terms into `subscriptions` (one open row per customer, history kept), where they can be adjusted per customer (e.g. more included loads). Editing a catalog plan never changes what existing customers pay. Every new customer is created on a plan; existing customers were put on "GPS + Loads" when plans were introduced (migration 0022).
+
+**Usage ledger (can't be gamed).**
+- `billable_loads`: a load is recorded once (unique load id) when tracking starts: driver accepts the link, or a vehicle-tracked load is created. Loads cancelled/declined before tracking are free. Deleting or cancelling later never removes the row.
+- `billable_trackers`: a tracker is recorded once per month it is with an active customer (hourly job + immediately on assign/move).
+- Months are calendar months in the customer's time zone.
+- After pickup, a load's pickup can't be edited (a new shipment is a new load). Loads tracked longer than 14 days are flagged on the statement for review.
+
+**Over the allowance** work never stops: extra loads are billed at the customer's extra-load price. The Loads list and New load page show a notice at 80% and 100% of the month's included loads.
+
+**Statement.** Console → Billing → Usage & billing: per customer and month (terms in effect at month end), trackers × price, loads used / included, extra loads × price, monthly fee, total; CSV download (`GET /api/admin/billing?month=YYYY-MM`). Customers see their own plan, this month's usage, an estimate and the counting rules on **Plan & usage** (Org admins).

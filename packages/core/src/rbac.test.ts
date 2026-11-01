@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contextHasPermission, ORG_ROLES, PERMISSIONS, roleHasPermission, type TenantContext } from "./rbac.js";
+import { contextHasPermission, MODULE_PERMISSIONS, MODULES, ORG_ROLES, PERMISSIONS, roleHasPermission, type TenantContext } from "./rbac.js";
 
 const ctx = (over: Partial<TenantContext>): TenantContext => ({
   userId: "u",
@@ -46,5 +46,26 @@ describe("RBAC", () => {
 
   it("a context without a role and without super admin is denied", () => {
     expect(contextHasPermission(ctx({ role: null }), "locations.read")).toBe(false);
+  });
+});
+
+describe("plan modules", () => {
+  const base: TenantContext = { userId: "u", organizationId: "o", role: "ORG_ADMIN", isSuperAdmin: false };
+  it("a Loads-only plan hides fleet permissions, even from an org admin and a platform admin", () => {
+    const loadsOnly = { ...base, modules: ["loads"] as const };
+    expect(contextHasPermission(loadsOnly, "loads.write")).toBe(true);
+    expect(contextHasPermission(loadsOnly, "locations.read")).toBe(false);
+    expect(contextHasPermission(loadsOnly, "vehicles.read")).toBe(false);
+    expect(contextHasPermission({ ...loadsOnly, role: null, isSuperAdmin: true }, "devices.read")).toBe(false);
+  });
+  it("a GPS-only plan hides loads; team, settings, alerts and billing are in every plan", () => {
+    const gps = { ...base, modules: ["gps"] as const };
+    expect(contextHasPermission(gps, "loads.read")).toBe(false);
+    expect(contextHasPermission(gps, "locations.read")).toBe(true);
+    for (const p of ["users.manage", "organization.manage", "alerts.read", "billing.read"] as const) expect(contextHasPermission(gps, p)).toBe(true);
+  });
+  it("every permission belongs to at most one module", () => {
+    const all = MODULES.flatMap((m) => MODULE_PERMISSIONS[m]);
+    expect(new Set(all).size).toBe(all.length);
   });
 });

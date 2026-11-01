@@ -155,6 +155,13 @@
       "when": 1793516743302,
       "tag": "0021_stats_engine_version",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793517190704,
+      "tag": "0022_plans_usage",
+      "breakpoints": true
     }
   ]
 }

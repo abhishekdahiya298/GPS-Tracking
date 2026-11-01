@@ -20,6 +20,7 @@ import {
   Activity,
   ShieldCheck,
   CardSim,
+  ReceiptText,
   type LucideIcon,
   Inbox
 } from "lucide-react";
@@ -56,7 +57,8 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   activity: Activity,
   shield: ShieldCheck,
   user: UserCircle,
-  sim: CardSim
+  sim: CardSim,
+  receipt: ReceiptText
 };
 
 /** Routes whose page fills the content area edge to edge (maps). */

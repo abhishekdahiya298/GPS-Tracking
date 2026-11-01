@@ -5,7 +5,7 @@ import { contextHasPermission, type Permission, type TenantContext } from "@rio-
  * server with the same permission checks the pages and APIs enforce: hiding a
  * link is a convenience, never the security boundary.
  */
-export type NavIcon = "dashboard" | "map" | "truck" | "package" | "cpu" | "zones" | "bell" | "reports" | "wrench" | "users" | "building" | "settings" | "inbox" | "activity" | "shield" | "user" | "sim";
+export type NavIcon = "dashboard" | "map" | "truck" | "package" | "cpu" | "zones" | "bell" | "reports" | "wrench" | "users" | "building" | "settings" | "inbox" | "activity" | "shield" | "user" | "sim" | "receipt";
 
 export interface NavItem {
   href: string;
@@ -24,7 +24,8 @@ export interface NavSection {
 type Rule = NavItem & { permission?: Permission; superAdminOnly?: boolean };
 
 const SECTIONS: { title?: string; items: Rule[] }[] = [
-  { items: [{ href: "/dashboard", label: "Dashboard", icon: "dashboard" }] },
+  // Fleet overview; a Loads-only plan starts at Loads instead.
+  { items: [{ href: "/dashboard", label: "Dashboard", icon: "dashboard", permission: "locations.read" }] },
   {
     title: "Tracking",
     items: [
@@ -47,6 +48,7 @@ const SECTIONS: { title?: string; items: Rule[] }[] = [
     title: "Administration",
     items: [
       { href: "/settings/team", label: "Team", icon: "users", permission: "users.read" },
+      { href: "/settings/plan", label: "Plan & usage", icon: "receipt", permission: "billing.read" },
       { href: "/settings/organization", label: "Settings", icon: "settings", permission: "organization.manage" }
     ]
   }
@@ -73,6 +75,13 @@ export const PLATFORM_NAV: NavSection[] = [
     items: [
       { href: "/admin/trackers", label: "Trackers", icon: "cpu" },
       { href: "/admin/sims", label: "SIM cards", icon: "sim" }
+    ]
+  },
+  {
+    title: "Billing",
+    items: [
+      { href: "/admin/billing", label: "Usage & billing", icon: "receipt" },
+      { href: "/admin/plans", label: "Plans", icon: "package" }
     ]
   },
   {

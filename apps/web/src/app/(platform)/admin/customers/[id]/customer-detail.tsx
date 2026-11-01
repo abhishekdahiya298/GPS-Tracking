@@ -12,6 +12,7 @@ import { SIM_STATUS } from "../../_shared/sim-meta";
 import { SimNumbers } from "../../_shared/sim-numbers";
 import { TrackerActionDialog } from "../../_shared/tracker-actions";
 import { EditCustomerDialog, MemberDialog, type MemberAction } from "./customer-dialogs";
+import { CustomerPlanCard, type CustomerBilling } from "./customer-plan";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { Input, Textarea } from "@/components/ui/input";
@@ -29,7 +30,7 @@ import { useTime } from "@/components/app/time-context";
 
 const ROLE_LABEL: Record<string, string> = { ORG_ADMIN: "Org Admin", FLEET_MANAGER: "Fleet Manager", DISPATCHER: "Dispatcher", VIEWER: "Viewer" };
 
-export function CustomerDetailView({ c }: { c: CustomerDetail }) {
+export function CustomerDetailView({ c, billing }: { c: CustomerDetail; billing: CustomerBilling }) {
   const time = useTime();
   const router = useRouter();
   const [registering, setRegistering] = useState(false);
@@ -178,6 +179,7 @@ export function CustomerDetailView({ c }: { c: CustomerDetail }) {
         </Card>
 
         <div className="grid h-fit min-w-0 gap-4">
+          <CustomerPlanCard customerId={c.id} customerName={c.name} billing={billing} />
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <CardTitle>Account details</CardTitle>
