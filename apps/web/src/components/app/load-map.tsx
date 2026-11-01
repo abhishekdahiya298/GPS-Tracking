@@ -2,10 +2,10 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import { circleRing, type LonLat } from "@rio-gps/core/geo";
 import maplibregl, { type GeoJSONSource, type Map as MlMap, type Marker } from "maplibre-gl";
+import { preferredStyleUrl } from "@/lib/map-style";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 type Stop = { latitude: number; longitude: number; radiusM: number };
 type Feature = GeoJSON.Feature;
 const fc = (features: Feature[]): GeoJSON.FeatureCollection => ({ type: "FeatureCollection", features });
@@ -41,7 +41,7 @@ export function LoadMap({ pickup, delivery, trail = [], position, className, lab
 
   useEffect(() => {
     if (!div.current || map.current) return;
-    const m = new maplibregl.Map({ container: div.current, style: STYLE_URL, center: [pickup.longitude, pickup.latitude], zoom: 6, attributionControl: { compact: true } });
+    const m = new maplibregl.Map({ container: div.current, style: preferredStyleUrl(), center: [pickup.longitude, pickup.latitude], zoom: 6, attributionControl: { compact: true } });
     m.getCanvas().setAttribute("aria-label", label);
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
     m.on("styleimagemissing", (e) => {

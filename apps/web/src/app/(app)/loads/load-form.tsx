@@ -5,6 +5,7 @@ import { LOAD_RADIUS_DEFAULT_M } from "@rio-gps/core/loads";
 import { toWallTime, wallTimeToUtc } from "@rio-gps/core/timezones";
 import { Check, Copy, MapPin, MessageCircle, MessageSquareText, Search, Share2 } from "lucide-react";
 import maplibregl, { type GeoJSONSource, type Map as MlMap, type Marker } from "maplibre-gl";
+import { preferredStyleUrl } from "@/lib/map-style";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -21,7 +22,6 @@ import type { GeocodeResult } from "@/lib/geocode";
 import type { DriverShare, LoadDetailDto } from "@/lib/loads";
 import type { SmsResult } from "@/lib/sms";
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 const RADII = [250, 500, 1_000, 2_000, 5_000];
 
 interface StopState {
@@ -47,7 +47,7 @@ function StopMap({ stop, color, onMove }: { stop: StopState; color: string; onMo
 
   useEffect(() => {
     if (!div.current || map.current) return;
-    const m = new maplibregl.Map({ container: div.current, style: STYLE_URL, center: [stop.longitude ?? -79.38, stop.latitude ?? 43.65], zoom: stop.latitude !== null ? 13 : 3, attributionControl: { compact: true } });
+    const m = new maplibregl.Map({ container: div.current, style: preferredStyleUrl(), center: [stop.longitude ?? -79.38, stop.latitude ?? 43.65], zoom: stop.latitude !== null ? 13 : 3, attributionControl: { compact: true } });
     m.getCanvas().setAttribute("aria-label", "Stop location. Search for the address above; click the map to adjust.");
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: false, showCompass: false }), "top-right");
     m.on("styleimagemissing", (e) => {

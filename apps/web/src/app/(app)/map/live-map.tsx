@@ -1,7 +1,8 @@
 "use client";
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
-import { ChevronUp, CircleDotDashed, Copy, Crosshair, Download, Expand, ExternalLink, History, Hexagon, Locate, LocateFixed, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Share2, Shrink, Tag, Truck, X } from "lucide-react";
+import * as Menu from "@radix-ui/react-dropdown-menu";
+import { Box, Check, ChevronDown, ChevronUp, Copy, Cpu, Crosshair, Download, Expand, ExternalLink, History, Layers, Locate, LocateFixed, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Share2, Shrink, Truck, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -19,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/toaster";
 import type { GeofenceDto } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
+import { MAP_STYLES, type MapStyleId, saveStyle, savedStyle, setBuildings3d, styleUrl } from "@/lib/map-style";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { FleetLayer, STATE_COLORS, type FleetPoint } from "./fleet-layer";
 import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, mapState, MAP_STATES, STATE_ORDER, stateBucket, type MapState } from "./fleet-model";
@@ -28,27 +30,6 @@ import { useFleetStream } from "./use-fleet-stream";
 const HistoryPanel = dynamic(() => import("./history-panel").then((m) => m.HistoryPanel), { ssr: false });
 const ShareDialog = dynamic(() => import("../vehicles/share-dialog").then((m) => m.ShareDialog), { ssr: false });
 
-/**
- * Base maps. "Streets" (OpenFreeMap Liberty) is the colourful, Mapbox-Streets-like look:
- * green parks, blue water, yellow main roads. All three come from the same tile origin the CSP allows.
- */
-const MAP_STYLES = [
-  { id: "streets", label: "Streets", url: "https://tiles.openfreemap.org/styles/liberty" },
-  { id: "light", label: "Light", url: "https://tiles.openfreemap.org/styles/positron" },
-  { id: "dark", label: "Dark", url: "https://tiles.openfreemap.org/styles/dark" }
-] as const;
-type MapStyleId = (typeof MAP_STYLES)[number]["id"];
-const STYLE_KEY = "rio.map.style";
-function savedStyle(): MapStyleId {
-  try {
-    const v = window.localStorage.getItem(STYLE_KEY);
-    if (MAP_STYLES.some((s) => s.id === v)) return v as MapStyleId;
-  } catch {
-    /* storage blocked: use the default */
-  }
-  return "streets";
-}
-const styleUrl = (id: MapStyleId) => MAP_STYLES.find((s) => s.id === id)!.url;
 const ROW_H = 68;
 const STATE_LABEL: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", parked: "Parked (unhooked)", offline: "Offline" };
 const STATE_HINT: Record<MapState, string> = {
@@ -64,6 +45,13 @@ const STATE_BADGE: Record<MapState, string> = { moving: "Moving", idle: "Idling"
 /** Floating map controls: white, raised, 40px targets. */
 const MAP_BTN =
   "grid size-10 cursor-pointer place-items-center border-0 bg-background text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:opacity-50";
+/** Tracker names often carry the IMEI, e.g. "FTM164 (868038076566554)": show "FTM164" and "…6554". */
+function splitName(name: string): { main: string; imei: string | null } {
+  const m = /^(.*?)\s*\((\d{6,})\)\s*$/.exec(name);
+  return m && m[1] && m[2] ? { main: m[1], imei: `…${m[2].slice(-4)}` } : { main: name, imei: null };
+}
+/** Below this width the card sits over the bottom sheet instead of beside the list. */
+const WIDE = "(min-width: 768px)";
 const ZONE_LAYERS = ["fences-fill", "fences-line", "fences-label"];
 type Filter = "all" | Exclude<MapState, "parked">;
 
@@ -152,6 +140,13 @@ export function LiveMap({
   const [mapStyle, setMapStyle] = useState<MapStyleId>("streets");
   const [bearing, setBearing] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
+  const [is3d, setIs3d] = useState(false);
+  const is3dRef = useRef(false);
+  is3dRef.current = is3d;
+  const styleRef = useRef<MapStyleId>("streets");
+  styleRef.current = mapStyle;
+  /** Pan the map so a vehicle picked on the map isn't left under the card. */
+  const centerOnRef = useRef<(id: string) => void>(() => undefined);
   const shellRef = useRef<HTMLDivElement>(null);
   /** Zones are fetched once and re-added whenever the base map changes. */
   const fencesRef = useRef<GeofenceDto[] | null>(null);
@@ -220,7 +215,10 @@ export function LiveMap({
       if (!m.isStyleLoaded()) setMapError("Map tiles failed to load. Vehicle positions are still updating in the list.");
     });
     const fl = new FleetLayer(m, {
-      onSelect: (id) => setSelected(id),
+      onSelect: (id) => {
+        setSelected(id);
+        centerOnRef.current(id);
+      },
       onHover: (id, ll) => {
         hover.current?.remove();
         hover.current = null;
@@ -262,6 +260,7 @@ export function LiveMap({
         m.addLayer({ id: "track-line", type: "line", source: "track", paint: { "line-color": "#2f5bea", "line-width": 4, "line-opacity": 0.85 }, layout: { "line-join": "round", "line-cap": "round" } });
       }
       fl.install();
+      if (is3dRef.current) setBuildings3d(m, true, styleRef.current === "dark");
       if (!m.getSource("track-pos")) {
         m.addSource("track-pos", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addLayer({
@@ -302,12 +301,19 @@ export function LiveMap({
   // Base-map switch: remembered per browser.
   const switchStyle = (id: MapStyleId) => {
     setMapStyle(id);
-    try {
-      window.localStorage.setItem(STYLE_KEY, id);
-    } catch {
-      /* storage blocked: the choice lasts for this visit */
-    }
+    styleRef.current = id;
+    saveStyle(id);
     mapRef.current?.setStyle(styleUrl(id));
+  };
+
+  // 3D: tilt the camera and raise buildings to their real height (like Mapbox's 3D view).
+  const toggle3d = () => {
+    const m = mapRef.current;
+    if (!m) return;
+    const on = !is3d;
+    setIs3d(on);
+    setBuildings3d(m, on, mapStyle === "dark");
+    m.easeTo({ pitch: on ? 55 : 0, zoom: on ? Math.max(m.getZoom(), 15) : m.getZoom(), duration: 700 });
   };
 
   // Full screen for the whole tracking view (list + map), not just the canvas.
@@ -473,15 +479,33 @@ export function LiveMap({
     return () => window.removeEventListener("keydown", close);
   }, [selected, historyFor, sharing]);
 
+  // Room for the vehicle card: beside it on wide screens, above it on phones. The padding stays on the
+  // camera, so later centering (Follow, Center) also keeps the vehicle clear of the card.
+  const paddedRef = useRef(false);
+  const cardPadding = () => {
+    paddedRef.current = true;
+    return window.matchMedia(WIDE).matches ? { top: 0, right: 0, bottom: 0, left: 392 } : { top: 0, right: 0, bottom: 480, left: 0 };
+  };
   const focus = useCallback(
     (id: string) => {
       setSelected(id);
       setSheetOpen(false);
       const d = devices.current.get(id);
-      if (d?.location) map?.flyTo({ center: [d.location.longitude, d.location.latitude], zoom: Math.max(map.getZoom(), 14), duration: 700 });
+      if (d?.location) map?.flyTo({ center: [d.location.longitude, d.location.latitude], zoom: Math.max(map.getZoom(), 14), padding: cardPadding(), duration: 700 });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [map, devices]
   );
+  centerOnRef.current = (id: string) => {
+    const d = devices.current.get(id);
+    if (d?.location) mapRef.current?.easeTo({ center: [d.location.longitude, d.location.latitude], padding: cardPadding(), duration: 500 });
+  };
+  // Card closed (or history opened): give the map its full area back.
+  useEffect(() => {
+    if ((selected && !historyFor) || !paddedRef.current) return;
+    paddedRef.current = false;
+    mapRef.current?.easeTo({ padding: { top: 0, right: 0, bottom: 0, left: 0 }, duration: 300 });
+  }, [selected, historyFor]);
 
   // Windowed list: only the visible rows are rendered.
   const listRef = useRef<HTMLDivElement>(null);
@@ -568,7 +592,7 @@ export function LiveMap({
                 <option value="speed">Sort: speed</option>
               </Select>
             </div>
-            <div role="group" aria-label="Filter by status" className="flex flex-wrap gap-1.5">
+            <div role="group" aria-label="Filter by status" className="-mx-1 flex gap-1 overflow-x-auto px-1 [scrollbar-width:none]">
               {(["all", ...MAP_STATES] as Filter[]).map((f) => {
                 const on = filter === f;
                 const n = counts[f];
@@ -580,11 +604,11 @@ export function LiveMap({
                     title={f === "all" ? "Every vehicle" : STATE_HINT[f]}
                     onClick={() => setFilter(on && f !== "all" ? "all" : f)}
                     className={cn(
-                      "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[13px] font-medium transition-colors",
+                      "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border px-2 text-xs font-medium transition-colors",
                       on ? "border-primary bg-primary-soft text-primary" : "border-border bg-background text-foreground hover:border-input hover:bg-muted"
                     )}
                   >
-                    {f !== "all" && <span aria-hidden="true" className="inline-block size-2 rounded-full" style={{ background: STATE_COLORS[f] }} />}
+                    {f !== "all" && <span aria-hidden="true" className="inline-block size-1.5 rounded-full" style={{ background: STATE_COLORS[f] }} />}
                     {f === "all" ? "All" : STATE_LABEL[f]}
                     <span className={cn("font-bold tabular-nums", n === 0 && !on && "text-muted-foreground")}>{n}</span>
                   </button>
@@ -621,9 +645,12 @@ export function LiveMap({
                 {rows.slice(start, end).map((r, i) => {
                   const d = r.d;
                   const active = d.deviceId === selected;
+                  const nm = splitName(r.name);
                   const detail = !d.location
                     ? "No position yet"
-                    : [d.vehicle?.licensePlate, r.state === "moving" ? u.fmtSpeed(d.location.speedKph) : STATE_HINT[r.state]].filter(Boolean).join(" · ");
+                    : r.state === "offline" && d.lastSeenAt
+                      ? `Last signal ${ago(d.lastSeenAt, now)}`
+                      : [d.vehicle?.licensePlate, r.state === "moving" ? u.fmtSpeed(d.location.speedKph) : STATE_HINT[r.state], !d.vehicle && "No vehicle linked"].filter(Boolean).join(" · ");
                   return (
                     <li key={d.deviceId} className="absolute inset-x-0 py-0.5" style={{ top: (start + i) * ROW_H, height: ROW_H }}>
                       <button
@@ -636,10 +663,13 @@ export function LiveMap({
                         )}
                       >
                         <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full" style={{ background: STATE_TINT[r.state], color: STATE_COLORS[r.state] }}>
-                          <VehicleTypeIcon type={d.vehicle?.type ?? "other"} className="size-4" />
+                          {d.vehicle ? <VehicleTypeIcon type={d.vehicle.type} className="size-4" /> : <Cpu className="size-4" />}
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate text-sm font-semibold">{r.name}</span>
+                          <span className="flex min-w-0 items-baseline gap-1.5">
+                            <span className="truncate text-sm font-semibold">{nm.main}</span>
+                            {nm.imei && <span className="shrink-0 text-xs tabular-nums text-muted-foreground" title={r.name}>{nm.imei}</span>}
+                          </span>
                           <span className="truncate text-xs text-muted-foreground">{detail}</span>
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-1">
@@ -670,12 +700,15 @@ export function LiveMap({
     >
       <div className="flex items-start gap-3">
         <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full" style={{ background: STATE_TINT[selState], color: STATE_COLORS[selState] }}>
-          <VehicleTypeIcon type={sel.vehicle?.type ?? "other"} className="size-5" />
+          {sel.vehicle ? <VehicleTypeIcon type={sel.vehicle.type} className="size-5" /> : <Cpu className="size-5" />}
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="m-0 truncate text-base font-semibold">{deviceLabel(sel)}</h2>
+          <h2 className="m-0 flex min-w-0 items-baseline gap-1.5 text-base font-semibold">
+            <span className="truncate">{splitName(deviceLabel(sel)).main}</span>
+            {splitName(deviceLabel(sel)).imei && <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{splitName(deviceLabel(sel)).imei}</span>}
+          </h2>
           <p className="m-0 truncate text-xs text-muted-foreground">
-            {sel.vehicle ? [VEHICLE_TYPE_LABEL[asVehicleType(sel.vehicle.type)], sel.vehicle.licensePlate].filter(Boolean).join(" · ") : STATE_HINT[selState]}
+            {sel.vehicle ? [VEHICLE_TYPE_LABEL[asVehicleType(sel.vehicle.type)], sel.vehicle.licensePlate].filter(Boolean).join(" · ") : "GPS tracker · no vehicle linked"}
           </p>
         </div>
         <StatusBadge state={selState} />
@@ -732,10 +765,10 @@ export function LiveMap({
       ) : (
         <p className="m-0 text-xs text-muted-foreground">This tracker hasn&apos;t reported a position yet.</p>
       )}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2">
         <Button
           size="md"
-          className="flex-1"
+          className="min-w-0 flex-1"
           variant={follow ? "primary" : "secondary"}
           aria-pressed={follow}
           disabled={!sel.location}
@@ -749,19 +782,19 @@ export function LiveMap({
         <Button
           size="md"
           variant="secondary"
-          className="flex-1"
+          className="min-w-0 flex-1"
           onClick={() => {
             setHistoryFor(sel.deviceId);
             setSheetOpen(true);
           }}
         >
-          <History /> Trip history
+          <History /> History
         </Button>
-        <Button size="md" variant="secondary" className="px-3" onClick={() => focus(sel.deviceId)} disabled={!sel.location} aria-label="Center on vehicle" title="Center on vehicle">
+        <Button size="md" variant="secondary" className="shrink-0 px-2.5" onClick={() => focus(sel.deviceId)} disabled={!sel.location} aria-label="Center on vehicle" title="Center on vehicle">
           <Crosshair />
         </Button>
         {canShare && sel.vehicle && (
-          <Button size="md" variant="secondary" className="px-3" onClick={() => setSharing(true)} aria-label="Share live location" title="Share live location">
+          <Button size="md" variant="secondary" className="shrink-0 px-2.5" onClick={() => setSharing(true)} aria-label="Share live location" title="Share live location">
             <Share2 />
           </Button>
         )}
@@ -794,15 +827,40 @@ export function LiveMap({
             <Button size="md" variant="secondary" className="border-0 shadow-pop" onClick={() => fitFleet(true)} disabled={counts.all === 0}>
               <Maximize2 /> Fit all
             </Button>
-            <Button size="md" variant="secondary" aria-pressed={showLabels} className={cn("border-0 shadow-pop", showLabels ? "text-primary" : "text-muted-foreground")} onClick={() => setShowLabels((v) => !v)}>
-              <Tag /> <span className="sr-only sm:not-sr-only">Names</span>
-            </Button>
-            <Button size="md" variant="secondary" aria-pressed={clustered} className={cn("border-0 shadow-pop", clustered ? "text-primary" : "text-muted-foreground")} title="Group nearby vehicles when zoomed out" onClick={() => setClustered((v) => !v)}>
-              <CircleDotDashed /> <span className="sr-only">Group nearby vehicles</span>
-            </Button>
-            <Button size="md" variant="secondary" aria-pressed={showZones} className={cn("border-0 shadow-pop", showZones ? "text-primary" : "text-muted-foreground")} onClick={() => setShowZones((v) => !v)}>
-              <Hexagon /> <span className="sr-only sm:not-sr-only">Zones</span>
-            </Button>
+            <Menu.Root>
+              <Menu.Trigger asChild>
+                <Button size="md" variant="secondary" className="border-0 shadow-pop data-[state=open]:bg-primary-soft data-[state=open]:text-primary">
+                  <Layers /> Layers <ChevronDown className="!size-3.5" />
+                </Button>
+              </Menu.Trigger>
+              <Menu.Portal container={shellRef.current ?? undefined}>
+                <Menu.Content align="start" sideOffset={6} className="z-50 min-w-[220px] animate-in rounded-xl border border-border bg-background p-1.5 shadow-pop">
+                  <Menu.Label className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Show on map</Menu.Label>
+                  {(
+                    [
+                      ["Vehicle names", showLabels, setShowLabels],
+                      ["Group nearby vehicles", clustered, setClustered],
+                      ["Zones", showZones, setShowZones]
+                    ] as const
+                  ).map(([label, on, set]) => (
+                    <Menu.CheckboxItem
+                      key={label}
+                      checked={on}
+                      onCheckedChange={(v) => set(v === true)}
+                      onSelect={(e) => e.preventDefault()}
+                      className="flex cursor-pointer select-none items-center gap-2.5 rounded-md px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-muted"
+                    >
+                      <span aria-hidden="true" className={cn("grid size-4 place-items-center rounded border", on ? "border-primary bg-primary text-primary-foreground" : "border-input")}>
+                        <Menu.ItemIndicator>
+                          <Check className="size-3" strokeWidth={3} />
+                        </Menu.ItemIndicator>
+                      </span>
+                      {label}
+                    </Menu.CheckboxItem>
+                  ))}
+                </Menu.Content>
+              </Menu.Portal>
+            </Menu.Root>
           </div>
           <div className="flex-1" />
           <div role="radiogroup" aria-label="Map style" className="pointer-events-auto flex gap-0.5 rounded-lg bg-background p-1 shadow-pop">
@@ -837,8 +895,24 @@ export function LiveMap({
               <Minus className="size-[18px]" aria-hidden="true" />
             </button>
           </div>
-          <button type="button" aria-label="Reset bearing to north" title="Reset bearing to north" className={cn(MAP_BTN, "rounded-lg shadow-pop")} onClick={() => map?.resetNorthPitch()}>
+          <button type="button" aria-label="Reset bearing to north" title="Reset bearing to north" className={cn(MAP_BTN, "rounded-lg shadow-pop")} onClick={() => {
+              map?.resetNorthPitch();
+              if (is3d) {
+                setIs3d(false);
+                if (map) setBuildings3d(map, false, mapStyle === "dark");
+              }
+            }}>
             <Navigation2 className="size-[18px] fill-danger text-danger transition-transform" style={{ transform: `rotate(${-bearing}deg)` }} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            aria-pressed={is3d}
+            aria-label={is3d ? "Switch to 2D view" : "Switch to 3D view"}
+            title={is3d ? "2D view" : "3D view with buildings"}
+            className={cn(MAP_BTN, "rounded-lg text-[13px] font-bold shadow-pop", is3d && "bg-primary text-primary-foreground hover:bg-primary-hover")}
+            onClick={toggle3d}
+          >
+            {is3d ? "2D" : <Box className="size-[18px]" aria-hidden="true" />}
           </button>
           <button type="button" aria-label="Show my location" title="Show my location" className={cn(MAP_BTN, "rounded-lg shadow-pop")} onClick={locateMe}>
             <Locate className="size-[18px]" aria-hidden="true" />

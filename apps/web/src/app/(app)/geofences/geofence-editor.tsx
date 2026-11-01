@@ -2,6 +2,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import { shapeRing, type LonLat } from "@rio-gps/core/geo";
 import maplibregl, { type GeoJSONSource, type Map as MlMap } from "maplibre-gl";
+import { preferredStyleUrl } from "@/lib/map-style";
 import { Circle, Hexagon, MoreHorizontal, Pencil, Plus, Trash2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Feature, FeatureCollection } from "geojson";
@@ -20,7 +21,6 @@ import type { GeofenceDto } from "@/lib/alerts";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 const FALLBACK = { center: [-98.6, 39.8] as [number, number], zoom: 3.2 };
 const COLORS = ["#2f5bea", "#15803d", "#b45309", "#c42b2b", "#7c3aed", "#0891b2"];
 type Mode = { kind: "idle" } | { kind: "polygon"; points: LonLat[] } | { kind: "circle"; center: LonLat | null };
@@ -73,7 +73,7 @@ export function GeofenceEditor({ initial, canWrite }: { initial: GeofenceDto[]; 
 
   useEffect(() => {
     if (!mapDiv.current || map.current) return;
-    const m = new maplibregl.Map({ container: mapDiv.current, style: STYLE_URL, center: FALLBACK.center, zoom: FALLBACK.zoom, attributionControl: { compact: true } });
+    const m = new maplibregl.Map({ container: mapDiv.current, style: preferredStyleUrl(), center: FALLBACK.center, zoom: FALLBACK.zoom, attributionControl: { compact: true } });
     m.getCanvas().setAttribute("aria-label", "Zones map. Use the zone list for keyboard access.");
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
     m.on("styleimagemissing", (e) => {

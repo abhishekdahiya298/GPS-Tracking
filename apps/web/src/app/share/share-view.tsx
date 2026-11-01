@@ -8,10 +8,10 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { units } from "@rio-gps/core/units";
 import { dateFormatter } from "@rio-gps/core/timezones";
 import maplibregl, { type Map as MlMap, type Marker } from "maplibre-gl";
+import { preferredStyleUrl } from "@/lib/map-style";
 import { useEffect, useRef, useState } from "react";
 import type { PublicShareView } from "@/lib/share-links";
 
-const STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 const POLL_MS = 15_000;
 type State = { kind: "loading" } | { kind: "gone" } | { kind: "error"; message: string } | { kind: "ok"; view: PublicShareView; fetchedAt: number };
 
@@ -78,7 +78,7 @@ export function ShareView() {
   // Map: created once there is a position; one marker, moved on each refresh.
   useEffect(() => {
     if (!hasMap || !mapDiv.current || map.current) return;
-    const m = new maplibregl.Map({ container: mapDiv.current, style: STYLE_URL, center: [loc!.longitude, loc!.latitude], zoom: 13, attributionControl: { compact: true } });
+    const m = new maplibregl.Map({ container: mapDiv.current, style: preferredStyleUrl(), center: [loc!.longitude, loc!.latitude], zoom: 13, attributionControl: { compact: true } });
     m.getCanvas().setAttribute("aria-label", "Map showing the vehicle's current position");
     m.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
     m.on("styleimagemissing", (e) => {
