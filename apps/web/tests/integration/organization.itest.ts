@@ -93,7 +93,7 @@ describe("organization time zone and clock", () => {
 
 describe("personal time preferences", () => {
   it("start empty (= organization default) and resolve to the organization's", async () => {
-    expect(await (await prefsGET(prefsReq("GET", "fleet"))).json()).toEqual({ timeZone: null, timeFormat: null });
+    expect(await (await prefsGET(prefsReq("GET", "fleet"))).json()).toEqual({ timeZone: null, timeFormat: null, navTheme: null });
     expect(await getTimePrefs(await orgId("org-a"), await userId("fleet@a.test"))).toEqual({ timeZone: "America/Los_Angeles", timeFormat: "24h" });
   });
 
@@ -102,14 +102,18 @@ describe("personal time preferences", () => {
     expect((await prefsPATCH(prefsReq("PATCH", "fleet", { timeZone: "Nowhere/Land" }))).status).toBe(400);
     const bobId = await userId("bob@b.test");
     expect((await prefsPATCH(prefsReq("PATCH", "fleet", { timeZone: "america/regina", timeFormat: "12h", userId: bobId }))).status).toBe(200);
-    expect(await (await prefsGET(prefsReq("GET", "fleet"))).json()).toEqual({ timeZone: "America/Regina", timeFormat: "12h" });
-    expect(await (await prefsGET(prefsReq("GET", "bob"))).json()).toEqual({ timeZone: null, timeFormat: null });
+    expect(await (await prefsGET(prefsReq("GET", "fleet"))).json()).toEqual({ timeZone: "America/Regina", timeFormat: "12h", navTheme: null });
+    expect(await (await prefsGET(prefsReq("GET", "bob"))).json()).toEqual({ timeZone: null, timeFormat: null, navTheme: null });
     expect(await getTimePrefs(await orgId("org-a"), await userId("fleet@a.test"))).toEqual({ timeZone: "America/Regina", timeFormat: "12h" });
     // admin still follows the organization
     expect(await getTimePrefs(await orgId("org-a"), await userId("admin@a.test"))).toEqual({ timeZone: "America/Los_Angeles", timeFormat: "24h" });
   });
 
   it("null goes back to the organization default", async () => {
+    // Menu style is personal too, and only the three known styles are accepted.
+    expect((await prefsPATCH(prefsReq("PATCH", "fleet", { navTheme: "glass" }))).status).toBe(200);
+    expect((await (await prefsGET(prefsReq("GET", "fleet"))).json()).navTheme).toBe("glass");
+    expect((await prefsPATCH(prefsReq("PATCH", "fleet", { navTheme: "neon" }))).status).toBe(400);
     expect((await prefsPATCH(prefsReq("PATCH", "fleet", { timeZone: null, timeFormat: null }))).status).toBe(200);
     expect(await getTimePrefs(await orgId("org-a"), await userId("fleet@a.test"))).toEqual({ timeZone: "America/Los_Angeles", timeFormat: "24h" });
   });

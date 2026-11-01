@@ -27,6 +27,8 @@ export type RequestContext =
       /** Effective display zone/clock: the user's own choice, else the organization's. */
       timeZone: string;
       timeFormat: TimeFormat;
+      /** The person's side-menu style (null = default). */
+      navTheme: string | null;
     };
 
 /**
@@ -57,10 +59,10 @@ export const getRequestContext = cache(async (): Promise<RequestContext> => {
       .select({ name: schema.organizations.name, status: schema.organizations.status, unitSystem: schema.organizations.unitSystem, timeZone: schema.organizations.timeZone, timeFormat: schema.organizations.timeFormat })
       .from(schema.organizations)
       .where(eq(schema.organizations.id, ctx.organizationId)),
-    db.select({ timeZone: schema.users.timeZone, timeFormat: schema.users.timeFormat }).from(schema.users).where(eq(schema.users.id, user.userId))
+    db.select({ timeZone: schema.users.timeZone, timeFormat: schema.users.timeFormat, navTheme: schema.users.navTheme }).from(schema.users).where(eq(schema.users.id, user.userId))
   ]);
   const time = effectiveTimePrefs({ timeZone: org?.timeZone ?? "UTC", timeFormat: org?.timeFormat ?? "12h" }, prefs);
-  return { status: "ok", user, ctx, orgName: org?.name ?? "Organization", orgStatus: org?.status ?? "active", unitSystem: org?.unitSystem ?? "imperial", ...time };
+  return { status: "ok", user, ctx, orgName: org?.name ?? "Organization", orgStatus: org?.status ?? "active", unitSystem: org?.unitSystem ?? "imperial", ...time, navTheme: prefs?.navTheme ?? null };
 });
 
 export type TenantRequestContext = Extract<RequestContext, { status: "ok" }>;

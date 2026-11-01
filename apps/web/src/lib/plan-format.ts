@@ -21,6 +21,7 @@ export function previousPeriod(period: string, back = 1): string {
 /** Plain-language price summary of a plan's terms. */
 export function termsSummary(t: { modules: Module[]; includedLoads: number; extraLoadCents: number; monthlyFeeCents: number; perTrackerCents: number }): string[] {
   const out: string[] = [];
+  if (t.monthlyFeeCents === 0 && (!t.modules.includes("gps") || t.perTrackerCents === 0) && (!t.modules.includes("loads") || t.extraLoadCents === 0)) return ["Free: nothing is charged"];
   if (t.monthlyFeeCents > 0) out.push(`${money(t.monthlyFeeCents)} per month`);
   if (t.modules.includes("gps")) out.push(`${money(t.perTrackerCents)} per tracker per month`);
   if (t.modules.includes("loads")) {

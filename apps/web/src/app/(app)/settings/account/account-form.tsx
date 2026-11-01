@@ -15,9 +15,10 @@ import { MIN_PASSWORD_LENGTH, PasswordInput } from "@/components/ui/password-inp
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { authClient } from "@/lib/client/auth-client";
+import { MenuStyleCard } from "./menu-style-card";
 import { TwoStepCard } from "./two-step-card";
 
-type Prefs = { timeZone: string | null; timeFormat: TimeFormat | null };
+type Prefs = { timeZone: string | null; timeFormat: TimeFormat | null; navTheme?: string | null };
 
 export function AccountForm({ name, email, prefs, orgDefaults, twoStep }: { name: string; email: string; prefs: Prefs; twoStep: boolean; orgDefaults: { timeZone: string; timeFormat: TimeFormat } }) {
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +52,7 @@ export function AccountForm({ name, email, prefs, orgDefaults, twoStep }: { name
   return (
     <>
       <PageHeader title="My account" description="Your name, sign-in and display settings." breadcrumbs={[{ label: "Settings" }, { label: "My account" }]} />
-      <div className="grid min-w-0 max-w-xl gap-4">
+      <div className="grid min-w-0 max-w-2xl gap-4">
         <Card className="p-4">
           <dl className="m-0 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted-foreground">Name</dt>
@@ -63,6 +64,7 @@ export function AccountForm({ name, email, prefs, orgDefaults, twoStep }: { name
           </dl>
         </Card>
         <TimePreferences initial={prefs} orgDefaults={orgDefaults} />
+        <MenuStyleCard initial={prefs.navTheme ?? null} />
         <Card>
           <CardHeader>
             <CardTitle>Change password</CardTitle>

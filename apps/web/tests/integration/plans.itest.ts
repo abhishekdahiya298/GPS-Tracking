@@ -6,6 +6,8 @@ import { createUserWithMembership } from "@/lib/admin-users";
 import { getAuth } from "@/lib/auth";
 import { resolveTenantContext } from "@/lib/authz";
 import { createCustomer } from "@/lib/customers";
+import { getLoadDashboard } from "@/lib/load-dashboard";
+import { setCustomerStatus } from "@/lib/organization-status";
 import { listPlans, periodOf, recordTrackerMonths, setCustomerPlan, updatePlan, usageStatement, loadAllowanceNotice } from "@/lib/plans";
 import { GET as vehiclesGET } from "@/app/api/vehicles/route";
 import { POST as createLoadPOST } from "@/app/api/loads/route";
@@ -160,5 +162,22 @@ describe("plans: trackers and switching plans", () => {
     const csv = await res.text();
     expect(csv.split("\n")[0]).toContain("loads_included");
     expect(csv).toContain("Northbound Brokerage");
+  });
+
+  it("the Loads dashboard counts active loads by stage, with the same attention rules as the Loads list", async () => {
+    const d = await getLoadDashboard(brokerId, "America/Toronto", new Date());
+    // L-3 (in transit) and L-4 (heading to pickup) are active; L-1 was deleted, L-2 cancelled.
+    expect(d.active).toBe(2);
+    expect(d.counts).toMatchObject({ inTransit: 1, toPickup: 1, waiting: 0, atDelivery: 0 });
+    expect(d.delivered).toHaveLength(14);
+  });
+
+  it("archived customers are never billed (and leave the CSV)", async () => {
+    await setCustomerStatus(platformId, brokerId, { status: "archived", reason: "test customer" }, meta);
+    const month = periodOf(new Date(), "America/Toronto");
+    const [line] = await usageStatement(month, brokerId);
+    expect(line).toMatchObject({ billed: false, amounts: { totalCents: 0 } });
+    expect(await (await billingCsvGET(req("GET", `/api/admin/billing?month=${month}`, "root"))).text()).not.toContain("Northbound Brokerage");
+    expect((await listPlans()).some((p) => p.name === "Free (internal & testing)" && p.monthlyFeeCents === 0)).toBe(true);
   });
 });

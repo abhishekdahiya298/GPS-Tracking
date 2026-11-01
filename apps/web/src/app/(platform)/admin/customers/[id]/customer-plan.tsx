@@ -1,6 +1,6 @@
 "use client";
 import type { Module } from "@rio-gps/core";
-import { ArrowRightLeft, History } from "lucide-react";
+import { ArrowRightLeft, ChevronDown, History } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { useTime } from "@/components/app/time-context";
@@ -24,12 +24,21 @@ export interface CustomerBilling {
 }
 
 /** Plan, this month's usage and plan history on a customer's page (platform console). */
-export function CustomerPlanCard({ customerId, customerName, billing }: { customerId: string; customerName: string; billing: CustomerBilling }) {
+export function CustomerPlanCard({ customerId, customerName, billing, archived = false }: { customerId: string; customerName: string; billing: CustomerBilling; archived?: boolean }) {
   const time = useTime();
   const [changing, setChanging] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
   const plan = billing.history.find((h) => !h.endedAt) ?? null;
+  const earlier = billing.history.filter((h) => h.endedAt);
   const u = billing.usage;
+  const free = plan ? termsSummary(plan)[0]?.startsWith("Free") : false;
+  const prices = plan
+    ? [
+        { label: "Monthly fee", value: money(plan.monthlyFeeCents), show: true },
+        { label: "Per tracker / month", value: money(plan.perTrackerCents), show: plan.modules.includes("gps") },
+        { label: "Loads included / month", value: plan.includedLoads > 0 ? plan.includedLoads.toLocaleString("en-US") : "None", show: plan.modules.includes("loads") },
+        { label: plan.includedLoads > 0 ? "Each extra load" : "Each load", value: money(plan.extraLoadCents), show: plan.modules.includes("loads") }
+      ].filter((p) => p.show)
+    : [];
 
   return (
     <Card>
@@ -39,22 +48,37 @@ export function CustomerPlanCard({ customerId, customerName, billing }: { custom
           <ArrowRightLeft /> Change plan
         </Button>
       </CardHeader>
-      <div className="grid gap-4 px-4 pb-4 text-sm">
+      <div className="grid gap-4 px-4 pb-4 pt-4 text-sm">
         {plan ? (
-          <div className="grid gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-base font-semibold">{plan.planName}</span>
-              {plan.modules.map((m) => (
-                <StatusBadge key={m} tone={m === "gps" ? "info" : "success"} label={MODULE_LABEL[m]} />
-              ))}
+          <>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="m-0 text-lg font-semibold leading-6 text-[#0a2463]">{plan.planName}</p>
+                <p className="m-0 mt-0.5 text-xs text-muted-foreground">
+                  Since {time.date(plan.startedAt)}
+                  {plan.changedByName ? ` · set by ${plan.changedByName}` : ""}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {plan.modules.map((m) => (
+                  <StatusBadge key={m} tone={m === "gps" ? "info" : "success"} label={MODULE_LABEL[m]} />
+                ))}
+              </div>
             </div>
-            <p className="m-0 text-muted-foreground">{termsSummary(plan).join(" · ")}</p>
-            <p className="m-0 text-xs text-muted-foreground">
-              Since {time.date(plan.startedAt)}
-              {plan.changedByName ? ` · set by ${plan.changedByName}` : ""}
-              {plan.note ? ` · ${plan.note}` : ""}
-            </p>
-          </div>
+            {plan.note && <p className="m-0 rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">{plan.note}</p>}
+            {free ? (
+              <p className="m-0 rounded-lg border border-dashed border-border px-3 py-2.5 text-center text-sm font-medium text-muted-foreground">Free: nothing is charged</p>
+            ) : (
+              <dl className="m-0 grid grid-cols-2 gap-2">
+                {prices.map((p) => (
+                  <div key={p.label} className="rounded-lg border border-border px-3 py-2">
+                    <dt className="text-xs text-muted-foreground">{p.label}</dt>
+                    <dd className="m-0 mt-0.5 text-base font-semibold tabular-nums">{p.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </>
         ) : (
           <Alert tone="warning" title="No plan recorded">
             Until a plan is set, this customer has every module. Choose a plan.
@@ -62,8 +86,11 @@ export function CustomerPlanCard({ customerId, customerName, billing }: { custom
         )}
 
         {u && plan && (
-          <div className="grid gap-3 rounded-lg border border-border p-3">
-            <p className="m-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">{monthLabel(u.period)} so far</p>
+          <section aria-label="This month" className="grid gap-3 rounded-xl bg-canvas p-3.5">
+            <div className="flex items-center justify-between">
+              <p className="m-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{monthLabel(u.period)} so far</p>
+              {archived && <StatusBadge tone="neutral" label="Not billed: archived" />}
+            </div>
             {plan.modules.includes("loads") && <UsageMeter label="Loads" used={u.loadsUsed} included={u.plan?.includedLoads ?? 0} />}
             {plan.modules.includes("gps") && (
               <div className="flex justify-between">
@@ -71,32 +98,32 @@ export function CustomerPlanCard({ customerId, customerName, billing }: { custom
                 <span className="font-semibold tabular-nums">{u.trackers}</span>
               </div>
             )}
-            <div className="flex justify-between border-t border-border pt-2">
+            <div className="flex items-baseline justify-between border-t border-border pt-2.5">
               <span className="font-medium">Estimated</span>
-              <span className="font-semibold tabular-nums">{money(u.amounts.totalCents)}</span>
+              <span className="text-lg font-semibold tabular-nums text-[#0a2463]">{money(u.amounts.totalCents)}</span>
             </div>
             {u.longLoads > 0 && <p className="m-0 text-xs text-warning">{u.longLoads} load(s) tracked longer than 14 days this month: worth a look before invoicing.</p>}
-          </div>
+          </section>
         )}
 
-        {billing.history.length > 1 && (
-          <div>
-            <button type="button" className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline" onClick={() => setShowHistory((v) => !v)} aria-expanded={showHistory}>
-              <History className="size-3.5" aria-hidden="true" /> {showHistory ? "Hide" : "Show"} plan history ({billing.history.length})
-            </button>
-            {showHistory && (
-              <ol className="m-0 mt-2 grid list-none gap-2 p-0">
-                {billing.history.map((h) => (
-                  <li key={h.id} className="rounded-md bg-muted/50 px-3 py-2 text-xs">
-                    <div className="font-medium text-foreground">{h.planName}</div>
-                    <div className="text-muted-foreground">
-                      {time.date(h.startedAt)} – {h.endedAt ? time.date(h.endedAt) : "now"} · {termsSummary(h).join(" · ")}
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
+        {earlier.length > 0 && (
+          <details className="group">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-primary hover:underline [&::-webkit-details-marker]:hidden">
+              <History className="size-3.5" aria-hidden="true" /> Earlier plans ({earlier.length})
+              <ChevronDown className="size-3.5 transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <ol className="m-0 mt-3 grid list-none gap-3 border-l border-border pl-4">
+              {earlier.map((h) => (
+                <li key={h.id} className="relative text-xs">
+                  <span aria-hidden="true" className="absolute -left-[21px] top-1 size-2.5 rounded-full border-2 border-background bg-muted-foreground/50" />
+                  <p className="m-0 font-medium text-foreground">{h.planName}</p>
+                  <p className="m-0 text-muted-foreground">
+                    {time.date(h.startedAt)} – {time.date(h.endedAt!)} · {termsSummary(h).join(" · ")}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </details>
         )}
       </div>
       {changing && <ChangePlanDialog customerId={customerId} customerName={customerName} current={plan} plans={billing.plans} onClose={() => setChanging(false)} />}

@@ -20,7 +20,7 @@ import { CUSTOMER_STATUS } from "../customers/_shared/status-meta";
  * extra) and the amount. Counts come from the usage ledger, so they don't change when a
  * customer deletes or cancels loads afterwards.
  */
-export function BillingView({ month, months, current, lines }: { month: string; months: string[]; current: boolean; lines: UsageLine[] }) {
+export function BillingView({ month, months, current, lines, archived }: { month: string; months: string[]; current: boolean; lines: UsageLine[]; archived: number }) {
   const router = useRouter();
   const sum = (f: (l: UsageLine) => number) => lines.reduce((a, l) => a + f(l), 0);
   const review = lines.filter((l) => l.longLoads > 0);
@@ -135,6 +135,11 @@ export function BillingView({ month, months, current, lines }: { month: string; 
               ))}
             </TBody>
           </Table>
+        )}
+        {archived > 0 && (
+          <p className="m-0 border-t border-border px-5 py-3 text-xs text-muted-foreground">
+            {archived} archived customer{archived === 1 ? " isn't" : "s aren't"} shown: archived customers are never billed. Restore a customer to bill them again.
+          </p>
         )}
       </Card>
     </>
