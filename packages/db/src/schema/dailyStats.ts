@@ -35,5 +35,7 @@ export const deviceDailyStats = pgTable(
 export const dailyStatsState = pgTable("daily_stats_state", {
   id: integer("id").primaryKey().default(1),
   lastHistoryId: bigint("last_history_id", { mode: "number" }).notNull().default(0),
+  /** Trip rules the stored rows were built with; a newer TRIP_ENGINE_VERSION rebuilds them. */
+  engineVersion: integer("engine_version").notNull().default(1),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });

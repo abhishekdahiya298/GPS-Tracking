@@ -338,7 +338,7 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
                         {sortHead("duration", "Duration", "text-right")}
                         {sortHead("distance", "Distance", "text-right")}
                         {sortHead("max", "Max", "text-right")}
-                        <TH className="text-right">Avg</TH>
+                        <TH className="text-right" title="Average speed while moving (stops with the engine running are left out)">Avg moving</TH>
                         <TH>
                           <span className="sr-only">Map</span>
                         </TH>

@@ -43,6 +43,16 @@ describe("detectTrips", () => {
     expect(detectTrips(noise)).toHaveLength(0);
   });
 
+  it("engine on without moving is not a trip (warm-up, idling in place, GPS drift)", () => {
+    // 2 minutes, ignition on, parked: the "0 mi, 0 mph" rows.
+    expect(detectTrips([pt(0, 0, 0, true), pt(1, 0, 0, true), pt(2, 0, 0, true)])).toHaveLength(0);
+    // 30 minutes idling with drift adding up to ~300 m, never above walking pace.
+    const drift = Array.from({ length: 31 }, (_, i) => pt(i, (i % 2) * 0.3, 1, true));
+    expect(detectTrips(drift)).toHaveLength(0);
+    // Yard moves: slow but real, so it stays a trip.
+    expect(detectTrips([pt(0, 0, 0, true), pt(5, 0.3, 12, true), pt(10, 0.9, 15, true), pt(11, 0.9, 0, false)])).toHaveLength(1);
+  });
+
   it("sparse reporting while driving (5+ min between moving points) stays one trip", () => {
     const pts = [pt(0, 0, 50, true), pt(6, 5, 50, true), pt(12, 10, 50, true), pt(13, 10, 0, false)];
     expect(detectTrips(pts)).toHaveLength(1);

@@ -1,4 +1,4 @@
-import { mileageByDay } from "@rio-gps/core";
+import { mileageByDay, TRIP_ENGINE_VERSION } from "@rio-gps/core";
 import { addDays, canonicalTimeZone, dateFormatter, startOfLocalDay } from "@rio-gps/core/timezones";
 import { getDb, schema } from "@rio-gps/db";
 import { and, eq, gte, lte, ne, sql } from "drizzle-orm";
@@ -19,6 +19,8 @@ import { loadTrack } from "./reports";
  *   was still open during a pass is picked up by the next one.
  * - Days are in the organization's time zone; when that changes, the organization's rows
  *   are rebuilt.
+ * - When the trip rules change (TRIP_ENGINE_VERSION), every organization's recent window is
+ *   rebuilt once.
  */
 
 /** How far back the first run (and a time-zone change) rebuilds. */
@@ -70,7 +72,8 @@ async function pass(now: Date): Promise<StatsPassResult> {
   const db = getDb();
   const t = schema.deviceDailyStats;
   const [state] = await db.select().from(schema.dailyStatsState).where(eq(schema.dailyStatsState.id, 1));
-  const firstRun = !state;
+  // No state yet, or rows built with older trip rules: rebuild the recent window everywhere.
+  const firstRun = !state || state.engineVersion !== TRIP_ENGINE_VERSION;
   const last = state?.lastHistoryId ?? 0;
 
   const orgs = await db.select({ id: schema.organizations.id, timeZone: schema.organizations.timeZone }).from(schema.organizations);
@@ -89,6 +92,7 @@ async function pass(now: Date): Promise<StatsPassResult> {
     const [stale] = await db.select({ day: t.day }).from(t).where(and(eq(t.organizationId, o.id), ne(t.timeZone, tz))).limit(1);
     if (!firstRun && !stale) continue;
     // First run, or the organization changed its time zone: rebuild the recent window.
+    // A rules change just recomputes in place (upserts), so dashboards never go empty meanwhile.
     if (stale) await db.delete(t).where(eq(t.organizationId, o.id));
     rebuilt++;
     const since = new Date(now.getTime() - STATS_BACKFILL_DAYS * 86_400_000);
@@ -121,8 +125,8 @@ async function pass(now: Date): Promise<StatsPassResult> {
 
   await db
     .insert(schema.dailyStatsState)
-    .values({ id: 1, lastHistoryId: watermark, updatedAt: now })
-    .onConflictDoUpdate({ target: schema.dailyStatsState.id, set: { lastHistoryId: watermark, updatedAt: now } });
+    .values({ id: 1, lastHistoryId: watermark, engineVersion: TRIP_ENGINE_VERSION, updatedAt: now })
+    .onConflictDoUpdate({ target: schema.dailyStatsState.id, set: { lastHistoryId: watermark, engineVersion: TRIP_ENGINE_VERSION, updatedAt: now } });
   if (recomputed || failed || rebuilt) logger.info("stats.pass", { recomputed, failed, rebuiltOrganizations: rebuilt, watermark });
   return { recomputed, failed, rebuiltOrganizations: rebuilt, watermark };
 }
