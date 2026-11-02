@@ -35,9 +35,25 @@ env:
   DEPLOY_KNOWN_HOSTS: "142.93.200.222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBTHmBa7dcoP+nA22PCQ1LyH7wSVNRxjeJ9X2HsqqJTx"
 
 jobs:
-  checks:
-    # Production runs main only (the server's files follow main).
+  preflight:
+    # Seconds, not minutes: prove the key and the server connection work
+    # before spending time on tests and builds. Production runs main only.
     if: inputs.action == 'deploy' && github.ref == 'refs/heads/main'
+    name: Check server access
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: infra/deploy
+      - name: SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: infra/deploy/ssh-setup.sh
+      - run: ssh -o BatchMode=yes root@"$DEPLOY_HOST" status
+
+  checks:
+    needs: preflight
     uses: ./.github/workflows/ci.yml
 
   build:
@@ -86,16 +102,16 @@ jobs:
       name: production
       url: https://app.riogps.com
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
         with:
-          name: images
+          sparse-checkout: infra/deploy
       - name: SSH key
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+        run: infra/deploy/ssh-setup.sh
+      - uses: actions/download-artifact@v4
+        with:
+          name: images
       - name: Send images
         run: ssh -o BatchMode=yes root@"$DEPLOY_HOST" load < images.tar.gz
       - name: Deploy (backup, migrate, swap, health check, auto rollback)
@@ -110,13 +126,13 @@ jobs:
       name: production
       url: https://app.riogps.com
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: infra/deploy
       - name: SSH key
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+        run: infra/deploy/ssh-setup.sh
       - run: ssh -o BatchMode=yes root@"$DEPLOY_HOST" rollback
 
   status:
@@ -125,11 +141,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: infra/deploy
       - name: SSH key
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          install -d -m 700 ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+        run: infra/deploy/ssh-setup.sh
       - run: ssh -o BatchMode=yes root@"$DEPLOY_HOST" status
