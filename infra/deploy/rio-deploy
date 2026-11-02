@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+# RIO GPS production deploy, run on the server.
+#
+# Installed as /usr/local/sbin/rio-deploy by infra/deploy/install.sh and used as
+# the forced command of the GitHub Actions deploy key, so that key can do these
+# commands and nothing else:
+#
+#   load            read a gzipped `docker save` of the web + worker images on stdin
+#   deploy <sha>    back up, update config files, migrate, swap web + worker,
+#                   health-check, and roll back automatically if unhealthy
+#   rollback        switch back to the previously deployed version
+#   status          show the current and previous versions and container state
+#
+# It never touches Postgres, Redis, Traccar or Caddy containers or any volume.
+# Database migrations must stay additive (add, never drop or rename in the same
+# release), so rolling the app back never needs a database rollback.
+set -Eeuo pipefail
+umask 077
+
+APP_DIR=${RIO_APP_DIR:-/opt/rio-gps}
+STATE_DIR=${RIO_DEPLOY_STATE:-/var/lib/rio-deploy}
+KEEP_VERSIONS=${RIO_KEEP_VERSIONS:-5}
+HEALTH_TIMEOUT=${RIO_HEALTH_TIMEOUT:-150}
+SERVICES=(web worker)
+
+log() { printf '%s %s\n' "$(date -u +%H:%M:%S)" "$*"; }
+die() { log "ERROR: $*"; exit 1; }
+
+# With a forced command, the requested command arrives in SSH_ORIGINAL_COMMAND.
+if [[ -n "${SSH_ORIGINAL_COMMAND:-}" ]]; then
+  read -r -a ARGS <<<"$SSH_ORIGINAL_COMMAND"
+else
+  ARGS=("$@")
+fi
+CMD=${ARGS[0]:-}
+ARG=${ARGS[1]:-}
+
+mkdir -p "$STATE_DIR"
+cd "$APP_DIR"
+G=(git -c safe.directory="$APP_DIR")
+C=(docker compose --env-file .env -f infra/docker-compose.yml)
+
+image() { echo "rio-gps-$1:$2"; }
+current_version() { cat "$STATE_DIR/current" 2>/dev/null || echo unknown; }
+previous_version() { cat "$STATE_DIR/previous" 2>/dev/null || true; }
+valid_sha() { [[ "$1" =~ ^[0-9a-f]{7,40}$ ]]; }
+
+# The public host name from .env (read one key only; .env is never printed).
+domain() { sed -n 's/^RIO_DOMAIN_ALIASES=//p; s/^RIO_DOMAIN=//p' .env | tr -d "\"'" | tr ', ' '\n\n' | grep -m1 . || true; }
+
+container_ok() {
+  # Healthy if the container has a health check, otherwise running and not restarting.
+  local id state health
+  id=$("${C[@]}" ps -q "$1" 2>/dev/null | head -1)
+  [[ -n "$id" ]] || return 1
+  state=$(docker inspect -f '{{.State.Status}} {{.State.Restarting}}' "$id")
+  [[ "$state" == "running false" ]] || return 1
+  health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id")
+  [[ "$health" == healthy || "$health" == none ]]
+}
+
+healthy() {
+  # Web container healthy, readiness (Postgres + Redis) OK through the app and
+  # through Caddy's HTTPS, and the worker stays up.
+  local d deadline=$((SECONDS + HEALTH_TIMEOUT)) worker_since=""
+  d=$(domain)
+  while ((SECONDS < deadline)); do
+    if container_ok web \
+      && curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:3000/api/health/ready \
+      && { [[ -z "$d" ]] || curl -fsS -o /dev/null --max-time 10 --resolve "$d:443:127.0.0.1" "https://$d/api/health/ready"; }; then
+      if container_ok worker; then
+        # The worker has no health endpoint: require it to stay up for 20 s.
+        worker_since=${worker_since:-$SECONDS}
+        if ((SECONDS - worker_since >= 20)); then return 0; fi
+      else
+        worker_since=""
+      fi
+    fi
+    sleep 5
+  done
+  return 1
+}
+
+switch_to() {
+  # Point :latest at a version and recreate only web + worker.
+  local v=$1 s
+  for s in "${SERVICES[@]}"; do docker tag "$(image "$s" "$v")" "$(image "$s" latest)"; done
+  "${C[@]}" up -d --no-deps --no-build "${SERVICES[@]}"
+}
+
+remember_rollback_point() {
+  # The images running now, kept as :rollback (same name the manual runbook uses).
+  local s
+  for s in "${SERVICES[@]}"; do
+    docker image inspect "$(image "$s" latest)" >/dev/null 2>&1 && docker tag "$(image "$s" latest)" "$(image "$s" rollback)"
+  done
+  # Make sure the version recorded as current also exists by its own tag.
+  local cur; cur=$(current_version)
+  if valid_sha "$cur"; then
+    for s in "${SERVICES[@]}"; do
+      docker image inspect "$(image "$s" "$cur")" >/dev/null 2>&1 || docker tag "$(image "$s" rollback)" "$(image "$s" "$cur")" 2>/dev/null || true
+    done
+  fi
+}
+
+restore_rollback_point() {
+  local s
+  for s in "${SERVICES[@]}"; do docker tag "$(image "$s" rollback)" "$(image "$s" latest)"; done
+  "${C[@]}" up -d --no-deps --no-build "${SERVICES[@]}"
+}
+
+prune_old_versions() {
+  # Keep the newest KEEP_VERSIONS deployed versions (plus :latest and :rollback).
+  # Only versions that were deployed are pruned; loaded-but-not-deployed images
+  # are left alone (failed ones are removed by drop_version).
+  touch "$STATE_DIR/history"
+  local keep v
+  keep=$(tail -n "$KEEP_VERSIONS" "$STATE_DIR/history")
+  sort -u "$STATE_DIR/history" | while read -r v; do
+    valid_sha "$v" || continue
+    grep -qx "$v" <<<"$keep" || drop_version "$v"
+  done
+  docker image prune -f >/dev/null
+}
+
+drop_version() {
+  local s
+  grep -qx "$1" <<<"$(tail -n "$KEEP_VERSIONS" "$STATE_DIR/history" 2>/dev/null)" && return 0
+  for s in "${SERVICES[@]}"; do docker rmi "$(image "$s" "$1")" >/dev/null 2>&1 || true; done
+}
+
+update_config_files() {
+  # Bring compose/Caddy/scripts to the deployed commit when it is newer.
+  # For an older commit (redeploying an old version) the files stay as they are.
+  local sha=$1
+  "${G[@]}" fetch -q origin
+  if ! "${G[@]}" cat-file -e "$sha^{commit}" 2>/dev/null; then
+    log "commit $sha is not on GitHub's main history; config files unchanged"
+    return 0
+  fi
+  if "${G[@]}" merge-base --is-ancestor HEAD "$sha"; then
+    "${G[@]}" merge -q --ff-only "$sha"
+    log "config files at $("${G[@]}" rev-parse --short HEAD)"
+  else
+    log "commit $sha is older than the server's files; config files unchanged"
+  fi
+}
+
+cmd_load() {
+  log "loading images"
+  gunzip -c | docker load | sed 's/^/  /'
+}
+
+cmd_deploy() {
+  local sha=$1 s
+  valid_sha "$sha" || die "usage: deploy <commit sha>"
+  for s in "${SERVICES[@]}"; do
+    docker image inspect "$(image "$s" "$sha")" >/dev/null 2>&1 || die "image $(image "$s" "$sha") not loaded"
+  done
+  log "deploying $sha (current $(current_version))"
+
+  log "1/6 database backup"
+  systemctl start rio-gps-backup.service || die "backup failed; nothing changed"
+
+  log "2/6 config files"
+  update_config_files "$sha"
+
+  log "3/6 rollback point"
+  remember_rollback_point
+
+  log "4/6 database migrations"
+  for s in "${SERVICES[@]}"; do docker tag "$(image "$s" "$sha")" "$(image "$s" latest)"; done
+  if ! "${C[@]}" run --rm --no-deps -T web sh -c 'cd /repo/packages/db && pnpm -s migrate'; then
+    for s in "${SERVICES[@]}"; do docker tag "$(image "$s" rollback)" "$(image "$s" latest)"; done
+    drop_version "$sha"
+    die "migration failed; running containers were not changed"
+  fi
+
+  log "5/6 swapping web + worker"
+  "${C[@]}" up -d --no-deps --no-build "${SERVICES[@]}"
+
+  log "6/6 health check (up to ${HEALTH_TIMEOUT}s)"
+  if healthy; then
+    current_version >"$STATE_DIR/previous.tmp" && mv "$STATE_DIR/previous.tmp" "$STATE_DIR/previous"
+    echo "$sha" >"$STATE_DIR/current"
+    echo "$sha" >>"$STATE_DIR/history"
+    prune_old_versions
+    log "DEPLOY OK: $sha is live"
+    return 0
+  fi
+
+  log "new version unhealthy; rolling back automatically"
+  "${C[@]}" logs --no-color --tail 40 web worker 2>&1 | sed 's/^/  /' || true
+  restore_rollback_point
+  drop_version "$sha"
+  if healthy; then
+    log "ROLLED BACK to $(current_version); the app is up on the previous version"
+  else
+    log "previous version also unhealthy: check Postgres/Redis and the logs"
+  fi
+  exit 1
+}
+
+cmd_rollback() {
+  local prev s
+  prev=$(previous_version)
+  valid_sha "$prev" || die "no previous version recorded"
+  for s in "${SERVICES[@]}"; do
+    docker image inspect "$(image "$s" "$prev")" >/dev/null 2>&1 || die "image for $prev no longer on the server"
+  done
+  log "rolling back $(current_version) -> $prev"
+  remember_rollback_point
+  switch_to "$prev"
+  if healthy; then
+    current_version >"$STATE_DIR/previous.tmp" && mv "$STATE_DIR/previous.tmp" "$STATE_DIR/previous"
+    echo "$prev" >"$STATE_DIR/current"
+    log "ROLLBACK OK: $prev is live"
+  else
+    log "previous version unhealthy; restoring"
+    restore_rollback_point
+    exit 1
+  fi
+}
+
+cmd_status() {
+  echo "current:  $(current_version)"
+  echo "previous: $(previous_version)"
+  echo "kept:     $(tail -n "$KEEP_VERSIONS" "$STATE_DIR/history" 2>/dev/null | cut -c1-7 | tr '\n' ' ')"
+  "${C[@]}" ps --format '{{.Service}}: {{.Status}}'
+}
+
+case "$CMD" in
+  load) cmd_load ;;
+  deploy | rollback | status)
+    # One deploy at a time.
+    exec 9>"$STATE_DIR/lock"
+    flock -n 9 || die "another deploy is running"
+    "cmd_$CMD" "$ARG"
+    ;;
+  *) die "unknown command '${CMD}'. Allowed: load, deploy <sha>, rollback, status" ;;
+esac

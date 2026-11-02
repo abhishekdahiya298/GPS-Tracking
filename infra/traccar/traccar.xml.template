@@ -30,6 +30,14 @@
     <entry key='forward.url'>http://web:3000/api/webhooks/traccar</entry>
     <entry key='forward.header'>Authorization: Bearer __TRACCAR_WEBHOOK_SECRET__</entry>
 
+    <!-- If the web app is briefly unavailable (a deploy restarts it for about
+         10 s), keep each position and retry instead of dropping it. Delays
+         double from 1 s: 1+2+...+128 s, about 4 minutes in total; at most 1000
+         positions wait at once. -->
+    <entry key='forward.retry.enable'>true</entry>
+    <entry key='forward.retry.delay'>1000</entry>
+    <entry key='forward.retry.count'>8</entry>
+    <entry key='forward.retry.limit'>1000</entry>
     <entry key='web.port'>8082</entry>
 
 </properties>

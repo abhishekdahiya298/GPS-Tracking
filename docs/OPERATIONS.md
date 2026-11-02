@@ -1,6 +1,28 @@
 # Operations runbook
 
-## Deploy (web only, zero-migration or additive-migration releases)
+## Deploy pipeline (GitHub Actions)
+
+Normal deploys go through GitHub: **Actions > Deploy > Run workflow** (branch `main`).
+
+| Action | What happens |
+|---|---|
+| `deploy` | All CI checks (type check, lint, unit, integration, build) run again; the web and worker images are built on GitHub (not on the server) and sent over SSH; the server then backs up the database, updates its config files to that commit, runs migrations, recreates **web and worker only**, and health-checks them. If they are not healthy within 150 s it switches back to the previous images by itself and the run fails. |
+| `rollback` | Switches back to the version that was live before the last deploy (no rebuild, about 1 minute). |
+| `status` | Shows the current and previous versions and container state. |
+
+- Every pull request and push to `main` runs CI (`.github/workflows/ci.yml`).
+- Postgres, Redis, Traccar and Caddy are never restarted by a deploy, so trackers stay connected. Traccar retries webhook deliveries for about 4 minutes (`forward.retry.*`), so positions sent while web restarts are not lost.
+- The server keeps the last 5 deployed versions (`/var/lib/rio-deploy`).
+- Migrations must stay additive (add columns/tables; drop or rename only in a later release). Then rolling the app back never needs a database rollback.
+- The deploy key can only run `/usr/local/sbin/rio-deploy` (forced command, `restrict`): no shell, no forwarding.
+
+**One-time setup** (and again after any change to `infra/deploy/rio-deploy`): on the server run `bash /opt/rio-gps/infra/deploy/install.sh`. On first run it creates the key; copy `/root/rio-deploy-key` into the GitHub secret `DEPLOY_SSH_KEY` (Settings > Secrets and variables > Actions), then `shred -u /root/rio-deploy-key`. Optional: Settings > Environments > production > Required reviewers adds an approval click before each deploy.
+
+**On the server by hand:** `rio-deploy status`, `rio-deploy rollback`.
+
+The manual steps below still work (for example if GitHub is down).
+
+## Manual deploy (web only, zero-migration or additive-migration releases)
 
 ```bash
 cd /opt/rio-gps

@@ -1,0 +1,65 @@
+# Every change is checked before it can reach production:
+# type check, lint, unit tests, integration tests (real Postgres + Redis), build.
+# The Deploy workflow calls this same workflow first, so nothing untested ships.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Type check, lint, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rio_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Same major version as the production images (node:20-alpine).
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Type check
+        run: pnpm -r run typecheck
+      - name: Lint
+        run: pnpm -r run lint
+      - name: Unit tests
+        run: pnpm -r run test
+      - name: Integration tests
+        working-directory: apps/web
+        env:
+          # Disposable CI database; never production.
+          TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/rio_test
+          TEST_REDIS_URL: redis://127.0.0.1:6379
+        run: pnpm run test:integration
+      - name: Build
+        run: |
+          pnpm --filter @rio-gps/web build
+          pnpm --filter @rio-gps/worker build
