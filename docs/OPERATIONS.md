@@ -59,6 +59,25 @@ docker tag rio-gps-web:rollback rio-gps-web:latest
 $C up -d --no-deps web
 ```
 
+## Host setup and upkeep
+
+`bash /opt/rio-gps/infra/host/setup.sh` (safe to run again) installs:
+
+- **Docker `live-restore`** and bounded logs (`infra/docker/daemon.json`): restarting or patch-upgrading the Docker engine no longer stops the containers.
+- **2 GB swap** with `vm.swappiness=10`: a safety net against the out-of-memory killer.
+- **Traccar retention** (`infra/traccar/retention.sh`, timer `rio-gps-traccar-retention.timer`, 04:30 UTC after the backup): deletes Traccar positions and events older than 30 days in small batches. Each device's latest position is always kept. RIO's own location history (rio database) is not touched. Logs: `journalctl -u rio-gps-traccar-retention.service`.
+
+**Monthly patching** (security updates already install by themselves daily):
+
+```bash
+systemctl start rio-gps-backup.service
+apt-get update && apt-get -y upgrade
+docker compose --env-file /opt/rio-gps/.env -f /opt/rio-gps/infra/docker-compose.yml ps   # all Up/healthy?
+[ -f /var/run/reboot-required ] && echo "reboot needed: plan ~1 min downtime" 
+```
+
+A Docker minor-version upgrade can still restart the containers (about 30 s; trackers reconnect and resend buffered points). A reboot is only needed when `/var/run/reboot-required` exists; pick a quiet hour.
+
 ## Health and observability
 
 | What | Where |

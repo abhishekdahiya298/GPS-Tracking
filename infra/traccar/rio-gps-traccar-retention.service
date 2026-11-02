@@ -1,0 +1,12 @@
+[Unit]
+Description=RIO GPS: delete Traccar positions and events older than 30 days
+Wants=docker.service
+After=docker.service rio-gps-backup.service
+
+[Service]
+Type=oneshot
+Environment=RETENTION_DAYS=30
+ExecStart=/bin/bash /opt/rio-gps/infra/traccar/retention.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
