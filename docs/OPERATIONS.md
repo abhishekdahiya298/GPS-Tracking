@@ -16,7 +16,9 @@ Normal deploys go through GitHub: **Actions > Deploy > Run workflow** (branch `m
 - Migrations must stay additive (add columns/tables; drop or rename only in a later release). Then rolling the app back never needs a database rollback.
 - The deploy key can only run `/usr/local/sbin/rio-deploy` (forced command, `restrict`): no shell, no forwarding.
 
-**One-time setup** (and again after any change to `infra/deploy/rio-deploy`): on the server run `bash /opt/rio-gps/infra/deploy/install.sh`. On first run it creates the key; copy `/root/rio-deploy-key` into the GitHub secret `DEPLOY_SSH_KEY` (Settings > Secrets and variables > Actions), then `shred -u /root/rio-deploy-key`. Optional: Settings > Environments > production > Required reviewers adds an approval click before each deploy.
+**One-time setup** (and again after any change to `infra/deploy/rio-deploy`): on the server run `bash /opt/rio-gps/infra/deploy/install.sh`. On first run it creates the key; run `base64 -w0 /root/rio-deploy-key; echo` and paste that one line into the GitHub secret `DEPLOY_SSH_KEY` (one line survives copying from the web console; the raw multi-line key may not) (Settings > Secrets and variables > Actions), then `shred -u /root/rio-deploy-key`. Optional: Settings > Environments > production > Required reviewers adds an approval click before each deploy.
+
+**Replacing the key:** `sed -i '/rio-deploy github-actions/d' /root/.ssh/authorized_keys && bash /opt/rio-gps/infra/deploy/install.sh`, then update the secret the same way. Each Deploy run first checks the key and the connection (about 10 s), so a bad key fails before tests and builds.
 
 **On the server by hand:** `rio-deploy status`, `rio-deploy rollback`.
 

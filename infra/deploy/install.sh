@@ -29,7 +29,8 @@ else
   echo "command=\"/usr/local/sbin/rio-deploy\",restrict $(cat /root/rio-deploy-key.pub)" >>"$AUTH"
   rm -f /root/rio-deploy-key.pub
   echo "deploy key created and authorised (forced command only)"
-  echo "NEXT: copy /root/rio-deploy-key into GitHub secret DEPLOY_SSH_KEY, then: shred -u /root/rio-deploy-key"
+  echo "NEXT: run  base64 -w0 /root/rio-deploy-key; echo  and paste that ONE line into GitHub secret DEPLOY_SSH_KEY,"
+  echo "      then: shred -u /root/rio-deploy-key"
 fi
 
 echo "known_hosts line:"
