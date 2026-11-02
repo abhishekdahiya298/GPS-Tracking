@@ -1,0 +1,135 @@
+# Production deploy, started by hand: Actions > Deploy > Run workflow.
+# Clicking "Run workflow" is the go-ahead; nothing deploys on its own.
+#
+#   deploy    run every CI check, build the web + worker images here (not on the
+#             server), send them to the server, then the server backs up the
+#             database, migrates, swaps web + worker and checks health. If the
+#             new version is unhealthy it rolls back to the old one by itself.
+#   rollback  switch back to the version that was live before the last deploy.
+#   status    show what is live.
+#
+# Only web and worker restart. Postgres, Redis, Traccar (the tracker port) and
+# Caddy are never touched. The server side is infra/deploy/rio-deploy.
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: What to do
+        type: choice
+        options: [deploy, rollback, status]
+        default: deploy
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+env:
+  DEPLOY_HOST: 142.93.200.222
+  # The server's public SSH host key (not a secret). Prevents sending images or
+  # commands to an impostor server.
+  DEPLOY_KNOWN_HOSTS: "142.93.200.222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBTHmBa7dcoP+nA22PCQ1LyH7wSVNRxjeJ9X2HsqqJTx"
+
+jobs:
+  checks:
+    # Production runs main only (the server's files follow main).
+    if: inputs.action == 'deploy' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build images
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/web.Dockerfile
+          tags: rio-gps-web:${{ github.sha }}
+          load: true
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+      - name: Build worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/worker.Dockerfile
+          tags: rio-gps-worker:${{ github.sha }}
+          load: true
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,scope=worker,mode=max
+      - name: Package images
+        run: |
+          docker save rio-gps-web:${{ github.sha }} rio-gps-worker:${{ github.sha }} | gzip -1 > images.tar.gz
+          ls -lh images.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: images
+          path: images.tar.gz
+          retention-days: 3
+          compression-level: 0
+
+  deploy:
+    name: Deploy to production
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://app.riogps.com
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: images
+      - name: SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Send images
+        run: ssh -o BatchMode=yes root@"$DEPLOY_HOST" load < images.tar.gz
+      - name: Deploy (backup, migrate, swap, health check, auto rollback)
+        run: ssh -o BatchMode=yes -o ServerAliveInterval=30 root@"$DEPLOY_HOST" deploy ${{ github.sha }}
+
+  rollback:
+    if: inputs.action == 'rollback'
+    name: Roll back to the previous version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: https://app.riogps.com
+    steps:
+      - name: SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - run: ssh -o BatchMode=yes root@"$DEPLOY_HOST" rollback
+
+  status:
+    if: inputs.action == 'status'
+    name: Show what is live
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: SSH key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - run: ssh -o BatchMode=yes root@"$DEPLOY_HOST" status
