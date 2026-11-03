@@ -12,7 +12,7 @@ export interface TokenStore {
   clear(): Promise<void>;
 }
 
-export type ApiErrorKind = "network" | "timeout" | "unauthorized" | "forbidden" | "not_found" | "rate_limited" | "server" | "bad_response";
+export type ApiErrorKind = "network" | "timeout" | "unauthorized" | "forbidden" | "not_found" | "rate_limited" | "update_required" | "server" | "bad_response";
 
 export class ApiError extends Error {
   constructor(
@@ -34,6 +34,10 @@ export interface ApiClientOptions {
   timeoutMs?: number;
   /** Called when the server says the session is no longer valid, after the stored token is cleared. */
   onSignedOut?: () => void;
+  /** This app's version and platform, sent with every request so the server can refuse versions that are too old. */
+  appInfo?: { version: string; platform: string };
+  /** Called when the server answers 426: this version must be updated before it can be used. */
+  onUpdateRequired?: () => void;
 }
 
 export interface RequestOptions {
@@ -53,6 +57,7 @@ function kindForStatus(status: number): ApiErrorKind {
   if (status === 403) return "forbidden";
   if (status === 404) return "not_found";
   if (status === 429) return "rate_limited";
+  if (status === 426) return "update_required";
   return status >= 500 ? "server" : "bad_response";
 }
 
@@ -71,6 +76,10 @@ export function createApiClient(options: ApiClientOptions) {
   /** Returns the parsed JSON body and the response headers (sign-in reads its token from a header). */
   async function send<T>(path: string, opts: RequestOptions = {}): Promise<{ data: T; headers: Headers }> {
     const headers: Record<string, string> = { Accept: "application/json", ...opts.headers };
+    if (options.appInfo) {
+      headers["X-RIO-App-Version"] = options.appInfo.version;
+      headers["X-RIO-App-Platform"] = options.appInfo.platform;
+    }
     if (opts.body !== undefined) headers["Content-Type"] = "application/json";
     if (!opts.anonymous) {
       const token = await options.tokens.get();
@@ -101,6 +110,7 @@ export function createApiClient(options: ApiClientOptions) {
         await options.tokens.clear();
         options.onSignedOut?.();
       }
+      if (response.status === 426) options.onUpdateRequired?.();
       let message = `Request failed (${response.status}).`;
       let code: string | null = null;
       try {

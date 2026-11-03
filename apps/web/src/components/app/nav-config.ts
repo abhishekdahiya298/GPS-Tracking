@@ -5,7 +5,7 @@ import { contextHasPermission, type Permission, type TenantContext } from "@rio-
  * server with the same permission checks the pages and APIs enforce: hiding a
  * link is a convenience, never the security boundary.
  */
-export type NavIcon = "dashboard" | "map" | "truck" | "package" | "cpu" | "zones" | "bell" | "reports" | "wrench" | "users" | "building" | "settings" | "inbox" | "activity" | "shield" | "user" | "sim" | "receipt" | "home" | "target" | "layers";
+export type NavIcon = "dashboard" | "map" | "truck" | "package" | "cpu" | "zones" | "bell" | "reports" | "wrench" | "users" | "building" | "settings" | "inbox" | "activity" | "shield" | "user" | "sim" | "receipt" | "home" | "target" | "layers" | "smartphone";
 
 export interface NavItem {
   href: string;
@@ -87,6 +87,7 @@ export const PLATFORM_NAV: NavSection[] = [
   {
     title: "Platform",
     items: [
+      { href: "/admin/app", label: "Mobile app", icon: "smartphone" },
       { href: "/admin/activity", label: "Activity log", icon: "activity" },
       { href: "/settings/account", label: "My account", icon: "user" }
     ]

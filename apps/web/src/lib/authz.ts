@@ -4,6 +4,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { getAuth } from "./auth";
 import { ForbiddenError, OrganizationUnavailableError, PlatformOnlyError, UnauthenticatedError } from "./errors";
 import { organizationModules } from "./plans";
+import { assertAppVersionAllowed } from "./app-releases";
 
 /**
  * The single authorization choke point. Every tenant-scoped route calls
@@ -21,6 +22,8 @@ export interface AuthenticatedUser {
 }
 
 export async function requireAuthenticatedUser(request: Request): Promise<AuthenticatedUser> {
+  // A mobile app older than the required version gets 426 and shows its "Update required" screen.
+  await assertAppVersionAllowed(request.headers);
   return requireAuthenticatedUserFromHeaders(request.headers);
 }
 

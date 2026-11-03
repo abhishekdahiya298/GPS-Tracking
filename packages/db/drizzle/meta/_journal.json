@@ -176,6 +176,13 @@
       "when": 1793520887985,
       "tag": "0024_nav_theme",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793700923630,
+      "tag": "0025_app_releases",
+      "breakpoints": true
     }
   ]
 }
