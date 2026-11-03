@@ -21,3 +21,4 @@ export * from "./pushDevices";
 export * from "./loads";
 export * from "./simCards";
 export * from "./billing";
+export * from "./appReleases";

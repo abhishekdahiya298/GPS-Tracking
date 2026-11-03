@@ -76,4 +76,15 @@ describe("api client", () => {
       await expect(api.get("x")).rejects.toMatchObject({ kind, status });
     }
   });
+
+  it("sends the app version and platform, and reports 426 as update required", async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => json({ code: "UPDATE_REQUIRED", message: "Please update the app." }, 426));
+    const onUpdateRequired = vi.fn();
+    const api = createApiClient({ baseUrl: "https://x.test", tokens: memoryTokens("t"), fetchImpl: fetchImpl as unknown as typeof fetch, appInfo: { version: "1.2.0", platform: "android" }, onUpdateRequired });
+    await expect(api.get("locations/current")).rejects.toMatchObject({ kind: "update_required", status: 426, code: "UPDATE_REQUIRED" });
+    const h = fetchImpl.mock.calls[0]![1]!.headers as Record<string, string>;
+    expect(h["X-RIO-App-Version"]).toBe("1.2.0");
+    expect(h["X-RIO-App-Platform"]).toBe("android");
+    expect(onUpdateRequired).toHaveBeenCalledOnce();
+  });
 });
