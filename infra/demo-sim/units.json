@@ -1,0 +1,109 @@
+{
+  "units": [
+    {
+      "imei": "359990000001015",
+      "name": "Demo Truck 101",
+      "kind": "route",
+      "from": [
+        43.7315,
+        -79.7624
+      ],
+      "to": [
+        42.8864,
+        -78.8784
+      ],
+      "speedKmh": 95,
+      "offsetMin": 0,
+      "note": "Brampton ON - Buffalo NY via QEW",
+      "odometerKm": 312400
+    },
+    {
+      "imei": "359990000001023",
+      "name": "Demo Truck 102",
+      "kind": "route",
+      "from": [
+        42.8864,
+        -78.8784
+      ],
+      "to": [
+        41.4993,
+        -81.6944
+      ],
+      "speedKmh": 100,
+      "offsetMin": 95,
+      "note": "Buffalo NY - Cleveland OH via I-90",
+      "odometerKm": 488150
+    },
+    {
+      "imei": "359990000001031",
+      "name": "Demo Truck 103",
+      "kind": "route",
+      "from": [
+        43.589,
+        -79.6441
+      ],
+      "to": [
+        42.9849,
+        -81.2453
+      ],
+      "speedKmh": 98,
+      "offsetMin": 40,
+      "note": "Mississauga ON - London ON via 401",
+      "odometerKm": 221900
+    },
+    {
+      "imei": "359990000001049",
+      "name": "Demo Truck 104",
+      "kind": "route",
+      "from": [
+        42.3314,
+        -83.0458
+      ],
+      "to": [
+        41.8781,
+        -87.6298
+      ],
+      "speedKmh": 102,
+      "offsetMin": 170,
+      "note": "Detroit MI - Chicago IL via I-94",
+      "odometerKm": 605300
+    },
+    {
+      "imei": "359990000001056",
+      "name": "Demo Truck 105",
+      "kind": "idle",
+      "lat": 42.9067,
+      "lon": -78.9195,
+      "angle": 90,
+      "note": "Idling at a Buffalo truck stop",
+      "odometer": 398700000
+    },
+    {
+      "imei": "359990000001064",
+      "name": "Demo Trailer 501",
+      "kind": "trailer-parked",
+      "lat": 43.7067,
+      "lon": -79.735,
+      "angle": 0,
+      "note": "Unhooked in the Brampton yard",
+      "odometer": 0
+    },
+    {
+      "imei": "359990000001072",
+      "name": "Demo Trailer 502",
+      "kind": "route",
+      "from": [
+        43.7315,
+        -79.7624
+      ],
+      "to": [
+        42.8864,
+        -78.8784
+      ],
+      "speedKmh": 95,
+      "offsetMin": 0,
+      "note": "Hooked to Demo Truck 101 (same route and timing)",
+      "odometerKm": 154200
+    }
+  ]
+}
