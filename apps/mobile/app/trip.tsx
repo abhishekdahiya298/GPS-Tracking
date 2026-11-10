@@ -5,10 +5,12 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
 import { ApiError, api } from "@/api";
+import { PressableScale, SlideUp } from "@/components/motion";
 import { Button } from "@/components/ui";
+import { haptic } from "@/haptics";
 import { Placeholder } from "@/components/Placeholder";
 import { useFleet } from "@/fleet/FleetProvider";
-import { colors, font, radius, space } from "@/theme";
+import { colors, elevation, font, radius, space } from "@/theme";
 import { SPEEDS, advance, buildTrack, positionAt, progressOf, timeAtProgress, type HistoryPage, type HistoryPoint, type Track } from "@/trips/model";
 
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -126,7 +128,7 @@ export default function TripScreen() {
         )}
       </View>
 
-      <View style={styles.panel}>
+      <SlideUp style={styles.panel}>
         <View style={styles.readout}>
           <Text style={styles.clock}>{fmt.timeSec(t)}</Text>
           <Text style={styles.speed}>{units.fmtSpeed(head.speedKph)}</Text>
@@ -154,18 +156,24 @@ export default function TripScreen() {
         </View>
 
         <View style={styles.controls}>
-          <Pressable onPress={togglePlay} style={({ pressed }) => [styles.play, pressed && { backgroundColor: colors.primaryDark }]} accessibilityRole="button" accessibilityLabel={playing ? "Pause" : "Play"}>
+          <PressableScale onPress={togglePlay} feedback="press" scaleTo={0.92} style={styles.play} accessibilityRole="button" accessibilityLabel={playing ? "Pause" : "Play"}>
             <Ionicons name={playing ? "pause" : "play"} size={26} color={colors.primaryForeground} />
-          </Pressable>
+          </PressableScale>
           <View style={styles.speeds}>
             {SPEEDS.map((s) => (
-              <Pressable key={s} onPress={() => setSpeed(s)} style={[styles.speedChip, speed === s && styles.speedChipOn]} accessibilityRole="button" accessibilityState={{ selected: speed === s }} accessibilityLabel={`Speed ${s} times`}>
+              <Pressable
+                key={s}
+                onPress={() => {
+                  haptic.tap();
+                  setSpeed(s);
+                }}
+                style={[styles.speedChip, speed === s && styles.speedChipOn]} accessibilityRole="button" accessibilityState={{ selected: speed === s }} accessibilityLabel={`Speed ${s} times`}>
                 <Text style={[styles.speedText, speed === s && styles.speedTextOn]}>{s}x</Text>
               </Pressable>
             ))}
           </View>
         </View>
-      </View>
+      </SlideUp>
     </View>
   );
 }
@@ -177,10 +185,10 @@ const styles = StyleSheet.create({
   retry: { marginTop: space.md, alignSelf: "stretch" },
   emptyTitle: { fontSize: font.title, fontWeight: "600", color: colors.foreground, marginTop: space.sm },
   muted: { fontSize: font.body, color: colors.mutedForeground, textAlign: "center", lineHeight: 21 },
-  panel: { backgroundColor: colors.background, paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.xl, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  panel: { backgroundColor: colors.background, paddingHorizontal: space.lg, paddingTop: space.lg, paddingBottom: space.xl, borderTopLeftRadius: 20, borderTopRightRadius: 20, marginTop: -16, ...elevation.lg },
   readout: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
-  clock: { fontSize: font.title, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
-  speed: { fontSize: font.body, fontWeight: "600", color: colors.primary, fontVariant: ["tabular-nums"] },
+  clock: { fontSize: 22, fontWeight: "800", color: colors.foreground, fontVariant: ["tabular-nums"] },
+  speed: { fontSize: font.title, fontWeight: "700", color: colors.primary, fontVariant: ["tabular-nums"] },
   barHit: { height: 44, justifyContent: "center" },
   bar: { height: 6, borderRadius: 3, backgroundColor: colors.muted, overflow: "hidden" },
   barFill: { height: 6, backgroundColor: colors.primary },
@@ -188,9 +196,9 @@ const styles = StyleSheet.create({
   ends: { flexDirection: "row", justifyContent: "space-between", marginTop: -space.xs },
   endText: { fontSize: 12, color: colors.mutedForeground },
   controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: space.md },
-  play: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" },
-  speeds: { flexDirection: "row", backgroundColor: colors.muted, borderRadius: radius.md, padding: 3 },
-  speedChip: { minWidth: 52, minHeight: 38, alignItems: "center", justifyContent: "center", borderRadius: radius.md - 2 },
+  play: { width: 58, height: 58, borderRadius: 29, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", ...elevation.md },
+  speeds: { flexDirection: "row", backgroundColor: colors.muted, borderRadius: radius.xl, padding: 3 },
+  speedChip: { minWidth: 52, minHeight: 38, alignItems: "center", justifyContent: "center", borderRadius: radius.lg },
   speedChipOn: { backgroundColor: colors.background },
   speedText: { fontSize: font.small, fontWeight: "500", color: colors.mutedForeground },
   speedTextOn: { color: colors.foreground, fontWeight: "700" }

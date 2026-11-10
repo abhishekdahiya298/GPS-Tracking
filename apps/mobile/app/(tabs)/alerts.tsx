@@ -10,7 +10,7 @@ import { Button } from "@/components/ui";
 import { haptic } from "@/haptics";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { timeAgo } from "@/fleet/model";
-import { colors, font, radius, space } from "@/theme";
+import { colors, font, radius, space, ink, isDark, softTint } from "@/theme";
 
 export default function AlertsScreen() {
   const { events, unread, unreadOnly, loading, loadingMore, hasMore, error, setUnreadOnly, refresh, loadMore, acknowledge } = useAlerts();
@@ -49,8 +49,8 @@ export default function AlertsScreen() {
     const known = item.deviceId !== null && devices.some((d) => d.deviceId === item.deviceId);
     const body = (
       <>
-        <View style={[styles.icon, { backgroundColor: meta.soft }]}>
-          <Ionicons name={meta.icon} size={20} color={meta.color} />
+        <View style={[styles.icon, { backgroundColor: softTint(meta.color, meta.soft) }]}>
+          <Ionicons name={meta.icon} size={20} color={ink(meta.color)} />
         </View>
         <View style={styles.flex}>
           <Text style={[styles.title, isUnread && styles.titleUnread]}>{alertTitle(item)}</Text>
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
   link: { color: colors.primary, fontSize: font.small, fontWeight: "600" },
   emptyList: { flexGrow: 1 },
   row: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
-  rowUnread: { backgroundColor: "#f4f7ff" },
+  rowUnread: { backgroundColor: isDark ? "#18223a" : "#f4f7ff" },
   unreadBar: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: colors.primary },
   icon: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
   title: { fontSize: font.body, color: colors.foreground, lineHeight: 20 },

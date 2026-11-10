@@ -4,6 +4,7 @@ import { AppState } from "react-native";
 import { ApiError, api, buildUrl, tokenStore } from "../api";
 import { API_BASE_URL } from "../config";
 import { APP_PLATFORM, APP_VERSION } from "../updates/events";
+import { loadFleetCache, saveFleetCache } from "./cache";
 import type { CurrentLocationsResponse, FleetDevice } from "./model";
 import { applyLocation, backoffMs, mergeSnapshot, parseJson, type LiveLocationEvent } from "./sse";
 import { openStream } from "./stream";
@@ -52,9 +53,31 @@ export function FleetProvider({ children }: { children: ReactNode }) {
   const fleet = useRef(new Map<string, FleetDevice>());
   const alertListeners = useRef(new Set<() => void>());
 
+  const savedAt = useRef(0);
   const show = useCallback(() => {
-    setDevices([...fleet.current.values()]);
+    const list = [...fleet.current.values()];
+    setDevices(list);
     setUpdatedAt(Date.now());
+    // Keep a copy on the phone (at most every 30 s) for the next app start.
+    if (Date.now() - savedAt.current > 30_000) {
+      savedAt.current = Date.now();
+      saveFleetCache(list);
+    }
+  }, []);
+
+  // App start: show the fleet as it was last time, until the server answers.
+  useEffect(() => {
+    let cancelled = false;
+    void loadFleetCache().then((saved) => {
+      if (cancelled || !saved || fleet.current.size > 0) return;
+      fleet.current = new Map(saved.devices.map((d) => [d.deviceId, d]));
+      setDevices(saved.devices);
+      setUpdatedAt(saved.savedAt);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const refresh = useCallback(() => {

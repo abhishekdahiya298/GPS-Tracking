@@ -7,7 +7,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import type { ReactNode } from "react";
 import { StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { STATE_META, type FleetState } from "../fleet/model";
-import { colors, elevation, font, gradient, radius, space } from "../theme";
+import { colors, elevation, font, gradient, ink, radius, softTint, space } from "../theme";
 import { FadeInUp, PressableScale, PulseDot, Skeleton } from "./motion";
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -21,9 +21,9 @@ export function HeaderBackground() {
 export function StatusPill({ state, compact = false }: { state: FleetState; compact?: boolean }) {
   const meta = STATE_META[state];
   return (
-    <View style={[styles.pill, { backgroundColor: meta.soft }]}>
-      <PulseDot color={meta.color} live={state === "moving"} />
-      <Text style={[styles.pillText, { color: meta.color }]} numberOfLines={1}>
+    <View style={[styles.pill, { backgroundColor: softTint(meta.color, meta.soft) }]}>
+      <PulseDot color={ink(meta.color)} live={state === "moving"} />
+      <Text style={[styles.pillText, { color: ink(meta.color) }]} numberOfLines={1}>
         {compact && state === "parked" ? "Parked" : meta.label}
       </Text>
     </View>
@@ -36,8 +36,8 @@ const TYPE_ICON: Record<string, IconName> = { truck: "bus", semi: "bus", bus: "b
 export function VehicleAvatar({ type, state, size = 46 }: { type: string | undefined; state: FleetState; size?: number }) {
   const meta = STATE_META[state];
   return (
-    <View style={[styles.avatar, { width: size, height: size, backgroundColor: meta.soft }]}>
-      <Ionicons name={TYPE_ICON[type ?? ""] ?? "navigate"} size={size * 0.5} color={meta.color} />
+    <View style={[styles.avatar, { width: size, height: size, backgroundColor: softTint(meta.color, meta.soft) }]}>
+      <Ionicons name={TYPE_ICON[type ?? ""] ?? "navigate"} size={size * 0.5} color={ink(meta.color)} />
     </View>
   );
 }
@@ -46,7 +46,7 @@ export function VehicleAvatar({ type, state, size = 46 }: { type: string | undef
 export function Chip({ label, count, selected, dot, onPress }: { label: string; count?: number; selected: boolean; dot?: string; onPress: () => void }) {
   return (
     <PressableScale onPress={onPress} style={[styles.chip, selected && styles.chipOn]} accessibilityRole="button" accessibilityState={{ selected }} accessibilityLabel={count === undefined ? label : `${label}, ${count}`}>
-      {dot && !selected ? <View style={[styles.chipDot, { backgroundColor: dot }]} /> : null}
+      {dot && !selected ? <View style={[styles.chipDot, { backgroundColor: ink(dot) }]} /> : null}
       <Text style={[styles.chipText, selected && styles.chipTextOn]}>{label}</Text>
       {count !== undefined ? (
         <View style={[styles.chipCount, selected && styles.chipCountOn]}>

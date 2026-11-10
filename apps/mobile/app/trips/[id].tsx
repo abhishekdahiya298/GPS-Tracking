@@ -2,9 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { dateFormatter } from "@rio-gps/core/timezones";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { ApiError, api } from "@/api";
+import { EmptyState, ListSkeleton } from "@/components/kit";
+import { FadeInUp, PressableScale } from "@/components/motion";
 import { Button } from "@/components/ui";
+import { haptic } from "@/haptics";
 import { useFleet } from "@/fleet/FleetProvider";
 import { displayName } from "@/fleet/model";
 import { colors, font, space } from "@/theme";
@@ -47,9 +50,11 @@ export default function TripsScreen() {
   const totals = load.state === "ready" ? load.report.totals : null;
 
   const row = ({ item, index }: { item: TripDto; index: number }) => (
-    <Pressable
+    <FadeInUp index={index < 10 ? index : 0} distance={index < 10 ? 12 : 0}>
+    <PressableScale
       onPress={() => router.push({ pathname: "/trip", params: { id, from: item.startAt, to: item.endAt, name } })}
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.muted }]}
+      style={styles.row}
+      scaleTo={0.985}
       accessibilityRole="button"
       accessibilityLabel={`Trip from ${fmt.time(item.startAt)} to ${fmt.time(item.endAt)}`}
     >
@@ -66,8 +71,9 @@ export default function TripsScreen() {
         </Text>
         <Text style={styles.sub}>Top speed {units.fmtSpeed(item.maxSpeedKph)}</Text>
       </View>
-      <Ionicons name="play-circle-outline" size={28} color={colors.primary} />
-    </Pressable>
+      <Ionicons name="play-circle" size={30} color={colors.primary} />
+    </PressableScale>
+    </FadeInUp>
   );
 
   return (
@@ -75,14 +81,20 @@ export default function TripsScreen() {
       <Stack.Screen options={{ title: `${name} trips` }} />
 
       <View style={styles.dayBar}>
-        <Pressable onPress={() => setDay(shiftDay(day, -1, today))} hitSlop={8} style={styles.arrow} accessibilityRole="button" accessibilityLabel="Previous day">
+        <Pressable onPress={() => {
+            haptic.tap();
+            setDay(shiftDay(day, -1, today));
+          }} hitSlop={8} style={styles.arrow} accessibilityRole="button" accessibilityLabel="Previous day">
           <Ionicons name="chevron-back" size={22} color={colors.primary} />
         </Pressable>
         <Pressable onPress={() => setDay(today)} style={styles.dayLabel} accessibilityRole="button" accessibilityLabel="Go to today">
           <Text style={styles.dayText}>{dayLabel(day, today)}</Text>
           <Text style={styles.zone}>Times in {fmt.abbr()}</Text>
         </Pressable>
-        <Pressable onPress={() => setDay(shiftDay(day, 1, today))} disabled={day >= today} hitSlop={8} style={[styles.arrow, day >= today && { opacity: 0.3 }]} accessibilityRole="button" accessibilityLabel="Next day">
+        <Pressable onPress={() => {
+            haptic.tap();
+            setDay(shiftDay(day, 1, today));
+          }} disabled={day >= today} hitSlop={8} style={[styles.arrow, day >= today && { opacity: 0.3 }]} accessibilityRole="button" accessibilityLabel="Next day">
           <Ionicons name="chevron-forward" size={22} color={colors.primary} />
         </Pressable>
       </View>
@@ -97,18 +109,11 @@ export default function TripsScreen() {
       ) : null}
 
       {load.state === "loading" ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
+        <ListSkeleton rows={5} />
       ) : load.state === "failed" ? (
-        <View style={styles.center}>
-          <Ionicons name="cloud-offline-outline" size={36} color={colors.offline} />
-          <Text style={styles.emptyTitle}>Can't load trips</Text>
-          <Text style={styles.muted}>{load.message}</Text>
-          <View style={styles.retry}>
-            <Button title="Try again" onPress={() => void fetchDay()} />
-          </View>
-        </View>
+        <EmptyState icon="cloud-offline-outline" tone="danger" title="Can't load trips" note={load.message}>
+          <Button title="Try again" icon="refresh" onPress={() => void fetchDay()} />
+        </EmptyState>
       ) : (
         <FlatList
           data={trips}
@@ -129,11 +134,7 @@ export default function TripsScreen() {
             />
           }
           ListEmptyComponent={
-            <View style={styles.center}>
-              <Ionicons name="trail-sign-outline" size={36} color={colors.offline} />
-              <Text style={styles.emptyTitle}>No trips this day</Text>
-              <Text style={styles.muted}>The vehicle did not drive, or its tracker was not reporting.</Text>
-            </View>
+            <EmptyState icon="trail-sign-outline" title="No trips this day" note="The vehicle did not drive, or its tracker was not reporting." />
           }
         />
       )}
@@ -160,13 +161,9 @@ const styles = StyleSheet.create({
   zone: { fontSize: 12, color: colors.mutedForeground, marginTop: 2 },
   totals: { flexDirection: "row", backgroundColor: colors.canvas, paddingVertical: space.md, paddingHorizontal: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   total: { flex: 1, alignItems: "center", paddingHorizontal: 2 },
-  totalValue: { fontSize: font.body, fontWeight: "700", color: colors.foreground },
+  totalValue: { fontSize: 16, fontWeight: "800", color: colors.foreground },
   totalLabel: { fontSize: 12, color: colors.mutedForeground, marginTop: 2 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.sm },
-  retry: { marginTop: space.md, alignSelf: "stretch" },
   emptyList: { flexGrow: 1 },
-  emptyTitle: { fontSize: font.title, fontWeight: "600", color: colors.foreground, marginTop: space.sm },
-  muted: { fontSize: font.body, color: colors.mutedForeground, textAlign: "center", lineHeight: 21 },
   row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
   number: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
   numberText: { color: colors.primary, fontWeight: "700", fontSize: font.small },

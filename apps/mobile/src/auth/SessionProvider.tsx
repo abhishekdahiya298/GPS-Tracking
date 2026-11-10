@@ -1,6 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { auth, onSignedOut } from "../api";
+import { clearFleetCache } from "../fleet/cache";
 import { disablePush } from "../push/service";
 import type { CodeKind, SessionUser, SignInResult } from "./service";
 
@@ -62,6 +63,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     () =>
       onSignedOut(() => {
         void cacheUser(null);
+        void clearFleetCache();
         setState({ status: "signedOut" });
       }),
     []
@@ -84,6 +86,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         await disablePush(false);
         await auth.signOut();
         await cacheUser(null);
+        await clearFleetCache();
         setState({ status: "signedOut" });
       }
     }),

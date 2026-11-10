@@ -1,7 +1,7 @@
 import type { Ref } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
-import { colors, elevation, font, radius, space } from "../theme";
+import { colors, elevation, font, isDark, radius, space } from "../theme";
 import { PressableScale } from "./motion";
 
 export function Button({ title, onPress, loading, variant = "primary", disabled, icon }: { title: string; onPress: () => void; loading?: boolean; variant?: "primary" | "ghost" | "danger" | "outline"; disabled?: boolean; icon?: keyof typeof Ionicons.glyphMap }) {
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
   field: { gap: space.xs },
   label: { fontSize: font.small, fontWeight: "500", color: colors.foreground },
   // 16px text: iOS zooms the screen on focus for anything smaller.
-  input: { minHeight: 50, borderWidth: 1, borderColor: "#d4d8df", borderRadius: radius.xl, paddingHorizontal: space.md, fontSize: 16, color: colors.foreground, backgroundColor: colors.background },
+  input: { minHeight: 50, borderWidth: 1, borderColor: isDark ? colors.border : "#d4d8df", borderRadius: radius.xl, paddingHorizontal: space.md, fontSize: 16, color: colors.foreground, backgroundColor: colors.background },
   error: { backgroundColor: colors.dangerSoft, borderRadius: radius.md, padding: space.md },
   errorText: { color: colors.danger, fontSize: font.small, lineHeight: 19 }
 });

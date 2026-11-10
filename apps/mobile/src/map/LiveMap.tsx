@@ -10,7 +10,7 @@ import { PressableScale, PulseDot, SlideUp } from "@/components/motion";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { FILTERS, STATE_META, countByFilter, displayName, fleetState, selectDevices, statusLine, timeAgo, type FleetFilter } from "@/fleet/model";
 import { haptic } from "@/haptics";
-import { colors, elevation, font, radius, space } from "@/theme";
+import { colors, elevation, font, isDark, radius, space } from "@/theme";
 import { FleetSheet } from "./FleetSheet";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, DETAIL_ZOOM, MAP_STYLES, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
 import { VEHICLE_IMAGES } from "./sprites";
@@ -40,7 +40,7 @@ export default function LiveMap() {
   const [mapFailed, setMapFailed] = useState(false);
   const [filter, setFilter] = useState<FleetFilter>("all");
   const [listOpen, setListOpen] = useState(false);
-  const [style, setStyle] = useState<MapStyleId>("streets");
+  const [style, setStyle] = useState<MapStyleId>(isDark ? "dark" : "streets");
   const [styleMenu, setStyleMenu] = useState(false);
   const [zones, setZones] = useState<Zone[]>([]);
   const fitted = useRef(false);
