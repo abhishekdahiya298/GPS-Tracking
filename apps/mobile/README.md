@@ -67,3 +67,17 @@ npx eas-cli build --platform android --profile preview   # an APK to install dir
 Use `npm ci`, not `npm install`, on machines that only build or run the app: `npm install` can rewrite `package-lock.json`, and the build servers refuse a lock file that does not match. `eas.json` pins the Node version used on the build servers to the one the lock file was made with.
 
 `eas.json` has three profiles: `preview` (standalone APK for testing), `development` (connects to `npx expo start` for live code changes) and `production` (store builds). iPhone builds need an Apple Developer account.
+
+## Releasing an update (and making it required)
+
+The app checks with the server on start, when it comes back to the foreground, and every 6 hours
+(`src/updates/`). The platform console's **Mobile app** page decides what installed apps do:
+
+1. Raise `version` in `app.json` (for example `1.3.0`) for every release, then build and publish it.
+2. When the build is live in the store (or on the download link), enter it as **Latest version**:
+   older apps show **Update available** with Update now / Later (Later waits a day).
+3. Only when older versions must stop working, also set **Required version**: older apps show a
+   full-screen **Update required** with no way past it, and the API answers them `426`.
+
+The app sends `X-RIO-App-Version` / `X-RIO-App-Platform` on every request. If the check can't reach
+the server, the app keeps working: an outage never locks people out.

@@ -27,6 +27,7 @@
     "./geo": "./src/geo.ts",
     "./timezones": "./src/timezones.ts",
     "./renewals": "./src/renewals.ts",
-    "./loads": "./src/loads.ts"
+    "./loads": "./src/loads.ts",
+    "./app-version": "./src/app-version.ts"
   }
 }

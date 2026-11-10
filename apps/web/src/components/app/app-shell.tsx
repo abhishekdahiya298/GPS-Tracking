@@ -26,7 +26,8 @@ import {
   ChevronRight,
   Home,
   Target,
-  Layers
+  Layers,
+  Smartphone
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -66,7 +67,8 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   receipt: ReceiptText,
   home: Home,
   target: Target,
-  layers: Layers
+  layers: Layers,
+  smartphone: Smartphone
 };
 
 /** Routes whose page fills the content area edge to edge (maps). */

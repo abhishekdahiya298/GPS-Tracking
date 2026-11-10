@@ -28,6 +28,7 @@ export const ACTION_LABEL: Record<string, string> = {
   "customer.plan_changed": "Changed plan",
   "plan.created": "Created plan",
   "plan.updated": "Edited plan",
+  "app.release_updated": "Changed mobile app update settings",
   "member.renamed": "Renamed user",
   "member.password_reset": "Reset user's password",
   "member.two_step_reset": "Turned off user's two-step",

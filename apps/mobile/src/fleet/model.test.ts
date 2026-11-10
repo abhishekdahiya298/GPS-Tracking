@@ -31,6 +31,13 @@ describe("fleetState (must match the web app)", () => {
     expect(fleetState(device({ connectivity: "offline", location: null }))).toBe("offline");
     expect(fleetState(device({ connectivity: "online", location: null }))).toBe("never_seen");
   });
+  it("shows a silent trailer as parked (unhooked), not offline", () => {
+    const trailer = { id: "t", name: "Trailer 7", licensePlate: null, type: "trailer" };
+    expect(fleetState(device({ vehicle: trailer, connectivity: "offline" }))).toBe("parked");
+    expect(fleetState(device({ vehicle: trailer, connectivity: "offline", location: null }))).toBe("offline");
+    expect(fleetState(device({ vehicle: trailer, speed: 60 }))).toBe("moving");
+    expect(statusLine(device({ vehicle: trailer, connectivity: "offline", lastSeenAt: ago(7200) }), fmt, NOW)).toBe("Unhooked · last seen 2 h ago");
+  });
 });
 
 describe("list selection", () => {
@@ -41,8 +48,9 @@ describe("list selection", () => {
     device({ deviceId: "d", vehicle: { id: "4", name: "Trailer 7", licensePlate: null, type: "trailer" }, connectivity: "offline" }),
     device({ deviceId: "e", vehicle: { id: "5", name: "Truck 1", licensePlate: null, type: "truck" }, speed: 0, ignition: true })
   ];
-  it("counts each filter, with never-reported trackers under Offline", () => {
-    expect(countByFilter(fleet)).toEqual({ all: 5, moving: 1, idle: 1, stopped: 1, offline: 2 });
+  it("counts each filter, with never-reported trackers under Offline and parked trailers under Stopped", () => {
+    expect(countByFilter(fleet)).toEqual({ all: 5, moving: 1, idle: 1, stopped: 2, offline: 1 });
+    expect(selectDevices(fleet, "stopped", "").map((d) => d.deviceId)).toEqual(["a", "d"]);
   });
   it("puts active vehicles first, then sorts names the way people read numbers", () => {
     expect(selectDevices(fleet, "all", "").map((d) => d.deviceId)).toEqual(["b", "e", "a", "d", "c"]);
@@ -50,7 +58,7 @@ describe("list selection", () => {
     expect(selectDevices(trucks, "all", "").map((d) => d.deviceId)).toEqual(["y", "x"]);
   });
   it("filters by status and searches name, plate and tracker name without caring about case", () => {
-    expect(selectDevices(fleet, "offline", "").map((d) => d.deviceId)).toEqual(["d", "c"]);
+    expect(selectDevices(fleet, "offline", "").map((d) => d.deviceId)).toEqual(["c"]);
     expect(selectDevices(fleet, "all", "abc").map((d) => d.deviceId)).toEqual(["b"]);
     expect(selectDevices(fleet, "all", "  SPARE ").map((d) => d.deviceId)).toEqual(["c"]);
     expect(selectDevices(fleet, "moving", "truck 10")).toEqual([]);

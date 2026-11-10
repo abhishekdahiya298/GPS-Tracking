@@ -12,3 +12,4 @@ export * from "./timezones.js";
 export * from "./activity.js";
 export * from "./renewals.js";
 export * from "./loads.js";
+export * from "./app-version.js";

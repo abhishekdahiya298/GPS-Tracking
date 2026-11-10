@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AlertsProvider } from "@/alerts/AlertsProvider";
 import { SessionProvider, useSession } from "@/auth/SessionProvider";
 import { FleetProvider } from "@/fleet/FleetProvider";
+import { UpdateGate } from "@/updates/UpdateGate";
 import { colors } from "@/theme";
 
 // Keep the splash screen up until we know whether someone is signed in,
@@ -52,9 +53,12 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <SessionProvider>
-        <Screens />
-      </SessionProvider>
+      {/* Before anything else: an app version the server no longer supports can't be used. */}
+      <UpdateGate>
+        <SessionProvider>
+          <Screens />
+        </SessionProvider>
+      </UpdateGate>
     </SafeAreaProvider>
   );
 }
