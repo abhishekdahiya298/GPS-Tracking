@@ -33,7 +33,7 @@ export const STATE_COLORS: Record<MapState, string> = { moving: "#15803d", idle:
 /** Below this zoom nearby vehicles merge into one counted bubble, so a large fleet stays readable. */
 const CLUSTER_MAX_ZOOM = 8;
 const NOT_CLUSTER = ["!", ["has", "point_count"]];
-const HALO_R = 23;
+const HALO_R = 18;
 /** Below this zoom every vehicle is a small status dot: with 50+ vehicles, detailed icons would pile up. */
 const DETAIL_ZOOM = 11;
 
@@ -392,7 +392,8 @@ export class FleetLayer {
         filter: ["all", NOT_CLUSTER, ["==", ["get", "state"], "moving"]] as never,
         layout: {
           "icon-image": ["concat", "spr-", ["get", "shape"]],
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.85, 13, 1.15, 16, 1.5, 18, 1.75],
+          // Kept small on purpose: big vehicles hide the road and each other. Grows only a little when zoomed right in.
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.55, 13, 0.7, 16, 0.85, 18, 1],
           "icon-rotate": ["to-number", ["coalesce", ["get", "heading"], 0]],
           "icon-rotation-alignment": "map",
           "icon-pitch-alignment": "map",
@@ -409,6 +410,7 @@ export class FleetLayer {
         filter: ["all", NOT_CLUSTER, ["!=", ["get", "state"], "moving"]] as never,
         layout: {
           "icon-image": ["concat", "pin-", ["get", "type"], "-", ["get", "state"]],
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.7, 14, 0.8, 18, 0.95],
           "icon-anchor": "bottom",
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
@@ -427,10 +429,10 @@ export class FleetLayer {
           layout: {
             "text-field": ["format", ["get", "name"], { "font-scale": 1 }, ["case", ["==", ["get", "sub"], ""], "", ["concat", "\n", ["get", "sub"]]], { "font-scale": 0.85, "text-color": "#4b5563" }],
             "text-font": ["Noto Sans Regular"],
-            "text-size": 12,
+            "text-size": 11,
             "text-line-height": 1.25,
             "text-anchor": "top",
-            "text-offset": ["case", ["==", ["get", "state"], "moving"], ["literal", [0, 1.9]], ["literal", [0, 0.6]]],
+            "text-offset": ["case", ["==", ["get", "state"], "moving"], ["literal", [0, 1.5]], ["literal", [0, 0.5]]],
             "text-optional": true,
             "icon-image": "veh-chip",
             "icon-text-fit": "both",
