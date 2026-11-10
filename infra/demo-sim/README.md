@@ -21,19 +21,23 @@ The IMEIs are made-up numbers that pass the IMEI check digit. Register them
 model FTM880). Unregistered IMEIs are refused by Traccar and the simulator just
 retries every minute.
 
-Driving units go A → B, rest 25 min with the ignition off, drive back, rest,
+Driving units go A → B, rest 15 min with the ignition off, drive back, rest,
 forever. Their place in the cycle comes from the clock, so a restart resumes
 where each truck "should" be. Records every 30 s while moving, every 5 min while
-idling, every 30 min while parked. Routes come from the public OSRM router the
+idling, every 10 min while parked (a resting driving unit checks in every minute). Routes come from the public OSRM router the
 first time and are cached in `/opt/rio-demo-sim/cache`.
 
 ## Run on the server
 
 ```bash
-cd /opt/rio-gps && git fetch origin && git checkout origin/main -- infra/demo-sim   # or after merge: git pull
-bash /opt/rio-gps/infra/demo-sim/install.sh        # install/update + start
-docker logs -f --tail 50 rio-demo-sim              # watch
-bash /opt/rio-gps/infra/demo-sim/install.sh stop   # stop
+# Get the files without touching the /opt/rio-gps checkout (deploys fast-forward it):
+B=origin/feat/demo-sim   # or origin/main once merged
+cd /opt/rio-gps && git -c safe.directory=/opt/rio-gps fetch -q origin \
+  && rm -rf /opt/rio-demo-sim/src && mkdir -p /opt/rio-demo-sim/src \
+  && git -c safe.directory=/opt/rio-gps archive $B infra/demo-sim | tar -x -C /opt/rio-demo-sim/src
+bash /opt/rio-demo-sim/src/infra/demo-sim/install.sh        # install/update + start
+docker logs -f --tail 50 rio-demo-sim                       # watch (failures are always logged)
+bash /opt/rio-demo-sim/src/infra/demo-sim/install.sh stop   # stop
 ```
 
 Container `rio-demo-sim` (node:22-alpine, 128 MB / 0.25 CPU cap,

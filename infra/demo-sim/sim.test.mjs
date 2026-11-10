@@ -157,3 +157,22 @@ test("end to end against a mock tracker server: login, ACK, AVL record", async (
   assert.equal(parked.io[66], 0, "unhooked trailer: no external power");
   assert.ok(Math.abs(parked.lat - 43.7) < 1e-6);
 });
+
+test("sendOnce: a server that never ACKs times out instead of hanging", async () => {
+  const { sendOnce } = await import("./sim.mjs");
+  const server = net.createServer((s) => s.on("data", () => {}));
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const r = await sendOnce("127.0.0.1", server.address().port, "359990000001015", Buffer.alloc(10), 500);
+  server.close();
+  assert.equal(r.ok, false);
+  assert.equal(r.why, "timeout");
+});
+
+test("sendOnce: a server that closes after login reports failure (no silent loss)", async () => {
+  const { sendOnce } = await import("./sim.mjs");
+  const server = net.createServer((s) => s.once("data", () => { s.write(Buffer.from([1])); s.end(); }));
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const r = await sendOnce("127.0.0.1", server.address().port, "359990000001015", Buffer.alloc(10), 2000);
+  server.close();
+  assert.equal(r.ok, false);
+});

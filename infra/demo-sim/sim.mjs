@@ -164,7 +164,7 @@ export function routeState(unit, coords, cum, nowMs) {
   const total = cum[cum.length - 1];
   const cruise = (unit.speedKmh ?? 95) / 3.6; // m/s
   const driveS = total / cruise;
-  const restS = (unit.restMin ?? 25) * 60;
+  const restS = (unit.restMin ?? 15) * 60;
   const cycleS = 2 * (driveS + restS);
   const t = ((nowMs / 1000 + (unit.offsetMin ?? 0) * 60) % cycleS + cycleS) % cycleS;
   let dir;
@@ -216,11 +216,15 @@ function stateFor(unit, ctx, nowMs) {
   return { lat: unit.lat, lon: unit.lon, angle: unit.angle ?? 0, speed: 0, moving: false, ignition: false, odometer: unit.odometer ?? 0 };
 }
 
-/** Seconds until the next record: 30 s while moving, 5 min idling, 30 min parked. */
+/**
+ * Seconds until the next record: 30 s while moving, 5 min idling, 10 min parked.
+ * A driving unit that is resting is re-checked every minute so it pulls away on time.
+ */
 function intervalFor(unit, s) {
   if (s.moving) return unit.movingEverySec ?? 30;
+  if (unit.kind === "route") return 60;
   if (s.ignition ?? false) return 300;
-  return unit.parkedEverySec ?? 1800;
+  return unit.parkedEverySec ?? 600;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,55 +234,57 @@ function log(...a) {
   console.log(new Date().toISOString(), ...a);
 }
 
-function runUnit(unit, ctx, opts) {
-  let sock = null;
-  let ready = false;
-  let timer = null;
-  let backoff = 2000;
-
-  const connect = () => {
-    ready = false;
-    sock = net.createConnection({ host: opts.host, port: opts.port });
-    sock.setKeepAlive(true, 60000);
-    sock.on("connect", () => sock.write(imeiPacket(unit.imei)));
+/**
+ * Sends one record in its own short TCP session: connect, IMEI login, AVL packet,
+ * wait for the 4-byte ACK, close. This is how real Teltonika units behave between
+ * send periods, and it means a connection the server dropped while a unit was
+ * parked can never silently swallow data. Resolves true when the server ACKed.
+ */
+export function sendOnce(host, port, imei, packet, timeoutMs = 15000) {
+  return new Promise((resolve) => {
+    let done = false;
+    let loggedIn = false;
+    const sock = net.createConnection({ host, port });
+    const finish = (ok, why) => {
+      if (done) return;
+      done = true;
+      clearTimeout(t);
+      sock.destroy();
+      resolve({ ok, why });
+    };
+    const t = setTimeout(() => finish(false, "timeout"), timeoutMs);
+    sock.on("connect", () => sock.write(imeiPacket(imei)));
     sock.on("data", (buf) => {
-      if (!ready) {
-        if (buf[0] === 0x01) {
-          ready = true;
-          backoff = 2000;
-          log(`${unit.name}: logged in`);
-          tick();
-        } else {
-          log(`${unit.name}: login refused (is IMEI ${unit.imei} registered in Traccar?)`);
-          sock.destroy();
-        }
+      if (!loggedIn) {
+        if (buf[0] !== 0x01) return finish(false, "login refused");
+        loggedIn = true;
+        sock.write(packet);
+        if (buf.length >= 5) finish(true); // login byte and ACK arrived together
+        return;
       }
-      // Later data = 4-byte record count ACKs; nothing to do.
+      if (buf.length >= 4) finish(true);
     });
-    sock.on("error", (e) => log(`${unit.name}: ${e.code ?? e.message}`));
-    sock.on("close", () => {
-      ready = false;
-      clearTimeout(timer);
-      if (opts.stopping) return;
-      setTimeout(connect, backoff);
-      backoff = Math.min(backoff * 2, 60000);
-    });
-  };
+    sock.on("error", (e) => finish(false, e.code ?? e.message));
+    sock.on("close", () => finish(false, loggedIn ? "closed before ACK" : "closed before login"));
+  });
+}
 
-  const tick = () => {
-    if (!ready) return;
+function runUnit(unit, ctx, opts) {
+  let failures = 0;
+  const tick = async () => {
     const now = new Date();
     const s = stateFor(unit, ctx, now.getTime());
-    sock.write(avlPacket([record(unit, s, now)]));
-    if (opts.verbose) log(`${unit.name}: ${s.lat.toFixed(5)},${s.lon.toFixed(5)} ${Math.round(s.speed)} km/h ${s.moving ? "moving" : "stopped"}`);
-    if (opts.once) {
-      setTimeout(() => { opts.stopping = true; sock.end(); }, 1500);
-      return;
+    const r = await sendOnce(opts.host, opts.port, unit.imei, avlPacket([record(unit, s, now)]));
+    if (opts.verbose || !r.ok) {
+      log(`${unit.name}: ${r.ok ? "sent" : `FAILED (${r.why})`} ${s.lat.toFixed(5)},${s.lon.toFixed(5)} ${Math.round(s.speed)} km/h ${s.moving ? "moving" : "stopped"}`);
     }
-    timer = setTimeout(tick, intervalFor(unit, s) * 1000);
+    if (opts.once) return;
+    failures = r.ok ? 0 : failures + 1;
+    // On failure retry soon (10 s, 20 s, … up to 2 min); otherwise follow the unit's send period.
+    const next = r.ok ? intervalFor(unit, s) : Math.min(10 * 2 ** (failures - 1), 120);
+    setTimeout(tick, next * 1000);
   };
-
-  connect();
+  return tick();
 }
 
 // ---------------------------------------------------------------------------
