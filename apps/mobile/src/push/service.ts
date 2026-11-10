@@ -22,6 +22,14 @@ Notifications.setNotificationHandler({
 export async function loadPrefs(): Promise<PushPrefs> {
   return parsePrefs(await SecureStore.getItemAsync(PREFS_KEY).catch(() => null));
 }
+/** The phone's time zone name ("Asia/Kolkata"), or null when the phone can't say. */
+function phoneTimeZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
 const savePrefs = (prefs: PushPrefs) => SecureStore.setItemAsync(PREFS_KEY, JSON.stringify(prefs)).catch(() => undefined);
 
 async function pushToken(): Promise<string | null> {
@@ -54,7 +62,7 @@ export async function enablePush(prefs: PushPrefs): Promise<PushProblem | null> 
   const token = await pushToken();
   if (!token) return "no_token";
   try {
-    await api.post("push/devices", registrationBody(token, Platform.OS === "ios" ? "ios" : "android", prefs));
+    await api.post("push/devices", registrationBody(token, Platform.OS === "ios" ? "ios" : "android", prefs, phoneTimeZone()));
   } catch {
     return "server";
   }
@@ -83,6 +91,6 @@ export async function refreshPushRegistration(): Promise<void> {
   }
   const token = await pushToken();
   if (!token) return;
-  await api.post("push/devices", registrationBody(token, Platform.OS === "ios" ? "ios" : "android", prefs)).catch(() => undefined);
+  await api.post("push/devices", registrationBody(token, Platform.OS === "ios" ? "ios" : "android", prefs, phoneTimeZone())).catch(() => undefined);
   await SecureStore.setItemAsync(TOKEN_KEY, token).catch(() => undefined);
 }

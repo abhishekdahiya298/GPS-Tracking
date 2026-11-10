@@ -13,6 +13,7 @@ import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { timeAgo } from "@/fleet/model";
 import { ROW_INSET, VehicleRow } from "@/fleet/VehicleRow";
 import { firstName, fleetSummary, greeting, onTheMove } from "@/home/model";
+import { Welcome } from "@/home/Welcome";
 import { colors, elevation, font, gradient, ink, softTint, space } from "@/theme";
 
 const LOGO = require("../../assets/logo.png"); // eslint-disable-line @typescript-eslint/no-require-imports -- React Native loads images with require()
@@ -161,6 +162,7 @@ export default function HomeScreen() {
           </FadeInUp>
         </View>
       </ScrollView>
+      <Welcome />
     </View>
   );
 }

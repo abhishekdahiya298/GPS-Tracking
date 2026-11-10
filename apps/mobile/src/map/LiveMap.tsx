@@ -12,12 +12,12 @@ import { FILTERS, STATE_META, countByFilter, displayName, fleetState, selectDevi
 import { haptic } from "@/haptics";
 import { colors, elevation, font, isDark, radius, space } from "@/theme";
 import { FleetSheet } from "./FleetSheet";
-import { DEFAULT_CENTER, DEFAULT_ZOOM, DETAIL_ZOOM, MAP_STYLES, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
+import { DEFAULT_CENTER, DEFAULT_ZOOM, DETAIL_ZOOM, FOCUS_ZOOM, MAP_STYLES, focusZoom, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
 import { VEHICLE_IMAGES } from "./sprites";
 import { useGlide } from "./useGlide";
 
 const FIT_PADDING = { top: 150, right: 50, bottom: 230, left: 50 };
-const FOLLOW_ZOOM = 14;
+const FOLLOW_ZOOM = FOCUS_ZOOM;
 const STYLE_KEY = "rio.map-style";
 const NOT_CLUSTER: ["!", ["has", string]] = ["!", ["has", "point_count"]];
 
@@ -46,6 +46,10 @@ export default function LiveMap() {
   const fitted = useRef(false);
   // A tap on a vehicle must not also count as a tap on empty map (which closes the card).
   const vehicleTapAt = useRef(0);
+  // How far in the map is right now, and the latest fleet, for use inside tap handlers.
+  const zoomNow = useRef<number | null>(null);
+  const devicesNow = useRef(devices);
+  devicesNow.current = devices;
 
   // The status filter narrows the map exactly as it narrows the list.
   const visible = useMemo(() => (filter === "all" ? devices : selectDevices(devices, filter, "")), [devices, filter]);
@@ -129,6 +133,9 @@ export default function LiveMap() {
       haptic.tap();
       setSelectedId(tap.deviceId);
       setFollowing(false);
+      // Bring the vehicle to the middle and come in close enough to see its road.
+      const at = positionOf(devicesNow.current.find((d) => d.deviceId === tap.deviceId));
+      if (at) camera.current?.flyTo({ center: at, zoom: focusZoom(zoomNow.current), duration: 700 });
     } else if (tap.kind === "cluster") {
       // Zoom in just far enough for the group to split.
       const zoom = await source.current?.getClusterExpansionZoom(tap.clusterId).catch(() => null);
@@ -168,6 +175,9 @@ export default function LiveMap() {
         onDidFinishLoadingMap={() => setMapReady(true)}
         onDidFailLoadingMap={() => setMapFailed(true)}
         // Dragging the map by hand ends follow mode, as on the website.
+        onRegionDidChange={(e) => {
+          zoomNow.current = e.nativeEvent.zoom;
+        }}
         onRegionWillChange={(e) => {
           if (e.nativeEvent.userInteraction) setFollowing(false);
         }}

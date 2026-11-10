@@ -223,6 +223,11 @@ export function boundsOf(devices: FleetDevice[], minSpanDeg = 0.02): [number, nu
   return [west, south, east, north];
 }
 
+/** Close enough to see the road a vehicle is on. */
+export const FOCUS_ZOOM = 14.5;
+/** Zoom to use when a vehicle is tapped: come in close, but never zoom out if the person is already closer. */
+export const focusZoom = (current: number | null | undefined): number => (typeof current === "number" && Number.isFinite(current) ? Math.max(current, FOCUS_ZOOM) : FOCUS_ZOOM);
+
 /** What a tap on the map hit: a group of vehicles, one vehicle, or nothing. */
 export function readTap(features: GeoJSON.Feature[] | undefined): { kind: "cluster"; clusterId: number; at: [number, number] } | { kind: "vehicle"; deviceId: string } | { kind: "none" } {
   const f = features?.[0];

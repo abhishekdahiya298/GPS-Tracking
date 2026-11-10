@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FleetDevice } from "../fleet/model";
-import { MAP_STYLES, TRAIL_POINTS, bearing, boundsOf, distanceKm, isMapStyleId, lerpLngLat, nextTrails, positionOf, readTap, shapeOf, shouldAnimate, spriteName, styleUrl, toFeatures, trailFeatures, zoneFeatures, type Zone } from "./model";
+import { FOCUS_ZOOM, MAP_STYLES, focusZoom, TRAIL_POINTS, bearing, boundsOf, distanceKm, isMapStyleId, lerpLngLat, nextTrails, positionOf, readTap, shapeOf, shouldAnimate, spriteName, styleUrl, toFeatures, trailFeatures, zoneFeatures, type Zone } from "./model";
 
 const dev = (id: string, lat: number | null, lng: number | null, over: Partial<FleetDevice> = {}): FleetDevice => ({
   deviceId: id, model: "FTM880", name: null, deviceStatus: "active", vehicle: { id, name: `Truck ${id}`, licensePlate: null, type: "truck" }, connectivity: "online", lastSeenAt: "2026-10-09T12:00:00Z",
@@ -139,5 +139,34 @@ describe("zones", () => {
       { id: "z", name: "z", color: "#000000", shape: null }
     ] as unknown as Zone[];
     expect(zoneFeatures(bad).features).toHaveLength(0);
+  });
+});
+
+describe("tapping a vehicle", () => {
+  it("zooms in close, and never out when already closer", () => {
+    expect(focusZoom(6)).toBe(FOCUS_ZOOM);
+    expect(focusZoom(17)).toBe(17);
+    expect(focusZoom(null)).toBe(FOCUS_ZOOM);
+    expect(focusZoom(NaN)).toBe(FOCUS_ZOOM);
+  });
+});
+
+describe("large fleets", () => {
+  it("prepares 1,000 vehicles for the map quickly", () => {
+    const fleet = Array.from({ length: 1000 }, (_, i) => dev(`d${i}`, 40 + (i % 100) / 10, -90 + (i % 200) / 10));
+    let trails = nextTrails(new Map(), fleet);
+    const started = performance.now();
+    for (let round = 0; round < 20; round++) {
+      const moved = fleet.map((d, i) => dev(d.deviceId, 40 + (i % 100) / 10 + (round + 1) / 1000, -90 + (i % 200) / 10));
+      trails = nextTrails(trails, moved);
+      const features = toFeatures(moved, (k) => `${Math.round(k ?? 0)} km/h`);
+      expect(features.features).toHaveLength(1000);
+      trailFeatures(trails);
+      boundsOf(moved);
+    }
+    // 20 full updates of 1,000 vehicles. On a laptop this takes a few tens of milliseconds;
+    // the limit is loose so a slow test machine does not fail it.
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(trails.size).toBe(1000);
   });
 });

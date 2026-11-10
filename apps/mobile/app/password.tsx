@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from "react-native";
-import { ApiError, api } from "@/api";
+import { ApiError, api, tokenStore } from "@/api";
 import { Card } from "@/components/kit";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { haptic } from "@/haptics";
@@ -18,6 +18,7 @@ export default function ChangePasswordScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [kept, setKept] = useState(true);
 
   async function submit() {
     if (!current || !next) return setError("Enter your current password and a new one.");
@@ -26,8 +27,12 @@ export default function ChangePasswordScreen() {
     setBusy(true);
     setError(null);
     try {
-      // This phone stays signed in; other devices keep their sessions too.
-      await api.send("change-password", { method: "POST", area: "auth", body: { currentPassword: current, newPassword: next, revokeOtherSessions: false } });
+      // As on the website: every other device is signed out. The server answers with a new
+      // session for this phone; without it this phone is signed out too at its next request.
+      const { headers } = await api.send("change-password", { method: "POST", area: "auth", body: { currentPassword: current, newPassword: next, revokeOtherSessions: true } });
+      const fresh = headers.get("set-auth-token");
+      if (fresh) await tokenStore.set(fresh);
+      setKept(!!fresh);
       haptic.success();
       setDone(true);
       setCurrent("");
@@ -51,7 +56,9 @@ export default function ChangePasswordScreen() {
           {done ? (
             <>
               <Text style={styles.title}>Password changed</Text>
-              <Text style={styles.note}>Use the new password the next time you sign in, here and on the website.</Text>
+              <Text style={styles.note}>
+                {kept ? "Your other devices have been signed out. Use the new password the next time you sign in, here and on the website." : "All devices have been signed out, including this phone. Sign in again with the new password."}
+              </Text>
               <Button title="Done" onPress={() => router.back()} />
             </>
           ) : (

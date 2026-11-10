@@ -11,7 +11,8 @@ import { FadeInUp, PressableScale, PulseDot } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { API_BASE_URL } from "@/config";
 import { haptic } from "@/haptics";
-import { DEFAULT_PREFS, PROBLEM_TEXT, PUSH_KINDS, type PushPrefs } from "@/push/model";
+import { useFleet } from "@/fleet/FleetProvider";
+import { DEFAULT_PREFS, PROBLEM_TEXT, PUSH_KINDS, clockText, wrapMinutes, type PushPrefs } from "@/push/model";
 import { disablePush, enablePush, loadPrefs } from "@/push/service";
 import { colors, elevation, font, gradient, space } from "@/theme";
 
@@ -23,6 +24,7 @@ export default function AccountScreen() {
   const [check, setCheck] = useState<Check>({ state: "checking" });
   const [leaving, setLeaving] = useState(false);
   const router = useRouter();
+  const { timeFormat } = useFleet();
   const [push, setPush] = useState<PushPrefs>(DEFAULT_PREFS);
   const [pushBusy, setPushBusy] = useState(false);
 
@@ -137,6 +139,21 @@ export default function AccountScreen() {
                 </View>
               ))
             : null}
+          {push.enabled ? (
+            <View style={[styles.setting, styles.sub]}>
+              <View style={styles.flex}>
+                <Text style={styles.subTitle}>Quiet hours</Text>
+                <Text style={styles.settingNote}>No notifications at night. Alerts still show in the app.</Text>
+              </View>
+              <Switch value={push.quiet} disabled={pushBusy} onValueChange={(on) => void changePush({ ...push, quiet: on })} trackColor={{ true: colors.primary }} accessibilityLabel="Quiet hours" />
+            </View>
+          ) : null}
+          {push.enabled && push.quiet ? (
+            <View style={[styles.sub, styles.times]}>
+              <TimeStep label="From" value={clockText(push.quietStart, timeFormat)} disabled={pushBusy} onStep={(by) => void changePush({ ...push, quietStart: wrapMinutes(push.quietStart + by) })} />
+              <TimeStep label="To" value={clockText(push.quietEnd, timeFormat)} disabled={pushBusy} onStep={(by) => void changePush({ ...push, quietEnd: wrapMinutes(push.quietEnd + by) })} />
+            </View>
+          ) : null}
         </Card>
       </FadeInUp>
 
@@ -153,6 +170,24 @@ export default function AccountScreen() {
       </FadeInUp>
       <Text style={styles.footer}>RIO GPS {Constants.expoConfig?.version ?? ""}</Text>
     </ScrollView>
+  );
+}
+
+/** A time of day with earlier / later buttons, in half-hour steps. */
+function TimeStep({ label, value, disabled, onStep }: { label: string; value: string; disabled: boolean; onStep: (minutes: number) => void }) {
+  return (
+    <View style={styles.time}>
+      <Text style={styles.settingNote}>{label}</Text>
+      <View style={styles.timeRow}>
+        <PressableScale onPress={() => onStep(-30)} disabled={disabled} scaleTo={0.88} style={styles.timeButton} accessibilityRole="button" accessibilityLabel={`${label}: half an hour earlier`}>
+          <Ionicons name="remove" size={18} color={colors.primary} />
+        </PressableScale>
+        <Text style={styles.timeValue} accessibilityLabel={`${label} ${value}`}>{value}</Text>
+        <PressableScale onPress={() => onStep(30)} disabled={disabled} scaleTo={0.88} style={styles.timeButton} accessibilityRole="button" accessibilityLabel={`${label}: half an hour later`}>
+          <Ionicons name="add" size={18} color={colors.primary} />
+        </PressableScale>
+      </View>
+    </View>
   );
 }
 
@@ -173,6 +208,11 @@ const styles = StyleSheet.create({
   settingTitle: { fontSize: 16, fontWeight: "700", color: colors.foreground },
   subTitle: { fontSize: font.body, fontWeight: "600", color: colors.foreground },
   settingNote: { fontSize: font.small, color: colors.mutedForeground, marginTop: 1 },
+  times: { flexDirection: "row", gap: space.lg, paddingVertical: space.md },
+  time: { flex: 1, gap: 4 },
+  timeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: colors.muted, borderRadius: 12, padding: 4 },
+  timeButton: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.background, alignItems: "center", justifyContent: "center" },
+  timeValue: { fontSize: font.body, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
   link: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 50 },
   linkLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   linkText: { flex: 1, fontSize: 16, fontWeight: "500", color: colors.foreground },
