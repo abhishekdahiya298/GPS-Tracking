@@ -1,29 +1,38 @@
 import type { Ref } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
-import { colors, font, radius, space } from "../theme";
+import { Ionicons } from "@expo/vector-icons";
+import { ActivityIndicator, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
+import { colors, elevation, font, radius, space } from "../theme";
+import { PressableScale } from "./motion";
 
-export function Button({ title, onPress, loading, variant = "primary", disabled }: { title: string; onPress: () => void; loading?: boolean; variant?: "primary" | "ghost" | "danger"; disabled?: boolean }) {
+export function Button({ title, onPress, loading, variant = "primary", disabled, icon }: { title: string; onPress: () => void; loading?: boolean; variant?: "primary" | "ghost" | "danger" | "outline"; disabled?: boolean; icon?: keyof typeof Ionicons.glyphMap }) {
   const off = disabled || loading;
+  const tint = variant === "primary" ? colors.primaryForeground : variant === "danger" ? colors.danger : colors.primary;
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
       disabled={off}
+      feedback={variant === "primary" ? "press" : "tap"}
       accessibilityRole="button"
+      accessibilityLabel={title}
       accessibilityState={{ disabled: !!off, busy: !!loading }}
-      style={({ pressed }) => [
+      style={[
         styles.button,
-        variant === "primary" && { backgroundColor: pressed ? colors.primaryDark : colors.primary },
-        variant === "danger" && { backgroundColor: pressed ? colors.dangerSoft : colors.background, borderWidth: 1, borderColor: colors.danger },
-        variant === "ghost" && { backgroundColor: pressed ? colors.muted : "transparent", minHeight: 40 },
+        variant === "primary" && styles.primary,
+        variant === "danger" && { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.danger },
+        variant === "outline" && { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
+        variant === "ghost" && { backgroundColor: "transparent", minHeight: 40 },
         off && { opacity: 0.6 }
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "primary" ? colors.primaryForeground : colors.primary} />
+        <ActivityIndicator color={tint} />
       ) : (
-        <Text style={[styles.buttonText, variant === "ghost" && { color: colors.primary, fontWeight: "500" }, variant === "danger" && { color: colors.danger }]}>{title}</Text>
+        <>
+          {icon ? <Ionicons name={icon} size={18} color={tint} /> : null}
+          <Text style={[styles.buttonText, { color: tint }, variant === "ghost" && { fontWeight: "600" }]}>{title}</Text>
+        </>
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -45,12 +54,13 @@ export function ErrorNote({ text }: { text: string }) {
 }
 
 const styles = StyleSheet.create({
-  button: { minHeight: 48, borderRadius: radius.md, alignItems: "center", justifyContent: "center", paddingHorizontal: space.lg },
+  button: { minHeight: 50, borderRadius: radius.xl, flexDirection: "row", gap: space.sm, alignItems: "center", justifyContent: "center", paddingHorizontal: space.lg },
+  primary: { backgroundColor: colors.primary, ...elevation.sm },
   buttonText: { color: colors.primaryForeground, fontSize: font.body, fontWeight: "600" },
   field: { gap: space.xs },
   label: { fontSize: font.small, fontWeight: "500", color: colors.foreground },
   // 16px text: iOS zooms the screen on focus for anything smaller.
-  input: { minHeight: 48, borderWidth: 1, borderColor: "#d4d8df", borderRadius: radius.md, paddingHorizontal: space.md, fontSize: 16, color: colors.foreground, backgroundColor: colors.background },
+  input: { minHeight: 50, borderWidth: 1, borderColor: "#d4d8df", borderRadius: radius.xl, paddingHorizontal: space.md, fontSize: 16, color: colors.foreground, backgroundColor: colors.background },
   error: { backgroundColor: colors.dangerSoft, borderRadius: radius.md, padding: space.md },
   errorText: { color: colors.danger, fontSize: font.small, lineHeight: 19 }
 });

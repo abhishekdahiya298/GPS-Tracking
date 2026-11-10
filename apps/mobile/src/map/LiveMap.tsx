@@ -3,9 +3,12 @@ import { Camera, GeoJSONSource, Layer, Map, type CameraRef, type GeoJSONSourceRe
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, type NativeSyntheticEvent } from "react-native";
+import { StatusPill } from "@/components/kit";
+import { PressableScale, PulseDot, SlideUp } from "@/components/motion";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
+import { haptic } from "@/haptics";
 import { STATE_META, countByFilter, displayName, fleetState, statusLine } from "@/fleet/model";
-import { colors, font, radius, space } from "@/theme";
+import { colors, elevation, font, radius, space } from "@/theme";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, MAP_STYLE_URL, boundsOf, positionOf, readTap, toFeatures } from "./model";
 
 const FIT_PADDING = { top: 90, right: 50, bottom: 200, left: 50 };
@@ -73,6 +76,7 @@ export default function LiveMap() {
     const tap = readTap(event.nativeEvent.features);
     if (tap.kind !== "none") vehicleTapAt.current = Date.now();
     if (tap.kind === "vehicle") {
+      haptic.tap();
       setSelectedId(tap.deviceId);
       setFollowing(false);
     } else if (tap.kind === "cluster") {
@@ -84,11 +88,11 @@ export default function LiveMap() {
 
   function toggleFollow() {
     if (!selectedAt) return;
+    haptic.press();
     if (!following) camera.current?.flyTo({ center: selectedAt, zoom: FOLLOW_ZOOM, duration: 700 });
     setFollowing(!following);
   }
 
-  const meta = selected ? STATE_META[fleetState(selected)] : null;
 
   return (
     <View style={styles.wrap}>
@@ -140,15 +144,17 @@ export default function LiveMap() {
       <View style={styles.summary} pointerEvents="none">
         {(["moving", "idle", "stopped", "offline"] as const).map((key) => (
           <View key={key} style={styles.summaryItem}>
-            <View style={[styles.dot, { backgroundColor: STATE_META[key].color }]} />
+            <PulseDot size={9} color={STATE_META[key].color} live={key === "moving" && counts[key] > 0} />
             <Text style={styles.summaryText}>{counts[key]}</Text>
           </View>
         ))}
       </View>
 
-      <Pressable onPress={fitAll} style={({ pressed }) => [styles.fab, pressed && { backgroundColor: colors.muted }]} accessibilityRole="button" accessibilityLabel="Show all vehicles">
-        <Ionicons name="scan-outline" size={22} color={colors.primary} />
-      </Pressable>
+      <View style={styles.fabSlot}>
+        <PressableScale onPress={fitAll} scaleTo={0.9} style={styles.fab} accessibilityRole="button" accessibilityLabel="Show all vehicles">
+          <Ionicons name="scan-outline" size={22} color={colors.primary} />
+        </PressableScale>
+      </View>
 
       {loading || !mapReady ? (
         <View style={styles.notice} pointerEvents="none">
@@ -164,17 +170,15 @@ export default function LiveMap() {
         </View>
       ) : null}
 
-      {selected && meta ? (
-        <View style={styles.card}>
+      {selected ? (
+        // Keyed by vehicle, so choosing another one slides a fresh card in.
+        <SlideUp key={selected.deviceId} style={styles.card}>
           <View style={styles.cardHead}>
             <View style={styles.flex}>
               <Text style={styles.cardName} numberOfLines={1}>{displayName(selected)}</Text>
               <Text style={styles.cardSub} numberOfLines={1}>{statusLine(selected, units.fmtSpeed, now)}</Text>
             </View>
-            <View style={[styles.pill, { backgroundColor: meta.soft }]}>
-              <View style={[styles.dot, { backgroundColor: meta.color }]} />
-              <Text style={[styles.pillText, { color: meta.color }]}>{meta.label}</Text>
-            </View>
+            <StatusPill state={fleetState(selected)} compact />
             <Pressable onPress={() => setSelectedId(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
               <Ionicons name="close" size={22} color={colors.mutedForeground} />
             </Pressable>
@@ -189,13 +193,13 @@ export default function LiveMap() {
               <Text style={styles.actionText}>Details</Text>
             </Pressable>
           </View>
-        </View>
+        </SlideUp>
       ) : null}
     </View>
   );
 }
 
-const shadow = { shadowColor: "#101828", shadowOpacity: 0.14, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 4 };
+const shadow = elevation.md;
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   map: { flex: 1 },
@@ -203,18 +207,16 @@ const styles = StyleSheet.create({
   summary: { position: "absolute", top: space.md, left: space.md, flexDirection: "row", gap: space.md, backgroundColor: colors.background, borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: space.sm, ...shadow },
   summaryItem: { flexDirection: "row", alignItems: "center", gap: 6 },
   summaryText: { fontSize: font.small, fontWeight: "600", color: colors.foreground },
-  dot: { width: 9, height: 9, borderRadius: 5 },
-  fab: { position: "absolute", top: space.md, right: space.md, width: 44, height: 44, borderRadius: 22, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", ...shadow },
+  fabSlot: { position: "absolute", top: space.md, right: space.md },
+  fab: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", ...shadow },
   notice: { position: "absolute", top: 68, alignSelf: "center", maxWidth: "86%", backgroundColor: colors.background, borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: space.sm, ...shadow },
   noticeText: { fontSize: font.small, color: colors.foreground, textAlign: "center" },
-  card: { position: "absolute", left: space.md, right: space.md, bottom: space.md, backgroundColor: colors.background, borderRadius: radius.xl, padding: space.lg, gap: space.md, ...shadow },
+  card: { position: "absolute", left: space.md, right: space.md, bottom: space.md, backgroundColor: colors.background, borderRadius: 18, padding: space.lg, gap: space.md, ...elevation.lg },
   cardHead: { flexDirection: "row", alignItems: "center", gap: space.md },
   cardName: { fontSize: font.title, fontWeight: "700", color: colors.foreground },
   cardSub: { fontSize: font.small, color: colors.mutedForeground, marginTop: 2 },
-  pill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: 12 },
-  pillText: { fontSize: 12, fontWeight: "600" },
   cardActions: { flexDirection: "row", gap: space.sm },
-  action: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 44, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border },
+  action: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 46, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border },
   actionOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   actionText: { fontSize: font.body, fontWeight: "600", color: colors.primary }
 });

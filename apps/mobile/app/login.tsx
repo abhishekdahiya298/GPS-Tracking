@@ -1,10 +1,12 @@
 import { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { codeFailure, signInMessage, type CodeKind } from "@/auth/service";
 import { useSession } from "@/auth/SessionProvider";
+import { FadeInUp } from "@/components/motion";
 import { Button, ErrorNote, Field } from "@/components/ui";
-import { colors, font, radius, space } from "@/theme";
+import { colors, elevation, font, gradient, space } from "@/theme";
 
 export default function LoginScreen() {
   const { signIn, verifyCode } = useSession();
@@ -67,15 +69,16 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <LinearGradient colors={gradient.brand} start={gradient.angle.start} end={gradient.angle.end} style={styles.flex}>
+    <SafeAreaView style={styles.flex}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.brand}>
+          <FadeInUp style={styles.brand} distance={20}>
             <Text style={styles.brandName}>RIO GPS</Text>
             <Text style={styles.brandNote}>Fleet tracking</Text>
-          </View>
+          </FadeInUp>
 
-          <View style={styles.card}>
+          <FadeInUp index={2} distance={24} style={styles.card}>
             {pending ? (
               <>
                 <Text style={styles.title}>Two-step verification</Text>
@@ -145,21 +148,21 @@ export default function LoginScreen() {
                 <Text style={styles.footnote}>Accounts are created by your administrator. To reset a password, use the website.</Text>
               </>
             )}
-          </View>
+          </FadeInUp>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.primaryDark },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: "center", padding: space.lg },
   brand: { alignItems: "center", marginBottom: space.xl },
-  brandName: { color: colors.primaryForeground, fontSize: 30, fontWeight: "700", letterSpacing: 1 },
+  brandName: { color: colors.primaryForeground, fontSize: 34, fontWeight: "800", letterSpacing: 1.5 },
   brandNote: { color: "#c7d3f2", fontSize: font.body, marginTop: space.xs },
-  card: { backgroundColor: colors.background, borderRadius: radius.xl, padding: space.xl, gap: space.lg },
+  card: { backgroundColor: colors.background, borderRadius: 22, padding: space.xl, gap: space.lg, ...elevation.lg },
   title: { fontSize: font.heading, fontWeight: "700", color: colors.foreground },
   help: { fontSize: font.body, color: colors.mutedForeground, lineHeight: 21, marginTop: -space.sm },
   code: { letterSpacing: 4, fontSize: 20 },

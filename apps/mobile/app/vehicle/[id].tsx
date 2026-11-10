@@ -2,17 +2,19 @@ import { Ionicons } from "@expo/vector-icons";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Card, EmptyState, StatusPill, VehicleAvatar } from "@/components/kit";
+import { FadeInUp } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { STATE_META, compassPoint, displayName, fleetState, statusLine, timeAgo } from "@/fleet/model";
+import { compassPoint, displayName, fleetState, statusLine, timeAgo } from "@/fleet/model";
 import { colors, font, radius, space } from "@/theme";
 
 // The map only exists in the installed app (see app/(tabs)/index.tsx).
 const hasMap = Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, last }: { label: string; value: string; last?: boolean }) {
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, last && styles.rowLast]}>
       <Text style={styles.label}>{label}</Text>
       <Text style={styles.value} selectable>{value}</Text>
     </View>
@@ -30,15 +32,12 @@ export default function VehicleScreen() {
     return (
       <View style={styles.missing}>
         <Stack.Screen options={{ title: "Vehicle" }} />
-        <Ionicons name="help-circle-outline" size={36} color={colors.offline} />
-        <Text style={styles.name}>Vehicle not found</Text>
-        <Text style={styles.sub}>It may have been removed. Go back to the list.</Text>
+        <EmptyState icon="help-circle-outline" title="Vehicle not found" note="It may have been removed. Go back to the list." />
       </View>
     );
   }
 
   const state = fleetState(device);
-  const meta = STATE_META[state];
   const loc = device.location;
   const name = displayName(device);
   const point = compassPoint(loc?.headingDeg ?? null);
@@ -51,56 +50,83 @@ export default function VehicleScreen() {
     Linking.openURL(url).catch(() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${at}`));
   }
 
+  const type = device.vehicle?.type;
+  const stats: Array<{ icon: keyof typeof Ionicons.glyphMap; label: string; value: string }> = [
+    { icon: "speedometer-outline", label: "Speed", value: loc && state !== "offline" && state !== "parked" ? units.fmtSpeed(loc.speedKph) : "—" },
+    { icon: "compass-outline", label: "Heading", value: loc?.headingDeg != null && point ? `${point} ${Math.round(loc.headingDeg)}°` : "—" },
+    { icon: "key-outline", label: "Engine", value: loc?.ignition === true ? "On" : loc?.ignition === false ? "Off" : "—" }
+  ];
+
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: name }} />
 
-      <View style={styles.card}>
-        <View style={styles.head}>
-          <View style={styles.flex}>
-            <Text style={styles.name}>{name}</Text>
-            {device.vehicle?.licensePlate ? <Text style={styles.sub}>{device.vehicle.licensePlate}</Text> : null}
+      <FadeInUp index={0}>
+        <Card>
+          <View style={styles.head}>
+            <VehicleAvatar type={type} state={state} size={54} />
+            <View style={styles.flex}>
+              <Text style={styles.name}>{name}</Text>
+              {device.vehicle?.licensePlate ? (
+                <View style={styles.plate}>
+                  <Text style={styles.plateText}>{device.vehicle.licensePlate}</Text>
+                </View>
+              ) : null}
+            </View>
+            <StatusPill state={state} compact />
           </View>
-          <View style={[styles.pill, { backgroundColor: meta.soft }]}>
-            <View style={[styles.dot, { backgroundColor: meta.color }]} />
-            <Text style={[styles.pillText, { color: meta.color }]}>{meta.label}</Text>
-          </View>
-        </View>
-        <Text style={styles.summary}>{statusLine(device, units.fmtSpeed, now)}</Text>
-      </View>
+          <Text style={styles.summary}>{statusLine(device, units.fmtSpeed, now)}</Text>
+        </Card>
+      </FadeInUp>
 
-      <View style={styles.card}>
-        <Row label="Speed" value={loc && state !== "offline" ? units.fmtSpeed(loc.speedKph) : "Not available"} />
-        <Row label="Heading" value={loc?.headingDeg != null && point ? `${point} (${Math.round(loc.headingDeg)}°)` : "Not available"} />
-        <Row label="Engine" value={loc?.ignition === true ? "On" : loc?.ignition === false ? "Off" : "Not reported"} />
-        <Row label="Last position" value={loc ? `${timeAgo(loc.recordedAt, now)} · ${new Date(loc.recordedAt).toLocaleString()}` : "None yet"} />
-        <Row label="Tracker last heard" value={device.lastSeenAt ? timeAgo(device.lastSeenAt, now) : "Never"} />
-        <Row label="Coordinates" value={loc ? `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}` : "None yet"} />
-        {device.vehicle ? <Row label="Type" value={device.vehicle.type.charAt(0).toUpperCase() + device.vehicle.type.slice(1)} /> : null}
-        {device.model ? <Row label="Tracker" value={device.model} /> : null}
-      </View>
+      <FadeInUp index={1} style={styles.stats}>
+        {stats.map((s) => (
+          <Card key={s.label} style={styles.stat}>
+            <Ionicons name={s.icon} size={18} color={colors.primary} />
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{s.value}</Text>
+            <Text style={styles.statLabel}>{s.label}</Text>
+          </Card>
+        ))}
+      </FadeInUp>
 
-      <Button variant={loc && hasMap ? "ghost" : "primary"} title="Trip history" onPress={() => router.push({ pathname: "/trips/[id]", params: { id: device.deviceId } })} />
-      {loc && hasMap ? <Button title="Show on map" onPress={() => router.navigate({ pathname: "/(tabs)", params: { device: device.deviceId } })} /> : null}
-      {loc ? <Button variant={hasMap ? "ghost" : "primary"} title="Open in Maps" onPress={openInMaps} /> : null}
+      <FadeInUp index={2}>
+        <Card style={styles.rows}>
+          <Row label="Last position" value={loc ? `${timeAgo(loc.recordedAt, now)} · ${new Date(loc.recordedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : "None yet"} />
+          <Row label="Tracker last heard" value={device.lastSeenAt ? timeAgo(device.lastSeenAt, now) : "Never"} />
+          <Row label="Coordinates" value={loc ? `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}` : "None yet"} />
+          {type ? <Row label="Type" value={type.charAt(0).toUpperCase() + type.slice(1)} /> : null}
+          {device.model ? <Row label="Tracker" value={device.model} last /> : null}
+        </Card>
+      </FadeInUp>
+
+      <FadeInUp index={3} style={styles.actions}>
+        {loc && hasMap ? <Button title="Show on map" icon="navigate" onPress={() => router.navigate({ pathname: "/(tabs)", params: { device: device.deviceId } })} /> : null}
+        <Button variant={loc && hasMap ? "outline" : "primary"} icon="time-outline" title="Trip history" onPress={() => router.push({ pathname: "/trips/[id]", params: { id: device.deviceId } })} />
+        {loc ? <Button variant="outline" icon="open-outline" title="Open in Maps" onPress={openInMaps} /> : null}
+      </FadeInUp>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
-  content: { padding: space.lg, gap: space.lg },
+  content: { padding: space.lg, gap: space.md, paddingBottom: space.xxl },
   flex: { flex: 1 },
-  missing: { flex: 1, alignItems: "center", justifyContent: "center", gap: space.sm, padding: space.xl, backgroundColor: colors.canvas },
-  card: { backgroundColor: colors.background, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: space.lg },
-  head: { flexDirection: "row", alignItems: "flex-start", gap: space.md },
-  name: { fontSize: font.title, fontWeight: "700", color: colors.foreground },
-  sub: { fontSize: font.body, color: colors.mutedForeground, marginTop: 2, textAlign: "center" },
-  summary: { fontSize: font.body, color: colors.foreground, marginTop: space.md },
-  pill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: space.sm, paddingVertical: 4, borderRadius: 12 },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  pillText: { fontSize: 12, fontWeight: "600" },
-  row: { flexDirection: "row", justifyContent: "space-between", gap: space.lg, paddingVertical: space.sm },
+  missing: { flex: 1, backgroundColor: colors.canvas },
+  head: { flexDirection: "row", alignItems: "center", gap: space.md },
+  name: { fontSize: 20, fontWeight: "800", color: colors.foreground },
+  // Left-aligned under the name (it used to be centred, which looked broken).
+  plate: { alignSelf: "flex-start", marginTop: 4, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.canvas },
+  plateText: { fontSize: 12, fontWeight: "600", color: colors.mutedForeground, letterSpacing: 0.4 },
+  summary: { fontSize: font.body, color: colors.mutedForeground, marginTop: space.md },
+  stats: { flexDirection: "row", gap: space.md },
+  stat: { flex: 1, padding: space.md, gap: 4 },
+  statValue: { fontSize: 20, fontWeight: "800", color: colors.foreground },
+  statLabel: { fontSize: 12, color: colors.mutedForeground, fontWeight: "500" },
+  rows: { paddingVertical: space.xs },
+  row: { flexDirection: "row", justifyContent: "space-between", gap: space.lg, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  rowLast: { borderBottomWidth: 0 },
   label: { fontSize: font.body, color: colors.mutedForeground },
-  value: { flex: 1, fontSize: font.body, color: colors.foreground, textAlign: "right" }
+  value: { flex: 1, fontSize: font.body, fontWeight: "500", color: colors.foreground, textAlign: "right" },
+  actions: { gap: space.sm, marginTop: space.xs }
 });

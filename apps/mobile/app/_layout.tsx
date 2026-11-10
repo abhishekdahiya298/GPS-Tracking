@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AlertsProvider } from "@/alerts/AlertsProvider";
 import { SessionProvider, useSession } from "@/auth/SessionProvider";
+import { HeaderBackground } from "@/components/kit";
 import { FleetProvider } from "@/fleet/FleetProvider";
 import { UpdateGate } from "@/updates/UpdateGate";
 import { colors } from "@/theme";
@@ -14,7 +15,7 @@ import { colors } from "@/theme";
 void SplashScreen.preventAutoHideAsync();
 
 /** Screens opened on top of the tabs share one header style. */
-const pushed = { headerShown: true, headerBackTitle: "Back", headerStyle: { backgroundColor: colors.primaryDark }, headerTintColor: colors.primaryForeground } as const;
+const pushed = { headerShown: true, headerBackTitle: "Back", headerBackground: () => <HeaderBackground />, headerTintColor: colors.primaryForeground, headerTitleStyle: { fontWeight: "700" as const }, headerShadowVisible: false };
 
 function Screens() {
   const { state } = useSession();
