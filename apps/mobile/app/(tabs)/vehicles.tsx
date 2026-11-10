@@ -1,13 +1,13 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { FlatList, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Banner, Chip, EmptyState, ListSkeleton, SearchBox, StatusPill, VehicleAvatar } from "@/components/kit";
-import { FadeInUp, PressableScale, Skeleton } from "@/components/motion";
+import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Banner, Chip, EmptyState, ListSkeleton, SearchBox } from "@/components/kit";
+import { FadeInUp, Skeleton } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { FILTERS, STATE_META, countByFilter, displayName, fleetState, selectDevices, statusLine, type FleetDevice, type FleetFilter } from "@/fleet/model";
-import { colors, font, radius, space } from "@/theme";
+import { FILTERS, STATE_META, countByFilter, selectDevices, type FleetDevice, type FleetFilter } from "@/fleet/model";
+import { ROW_INSET, VehicleRow } from "@/fleet/VehicleRow";
+import { colors, radius, space } from "@/theme";
 
 export default function VehiclesScreen() {
   const router = useRouter();
@@ -47,36 +47,13 @@ export default function VehiclesScreen() {
     );
   }
 
-  const row = ({ item, index }: { item: FleetDevice; index: number }) => {
-    const state = fleetState(item);
-    return (
-      // Only the first screenful staggers in; rows reached by scrolling appear at once.
-      <FadeInUp index={index < 10 ? index : 0} distance={index < 10 ? 12 : 0}>
-        <PressableScale
-          onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: item.deviceId } })}
-          style={styles.row}
-          scaleTo={0.985}
-          accessibilityRole="button"
-          accessibilityLabel={`${displayName(item)}, ${STATE_META[state].label}`}
-        >
-          <VehicleAvatar type={item.vehicle?.type} state={state} />
-          <View style={styles.flex}>
-            <View style={styles.nameLine}>
-              <Text style={styles.name} numberOfLines={1}>{displayName(item)}</Text>
-              {item.vehicle?.licensePlate ? (
-                <View style={styles.plate}>
-                  <Text style={styles.plateText} numberOfLines={1}>{item.vehicle.licensePlate}</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={styles.sub} numberOfLines={1}>{statusLine(item, units.fmtSpeed, now)}</Text>
-          </View>
-          <StatusPill state={state} compact />
-          <Ionicons name="chevron-forward" size={16} color={colors.border} />
-        </PressableScale>
-      </FadeInUp>
-    );
-  };
+  const open = (deviceId: string) => router.push({ pathname: "/vehicle/[id]", params: { id: deviceId } });
+  const row = ({ item, index }: { item: FleetDevice; index: number }) => (
+    // Only the first screenful staggers in; rows reached by scrolling appear at once.
+    <FadeInUp index={index < 10 ? index : 0} distance={index < 10 ? 12 : 0}>
+      <VehicleRow device={item} fmtSpeed={units.fmtSpeed} now={now} onPress={open} />
+    </FadeInUp>
+  );
 
   return (
     <View style={styles.wrap}>
@@ -128,16 +105,9 @@ export default function VehiclesScreen() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
   top: { paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.xs },
   list: { paddingBottom: space.lg },
   emptyList: { flexGrow: 1 },
   chips: { paddingHorizontal: space.lg, paddingVertical: space.sm, gap: space.sm },
-  row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, minHeight: 72, backgroundColor: colors.background },
-  nameLine: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  name: { flexShrink: 1, fontSize: 16, fontWeight: "700", color: colors.foreground },
-  plate: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.canvas },
-  plateText: { fontSize: 11, fontWeight: "600", color: colors.mutedForeground, letterSpacing: 0.3 },
-  sub: { fontSize: font.small, color: colors.mutedForeground, marginTop: 3 },
-  line: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: space.lg + 46 + space.md }
+  line: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: ROW_INSET }
 });

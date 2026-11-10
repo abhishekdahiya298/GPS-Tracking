@@ -1,14 +1,18 @@
 import Constants from "expo-constants";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { ApiError, api, type ReadyResponse } from "@/api";
 import { useSession } from "@/auth/SessionProvider";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Card } from "@/components/kit";
-import { FadeInUp, PulseDot } from "@/components/motion";
+import { FadeInUp, PressableScale, PulseDot } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { API_BASE_URL } from "@/config";
+import { haptic } from "@/haptics";
+import { DEFAULT_PREFS, PROBLEM_TEXT, PUSH_KINDS, type PushPrefs } from "@/push/model";
+import { disablePush, enablePush, loadPrefs } from "@/push/service";
 import { colors, elevation, font, gradient, space } from "@/theme";
 
 type Check = { state: "checking" } | { state: "ok"; at: string } | { state: "failed"; reason: string };
@@ -18,6 +22,30 @@ export default function AccountScreen() {
   const user = state.status === "signedIn" ? state.user : null;
   const [check, setCheck] = useState<Check>({ state: "checking" });
   const [leaving, setLeaving] = useState(false);
+  const router = useRouter();
+  const [push, setPush] = useState<PushPrefs>(DEFAULT_PREFS);
+  const [pushBusy, setPushBusy] = useState(false);
+
+  useEffect(() => {
+    void loadPrefs().then(setPush);
+  }, []);
+
+  /** Shows the new choice at once, then saves it; puts the old choice back if saving fails. */
+  async function changePush(next: PushPrefs) {
+    const before = push;
+    haptic.tap();
+    setPush(next);
+    setPushBusy(true);
+    if (!next.enabled) await disablePush();
+    else {
+      const problem = await enablePush(next);
+      if (problem) {
+        setPush(before);
+        Alert.alert("Notifications are still off", PROBLEM_TEXT[problem]);
+      }
+    }
+    setPushBusy(false);
+  }
 
   const run = useCallback(async () => {
     setCheck({ state: "checking" });
@@ -86,6 +114,41 @@ export default function AccountScreen() {
       </FadeInUp>
 
       <FadeInUp index={2}>
+        <Card style={styles.list}>
+          <View style={styles.setting}>
+            <View style={styles.iconBadge}>
+              <Ionicons name="notifications-outline" size={20} color={colors.primary} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.settingTitle}>Alert notifications</Text>
+              <Text style={styles.settingNote}>Get alerts on this phone, even when the app is closed.</Text>
+            </View>
+            {pushBusy ? <ActivityIndicator color={colors.primary} /> : null}
+            <Switch value={push.enabled} disabled={pushBusy} onValueChange={(on) => void changePush({ ...push, enabled: on })} trackColor={{ true: colors.primary }} accessibilityLabel="Alert notifications" />
+          </View>
+          {push.enabled
+            ? PUSH_KINDS.map((kind) => (
+                <View key={kind.key} style={[styles.setting, styles.sub]}>
+                  <View style={styles.flex}>
+                    <Text style={styles.subTitle}>{kind.label}</Text>
+                    <Text style={styles.settingNote}>{kind.note}</Text>
+                  </View>
+                  <Switch value={push[kind.key]} disabled={pushBusy} onValueChange={(on) => void changePush({ ...push, [kind.key]: on })} trackColor={{ true: colors.primary }} accessibilityLabel={kind.label} />
+                </View>
+              ))
+            : null}
+        </Card>
+      </FadeInUp>
+
+      <FadeInUp index={3}>
+        <Card style={styles.list}>
+          <LinkRow icon="key-outline" label="Change password" onPress={() => router.push("/password")} />
+          <LinkRow icon="help-circle-outline" label="Help" onPress={() => void Linking.openURL("https://www.riogps.com/help")} />
+          <LinkRow icon="shield-checkmark-outline" label="Privacy policy" onPress={() => void Linking.openURL("https://www.riogps.com/privacy")} last />
+        </Card>
+      </FadeInUp>
+
+      <FadeInUp index={4}>
         <Button variant="danger" title="Sign out" icon="log-out-outline" onPress={confirmSignOut} loading={leaving} />
       </FadeInUp>
       <Text style={styles.footer}>RIO GPS {Constants.expoConfig?.version ?? ""}</Text>
@@ -93,7 +156,26 @@ export default function AccountScreen() {
   );
 }
 
+function LinkRow({ icon, label, onPress, last }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; last?: boolean }) {
+  return (
+    <PressableScale onPress={onPress} scaleTo={0.985} style={[styles.link, !last && styles.linkLine]} accessibilityRole="button" accessibilityLabel={label}>
+      <Ionicons name={icon} size={20} color={colors.primary} />
+      <Text style={styles.linkText}>{label}</Text>
+      <Ionicons name="chevron-forward" size={16} color={colors.offline} />
+    </PressableScale>
+  );
+}
+
 const styles = StyleSheet.create({
+  list: { paddingVertical: space.xs },
+  setting: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: space.md },
+  sub: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingLeft: 40 + space.md },
+  settingTitle: { fontSize: 16, fontWeight: "700", color: colors.foreground },
+  subTitle: { fontSize: font.body, fontWeight: "600", color: colors.foreground },
+  settingNote: { fontSize: font.small, color: colors.mutedForeground, marginTop: 1 },
+  link: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 50 },
+  linkLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  linkText: { flex: 1, fontSize: 16, fontWeight: "500", color: colors.foreground },
   wrap: { flex: 1, backgroundColor: colors.canvas },
   content: { padding: space.lg, gap: space.lg },
   flex: { flex: 1 },
