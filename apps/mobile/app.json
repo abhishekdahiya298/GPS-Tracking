@@ -16,7 +16,8 @@
       "bundleIdentifier": "com.riogps.app",
       "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "RIO GPS does not track this phone. Location is used only if you choose to show your own position on the map."
       },
       "appStoreUrl": "https://apps.apple.com/app/id6832835266"
     },
