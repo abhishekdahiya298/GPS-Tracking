@@ -4,6 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { alertMeta } from "./alert-meta";
 import { logger } from "./logger";
+import { inQuietHours, isTimeZone } from "./push-quiet";
 
 /**
  * Push notifications for the mobile app. A phone registers its push address (an Expo
@@ -28,7 +29,11 @@ export const PushDeviceInputSchema = z.object({
   offline: z.boolean().default(true),
   maintenance: z.boolean().default(false),
   /** Load alerts (late, no signal, driver paused, arrivals). Older app versions don't send it. */
-  loads: z.boolean().default(true)
+  loads: z.boolean().default(true),
+  /** Quiet hours, minutes after midnight in `timeZone`. Older app versions send none of the three. */
+  quietStart: z.number().int().min(0).max(1439).nullish(),
+  quietEnd: z.number().int().min(0).max(1439).nullish(),
+  timeZone: z.string().trim().max(64).refine(isTimeZone, "Not a time zone").nullish()
 });
 export const PushDeviceRemoveSchema = z.object({ token: Token });
 
@@ -40,12 +45,17 @@ export interface PushDeviceDto {
   offline: boolean;
   maintenance: boolean;
   loads: boolean;
+  quietStart: number | null;
+  quietEnd: number | null;
+  timeZone: string | null;
   lastSeenAt: string;
 }
 
 /** Registers this phone for the caller, or updates its choices. A token belongs to one user at a time. */
 export async function registerPushDevice(ctx: TenantContext, input: z.infer<typeof PushDeviceInputSchema>): Promise<PushDeviceDto> {
-  const values = { organizationId: ctx.organizationId, userId: ctx.userId, platform: input.platform, speeding: input.speeding, zones: input.zones, offline: input.offline, maintenance: input.maintenance, loads: input.loads, lastSeenAt: new Date() };
+  // Quiet hours need all three values; with any missing, none are kept.
+  const quiet = input.quietStart != null && input.quietEnd != null && input.timeZone ? { quietStart: input.quietStart, quietEnd: input.quietEnd, timeZone: input.timeZone } : { quietStart: null, quietEnd: null, timeZone: null };
+  const values = { organizationId: ctx.organizationId, userId: ctx.userId, platform: input.platform, speeding: input.speeding, zones: input.zones, offline: input.offline, maintenance: input.maintenance, loads: input.loads, ...quiet, lastSeenAt: new Date() };
   const [row] = await getDb()
     .insert(schema.pushDevices)
     .values({ token: input.token, ...values })
@@ -73,7 +83,7 @@ export async function removePushDevice(ctx: TenantContext, token: string): Promi
 }
 
 function toDto(r: typeof schema.pushDevices.$inferSelect): PushDeviceDto {
-  return { id: r.id, platform: r.platform, speeding: r.speeding, zones: r.zones, offline: r.offline, maintenance: r.maintenance, loads: r.loads, lastSeenAt: r.lastSeenAt.toISOString() };
+  return { id: r.id, platform: r.platform, speeding: r.speeding, zones: r.zones, offline: r.offline, maintenance: r.maintenance, loads: r.loads, quietStart: r.quietStart, quietEnd: r.quietEnd, timeZone: r.timeZone, lastSeenAt: r.lastSeenAt.toISOString() };
 }
 
 // ---------- sending ----------
@@ -127,24 +137,26 @@ export function pushKindForAlert(type: string): PushKind | null {
 /**
  * Pushes alerts to the organization's registered phones that asked for that kind and whose
  * user is still a member. Best effort: failures are logged, never thrown. Phones the push
- * service reports as gone are forgotten.
+ * service reports as gone are forgotten. A phone inside its quiet hours is skipped: the alert
+ * is still in the app, it just does not buzz.
  */
-export async function pushAlerts(organizationId: string, alerts: { id: number; type: string; vehicleName: string | null; ruleName: string }[]): Promise<number> {
+export async function pushAlerts(organizationId: string, alerts: { id: number; type: string; vehicleName: string | null; ruleName: string }[], now: Date = new Date()): Promise<number> {
   const wanted = alerts.map((a) => ({ a, kind: pushKindForAlert(a.type) })).filter((x): x is { a: (typeof alerts)[number]; kind: PushKind } => x.kind !== null);
   if (wanted.length === 0) return 0;
   try {
     const db = getDb();
     const d = schema.pushDevices;
     const devices = await db
-      .select({ id: d.id, token: d.token, speeding: d.speeding, zones: d.zones, offline: d.offline, maintenance: d.maintenance, loads: d.loads })
+      .select({ id: d.id, token: d.token, speeding: d.speeding, zones: d.zones, offline: d.offline, maintenance: d.maintenance, loads: d.loads, quietStart: d.quietStart, quietEnd: d.quietEnd, timeZone: d.timeZone })
       .from(d)
       .innerJoin(schema.memberships, and(eq(schema.memberships.userId, d.userId), eq(schema.memberships.organizationId, d.organizationId)))
       .where(eq(d.organizationId, organizationId));
-    if (devices.length === 0) return 0;
+    const awake = devices.filter((dev) => !inQuietHours(now, dev.quietStart, dev.quietEnd, dev.timeZone));
+    if (awake.length === 0) return 0;
     const messages: PushMessage[] = [];
     const owners: string[] = [];
     for (const { a, kind } of wanted) {
-      for (const dev of devices) {
+      for (const dev of awake) {
         if (!dev[kind]) continue;
         messages.push({ to: dev.token, title: `${a.vehicleName ?? "A vehicle"} ${alertMeta(a.type).short}`, body: a.ruleName, data: { alertId: a.id, type: a.type }, sound: "default", channelId: "alerts" });
         owners.push(dev.id);

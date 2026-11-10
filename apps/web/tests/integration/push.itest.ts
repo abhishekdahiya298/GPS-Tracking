@@ -102,6 +102,24 @@ describe("alert pushes", () => {
     expect(JSON.stringify(sent)).not.toMatch(/lat|lon/i);
   });
 
+  it("skips a phone during its quiet hours and reaches it again afterwards", async () => {
+    // Ann: quiet 22:00 to 06:00 Toronto time.
+    const res = await devPOST(req("POST", "ann", { token: T("ann1"), platform: "ios", zones: false, quietStart: 1320, quietEnd: 360, timeZone: "America/Toronto" }));
+    expect((await res.json()).device).toMatchObject({ quietStart: 1320, quietEnd: 360, timeZone: "America/Toronto" });
+    const alert = [{ id: 20, type: "speeding", vehicleName: "Truck 7", ruleName: "Highway limit" }];
+    sent.length = 0;
+    await pushAlerts(orgs.a!, alert, new Date("2026-11-10T08:00:00Z")); // 03:00 in Toronto
+    expect(sent.some((m) => m.to === T("ann1"))).toBe(false);
+    sent.length = 0;
+    await pushAlerts(orgs.a!, alert, new Date("2026-11-10T17:00:00Z")); // noon in Toronto
+    expect(sent.some((m) => m.to === T("ann1"))).toBe(true);
+    // A bad zone or an out-of-range time is refused; sending only part of the three clears quiet hours.
+    expect((await devPOST(req("POST", "ann", { token: T("ann1"), platform: "ios", quietStart: 1320, quietEnd: 360, timeZone: "Mars/Olympus" }))).status).toBe(400);
+    expect((await devPOST(req("POST", "ann", { token: T("ann1"), platform: "ios", quietStart: 2000, quietEnd: 360, timeZone: "America/Toronto" }))).status).toBe(400);
+    const cleared = await (await devPOST(req("POST", "ann", { token: T("ann1"), platform: "ios", zones: false, quietStart: 1320 }))).json();
+    expect(cleared.device).toMatchObject({ quietStart: null, quietEnd: null, timeZone: null });
+  });
+
   it("forgets phones the push service reports as gone, and skips people removed from the organization", async () => {
     expect(await getDb().select().from(schema.pushDevices).where(eq(schema.pushDevices.token, T("gone")))).toHaveLength(0);
     const [al] = await getDb().select().from(schema.users).where(eq(schema.users.email, "al@a.test"));

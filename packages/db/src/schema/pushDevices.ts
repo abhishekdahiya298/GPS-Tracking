@@ -1,4 +1,4 @@
-import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { organizations } from "./organizations";
 import { users } from "./users";
 
@@ -27,6 +27,14 @@ export const pushDevices = pgTable(
     maintenance: boolean("maintenance").notNull().default(false),
     /** Load problems (late, no signal, driver paused) and arrivals. */
     loads: boolean("loads").notNull().default(true),
+    /**
+     * Quiet hours: no notifications between these two times of day (minutes after midnight in
+     * `timeZone`; may run past midnight). All three null = no quiet hours.
+     */
+    quietStart: integer("quiet_start"),
+    quietEnd: integer("quiet_end"),
+    /** The phone's IANA time zone, e.g. "America/Toronto". Only used for quiet hours. */
+    timeZone: text("time_zone"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow()
   },
