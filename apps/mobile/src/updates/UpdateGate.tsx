@@ -15,10 +15,11 @@ const SNOOZE_KEY = "rio.update-later";
 const RECHECK_MS = 5 * 60_000;
 const PERIODIC_MS = 6 * 3_600_000;
 
-/** The store page for this app when the server gave no link (Android only; iOS needs the App Store id). */
+/** The store page for this app when the server gave no link (app.json ios.appStoreUrl / android.package). */
 function fallbackStoreUrl(): string | null {
+  if (Platform.OS === "ios") return Constants.expoConfig?.ios?.appStoreUrl ?? null;
   const pkg = Constants.expoConfig?.android?.package;
-  return Platform.OS === "android" && pkg ? `market://details?id=${pkg}` : null;
+  return pkg ? `market://details?id=${pkg}` : null;
 }
 
 async function openUpdate(url: string | null) {

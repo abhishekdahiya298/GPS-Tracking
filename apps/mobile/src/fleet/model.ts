@@ -34,12 +34,13 @@ export interface CurrentLocationsResponse {
   devices: FleetDevice[];
 }
 
-export type FleetState = "moving" | "idle" | "stopped" | "offline" | "never_seen";
+/** parked: a trailer whose tracker went silent. It is powered by the tractor, so silence means unhooked. */
+export type FleetState = "moving" | "idle" | "stopped" | "parked" | "offline" | "never_seen";
 export const MOVING_KPH = 5;
 
-export function fleetState(d: Pick<FleetDevice, "connectivity" | "location">): FleetState {
+export function fleetState(d: Pick<FleetDevice, "connectivity" | "location"> & { vehicle?: FleetDevice["vehicle"] }): FleetState {
   if (d.connectivity === "never_seen" || !d.location) return d.connectivity === "offline" ? "offline" : "never_seen";
-  if (d.connectivity !== "online") return "offline";
+  if (d.connectivity !== "online") return d.vehicle?.type === "trailer" ? "parked" : "offline";
   if ((d.location.speedKph ?? 0) >= MOVING_KPH) return "moving";
   return d.location.ignition === true ? "idle" : "stopped";
 }
@@ -48,11 +49,12 @@ export const STATE_META: Record<FleetState, { label: string; color: string; soft
   moving: { label: "Moving", color: "#15803d", soft: "#e9f7ee" },
   idle: { label: "Idling", color: "#b45309", soft: "#fff5e1" },
   stopped: { label: "Stopped", color: "#0369a1", soft: "#e8f4fb" },
+  parked: { label: "Parked (unhooked)", color: "#0369a1", soft: "#e8f4fb" },
   offline: { label: "Offline", color: "#6b7280", soft: "#f3f4f6" },
   never_seen: { label: "No data yet", color: "#6b7280", soft: "#f3f4f6" }
 };
 
-/** The four filters on the list. Trackers that never reported are counted with Offline. */
+/** The four filters on the list. Trackers that never reported are counted with Offline; parked trailers with Stopped. */
 export type FleetFilter = "all" | "moving" | "idle" | "stopped" | "offline";
 export const FILTERS: Array<{ key: FleetFilter; label: string }> = [
   { key: "all", label: "All" },
@@ -62,7 +64,7 @@ export const FILTERS: Array<{ key: FleetFilter; label: string }> = [
   { key: "offline", label: "Offline" }
 ];
 
-const filterOf = (s: FleetState): Exclude<FleetFilter, "all"> => (s === "never_seen" ? "offline" : s);
+const filterOf = (s: FleetState): Exclude<FleetFilter, "all"> => (s === "never_seen" ? "offline" : s === "parked" ? "stopped" : s);
 
 export function displayName(d: FleetDevice): string {
   return d.vehicle?.name || d.name || d.model || "Unnamed tracker";
@@ -74,7 +76,7 @@ export function countByFilter(devices: FleetDevice[]): Record<FleetFilter, numbe
   return counts;
 }
 
-const ORDER: Record<FleetState, number> = { moving: 0, idle: 1, stopped: 2, offline: 3, never_seen: 4 };
+const ORDER: Record<FleetState, number> = { moving: 0, idle: 1, stopped: 2, parked: 3, offline: 4, never_seen: 5 };
 
 /** Search matches the vehicle name, plate, tracker name or model. Active vehicles come first, then A to Z. */
 export function selectDevices(devices: FleetDevice[], filter: FleetFilter, search: string): FleetDevice[] {
@@ -110,6 +112,7 @@ export function statusLine(d: FleetDevice, fmtSpeed: (kph: number | null) => str
   const state = fleetState(d);
   if (state === "never_seen") return "Waiting for the first report";
   if (state === "offline") return `Last seen ${timeAgo(d.lastSeenAt, now)}`;
+  if (state === "parked") return `Unhooked · last seen ${timeAgo(d.lastSeenAt, now)}`;
   const fresh = timeAgo(d.location?.recordedAt ?? d.lastSeenAt, now);
   if (state === "moving") {
     const point = compassPoint(d.location?.headingDeg ?? null);

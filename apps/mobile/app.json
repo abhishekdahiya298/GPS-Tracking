@@ -3,7 +3,7 @@
     "name": "RIO GPS",
     "slug": "rio-gps",
     "scheme": "riogps",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "platforms": [
       "ios",
@@ -12,17 +12,18 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.riocaliforniainc.gps",
+      "supportsTablet": false,
+      "bundleIdentifier": "com.riogps.app",
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "appStoreUrl": "https://apps.apple.com/app/id6832835266"
     },
     "android": {
-      "package": "com.riocaliforniainc.gps",
+      "package": "com.riogps.app",
       "adaptiveIcon": {
-        "backgroundColor": "#0a2463",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
@@ -36,9 +37,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0a2463",
+          "backgroundColor": "#ffffff",
           "image": "./assets/splash-icon.png",
-          "imageWidth": 160
+          "imageWidth": 240
         }
       ]
     ],
