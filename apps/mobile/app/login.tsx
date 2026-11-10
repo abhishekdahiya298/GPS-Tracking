@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { codeFailure, signInMessage, type CodeKind } from "@/auth/service";
@@ -7,6 +7,8 @@ import { useSession } from "@/auth/SessionProvider";
 import { FadeInUp } from "@/components/motion";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { colors, elevation, font, gradient, space } from "@/theme";
+
+const LOGO = require("../assets/logo.png"); // eslint-disable-line @typescript-eslint/no-require-imports -- React Native loads images with require()
 
 export default function LoginScreen() {
   const { signIn, verifyCode } = useSession();
@@ -74,8 +76,10 @@ export default function LoginScreen() {
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <FadeInUp style={styles.brand} distance={20}>
-            <Text style={styles.brandName}>RIO GPS</Text>
-            <Text style={styles.brandNote}>Fleet tracking</Text>
+            <View style={styles.logoCard}>
+              <Image source={LOGO} style={styles.logo} resizeMode="contain" accessibilityLabel="RIO GPS" />
+            </View>
+            <Text style={styles.brandNote}>Live fleet tracking for trucks and trailers</Text>
           </FadeInUp>
 
           <FadeInUp index={2} distance={24} style={styles.card}>
@@ -160,8 +164,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: "center", padding: space.lg },
   brand: { alignItems: "center", marginBottom: space.xl },
-  brandName: { color: colors.primaryForeground, fontSize: 34, fontWeight: "800", letterSpacing: 1.5 },
-  brandNote: { color: "#c7d3f2", fontSize: font.body, marginTop: space.xs },
+  logoCard: { backgroundColor: "#ffffff", borderRadius: 22, paddingHorizontal: 22, paddingVertical: 14, ...elevation.lg },
+  logo: { width: 190, height: 93 },
+  brandNote: { color: "#d5defa", fontSize: font.body, marginTop: space.md, textAlign: "center" },
   card: { backgroundColor: colors.background, borderRadius: 22, padding: space.xl, gap: space.lg, ...elevation.lg },
   title: { fontSize: font.heading, fontWeight: "700", color: colors.foreground },
   help: { fontSize: font.body, color: colors.mutedForeground, lineHeight: 21, marginTop: -space.sm },

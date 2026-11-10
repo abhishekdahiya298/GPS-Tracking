@@ -15,7 +15,8 @@ type IconName = keyof typeof Ionicons.glyphMap;
 
 /** Outline icon when idle, filled when active. Keyed by route name. */
 export const TAB_ICONS: Record<string, { idle: IconName; active: IconName }> = {
-  index: { idle: "map-outline", active: "map" },
+  index: { idle: "home-outline", active: "home" },
+  map: { idle: "map-outline", active: "map" },
   vehicles: { idle: "bus-outline", active: "bus" },
   alerts: { idle: "notifications-outline", active: "notifications" },
   account: { idle: "person-circle-outline", active: "person-circle" }
@@ -95,7 +96,7 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
 const styles = StyleSheet.create({
   bar: { flexDirection: "row", backgroundColor: colors.background, paddingTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, ...elevation.md },
   indicatorSlot: { position: "absolute", top: 6, left: 0, height: 34, alignItems: "center", justifyContent: "center" },
-  indicator: { width: 58, height: 34, borderRadius: 17, backgroundColor: colors.primarySoft },
+  indicator: { width: 52, height: 34, borderRadius: 17, backgroundColor: colors.primarySoft },
   tab: { flex: 1, alignItems: "center", gap: 3, minHeight: 52 },
   label: { fontSize: 11, fontWeight: "500", color: colors.offline },
   labelOn: { color: colors.primary, fontWeight: "700" },

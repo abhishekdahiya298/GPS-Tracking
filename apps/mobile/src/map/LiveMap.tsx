@@ -208,7 +208,7 @@ export default function LiveMap() {
             id="vehicle-selected"
             type="circle"
             filter={["all", NOT_CLUSTER, ["==", ["get", "deviceId"], selectedId ?? ""]]}
-            paint={{ "circle-radius": 18, "circle-color": "#2f5bea", "circle-opacity": 0.18, "circle-stroke-color": "#2f5bea", "circle-stroke-width": 2 }}
+            paint={{ "circle-radius": 15, "circle-color": "#2f5bea", "circle-opacity": 0.18, "circle-stroke-color": "#2f5bea", "circle-stroke-width": 2 }}
           />
           {/* Zoomed out: a small status dot each, so a large fleet stays readable. */}
           <Layer

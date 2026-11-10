@@ -100,7 +100,7 @@ export default function VehicleScreen() {
       </FadeInUp>
 
       <FadeInUp index={3} style={styles.actions}>
-        {loc && hasMap ? <Button title="Show on map" icon="navigate" onPress={() => router.navigate({ pathname: "/(tabs)", params: { device: device.deviceId } })} /> : null}
+        {loc && hasMap ? <Button title="Show on map" icon="navigate" onPress={() => router.navigate({ pathname: "/(tabs)/map", params: { device: device.deviceId } })} /> : null}
         <Button variant={loc && hasMap ? "outline" : "primary"} icon="time-outline" title="Trip history" onPress={() => router.push({ pathname: "/trips/[id]", params: { id: device.deviceId } })} />
         {loc ? <Button variant="outline" icon="open-outline" title="Open in Maps" onPress={openInMaps} /> : null}
       </FadeInUp>

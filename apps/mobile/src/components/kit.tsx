@@ -2,7 +2,7 @@
  * Shared screen pieces, so every screen looks and moves the same way:
  * status pill, vehicle avatar, filter chip, search box, card, empty state, loading rows.
  */
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import type { ReactNode } from "react";
 import { StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
@@ -30,14 +30,14 @@ export function StatusPill({ state, compact = false }: { state: FleetState; comp
   );
 }
 
-const TYPE_ICON: Record<string, IconName> = { truck: "bus", semi: "bus", bus: "bus", equipment: "construct", trailer: "cube", van: "bus", car: "car-sport", pickup: "car-sport" };
+const TYPE_ICON: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = { truck: "truck", semi: "truck", bus: "bus", equipment: "excavator", trailer: "truck-trailer", van: "van-utility", car: "car", pickup: "car-pickup" };
 
 /** The rounded square at the start of a vehicle row: an icon for the kind of vehicle, tinted by status. */
 export function VehicleAvatar({ type, state, size = 46 }: { type: string | undefined; state: FleetState; size?: number }) {
   const meta = STATE_META[state];
   return (
     <View style={[styles.avatar, { width: size, height: size, backgroundColor: softTint(meta.color, meta.soft) }]}>
-      <Ionicons name={TYPE_ICON[type ?? ""] ?? "navigate"} size={size * 0.5} color={ink(meta.color)} />
+      <MaterialCommunityIcons name={TYPE_ICON[type ?? ""] ?? "car"} size={size * 0.56} color={ink(meta.color)} />
     </View>
   );
 }

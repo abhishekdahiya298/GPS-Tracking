@@ -17,7 +17,8 @@ export default function TabsLayout() {
         headerShadowVisible: false
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Map" }} />
+      <Tabs.Screen name="index" options={{ title: "Home", headerShown: false }} />
+      <Tabs.Screen name="map" options={{ title: "Map", headerShown: false }} />
       <Tabs.Screen name="vehicles" options={{ title: "Vehicles" }} />
       <Tabs.Screen name="alerts" options={{ title: "Alerts", tabBarBadge: badgeText(unread) }} />
       <Tabs.Screen name="account" options={{ title: "Account" }} />

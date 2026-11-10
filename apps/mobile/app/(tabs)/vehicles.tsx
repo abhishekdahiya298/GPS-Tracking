@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Banner, Chip, EmptyState, ListSkeleton, SearchBox } from "@/components/kit";
 import { FadeInUp, Skeleton } from "@/components/motion";
@@ -13,7 +13,16 @@ export default function VehiclesScreen() {
   const router = useRouter();
   const { devices, loading, error, units, refresh } = useFleet();
   const now = useNow();
+  const params = useLocalSearchParams<{ filter?: string }>();
   const [filter, setFilter] = useState<FleetFilter>("all");
+
+  // Opened from a status tile on Home: start with that status chosen.
+  useEffect(() => {
+    const wanted = FILTERS.find((f) => f.key === params.filter);
+    if (!wanted) return;
+    setFilter(wanted.key);
+    router.setParams({ filter: undefined });
+  }, [params.filter, router]);
   const [search, setSearch] = useState("");
   const [pulling, setPulling] = useState(false);
 
