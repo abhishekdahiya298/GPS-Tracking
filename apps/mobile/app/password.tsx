@@ -5,6 +5,7 @@ import { ApiError, api, tokenStore } from "@/api";
 import { Card } from "@/components/kit";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { haptic } from "@/haptics";
+import { useBottomInset } from "@/layout";
 import { colors, font, space } from "@/theme";
 
 /** Same rule as the server (web lib/auth.ts minPasswordLength). */
@@ -19,6 +20,7 @@ export default function ChangePasswordScreen() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [kept, setKept] = useState(true);
+  const bottom = useBottomInset();
 
   async function submit() {
     if (!current || !next) return setError("Enter your current password and a new one.");
@@ -50,8 +52,8 @@ export default function ChangePasswordScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: space.lg + bottom }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
         <Card style={styles.card}>
           {done ? (
             <>

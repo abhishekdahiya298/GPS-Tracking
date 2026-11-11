@@ -1,6 +1,6 @@
-import type { Ref } from "react";
+import { useState, type Ref } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
 import { colors, elevation, font, isDark, radius, space } from "../theme";
 import { PressableScale } from "./motion";
 
@@ -36,11 +36,27 @@ export function Button({ title, onPress, loading, variant = "primary", disabled,
   );
 }
 
-export function Field({ label, ref, ...input }: { label: string; ref?: Ref<TextInput> } & TextInputProps) {
+export function Field({ label, ref, secureTextEntry, ...input }: { label: string; ref?: Ref<TextInput> } & TextInputProps) {
+  // A password field gets an eye button to show what was typed.
+  const [shown, setShown] = useState(false);
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput ref={ref} accessibilityLabel={label} placeholderTextColor={colors.offline} {...input} style={[styles.input, input.style]} />
+      <View>
+        <TextInput
+          ref={ref}
+          accessibilityLabel={label}
+          placeholderTextColor={colors.offline}
+          secureTextEntry={secureTextEntry && !shown}
+          {...input}
+          style={[styles.input, secureTextEntry && styles.inputWithEye, input.style]}
+        />
+        {secureTextEntry ? (
+          <Pressable onPress={() => setShown(!shown)} style={styles.eye} hitSlop={8} accessibilityRole="button" accessibilityLabel={shown ? "Hide password" : "Show password"}>
+            <Ionicons name={shown ? "eye-off-outline" : "eye-outline"} size={22} color={colors.mutedForeground} />
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -61,6 +77,8 @@ const styles = StyleSheet.create({
   label: { fontSize: font.small, fontWeight: "500", color: colors.foreground },
   // 16px text: iOS zooms the screen on focus for anything smaller.
   input: { minHeight: 50, borderWidth: 1, borderColor: isDark ? colors.border : "#d4d8df", borderRadius: radius.xl, paddingHorizontal: space.md, fontSize: 16, color: colors.foreground, backgroundColor: colors.background },
+  inputWithEye: { paddingRight: 48 },
+  eye: { position: "absolute", right: 4, top: 0, bottom: 0, width: 44, alignItems: "center", justifyContent: "center" },
   error: { backgroundColor: colors.dangerSoft, borderRadius: radius.md, padding: space.md },
   errorText: { color: colors.danger, fontSize: font.small, lineHeight: 19 }
 });

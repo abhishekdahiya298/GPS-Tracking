@@ -6,6 +6,7 @@ import { codeFailure, signInMessage, type CodeKind } from "@/auth/service";
 import { useSession } from "@/auth/SessionProvider";
 import { FadeInUp } from "@/components/motion";
 import { Button, ErrorNote, Field } from "@/components/ui";
+import { useBottomInset, useScreen } from "@/layout";
 import { colors, elevation, font, gradient, space } from "@/theme";
 
 const LOGO = require("../assets/logo.png"); // eslint-disable-line @typescript-eslint/no-require-imports -- React Native loads images with require()
@@ -21,6 +22,10 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const passwordRef = useRef<TextInput>(null);
+  const { compact, scale } = useScreen();
+  const bottom = useBottomInset();
+  // A short phone gets a smaller logo and tighter spacing so the whole form fits above the keyboard.
+  const logoWidth = compact ? scale(190) : scale(240);
 
   function startAgain(message: string | null = null) {
     setPending(null);
@@ -73,11 +78,11 @@ export default function LoginScreen() {
   return (
     <LinearGradient colors={gradient.brand} start={gradient.angle.start} end={gradient.angle.end} style={styles.flex}>
     <SafeAreaView style={styles.flex}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <FadeInUp style={styles.brand} distance={20}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: space.lg + bottom }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
+          <FadeInUp style={[styles.brand, compact && { marginBottom: space.lg }]} distance={20}>
             <View style={styles.logoCard}>
-              <Image source={LOGO} style={styles.logo} resizeMode="contain" accessibilityLabel="RIO GPS" />
+              <Image source={LOGO} style={{ width: logoWidth, height: Math.round(logoWidth * (93 / 190)) }} resizeMode="contain" accessibilityLabel="RIO GPS" />
             </View>
             <Text style={styles.brandNote}>Live fleet tracking for trucks and trailers</Text>
           </FadeInUp>
@@ -165,9 +170,8 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 1, justifyContent: "center", padding: space.lg },
   brand: { alignItems: "center", marginBottom: space.xl },
   logoCard: { backgroundColor: "#ffffff", borderRadius: 22, paddingHorizontal: 22, paddingVertical: 14, ...elevation.lg },
-  logo: { width: 190, height: 93 },
   brandNote: { color: "#d5defa", fontSize: font.body, marginTop: space.md, textAlign: "center" },
-  card: { backgroundColor: colors.background, borderRadius: 22, padding: space.xl, gap: space.lg, ...elevation.lg },
+  card: { backgroundColor: colors.background, borderRadius: 22, padding: space.xl, gap: space.md, ...elevation.lg },
   title: { fontSize: font.heading, fontWeight: "700", color: colors.foreground },
   help: { fontSize: font.body, color: colors.mutedForeground, lineHeight: 21, marginTop: -space.sm },
   code: { letterSpacing: 4, fontSize: 20 },

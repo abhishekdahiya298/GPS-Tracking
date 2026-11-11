@@ -8,6 +8,7 @@ import { ApiError, api } from "@/api";
 import { PressableScale, SlideUp } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { haptic } from "@/haptics";
+import { useBottomInset } from "@/layout";
 import { Placeholder } from "@/components/Placeholder";
 import { useFleet } from "@/fleet/FleetProvider";
 import { colors, elevation, font, radius, space } from "@/theme";
@@ -30,6 +31,7 @@ export default function TripScreen() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<number>(SPEEDS[0]);
   const barWidth = useRef(1);
+  const bottom = useBottomInset();
 
   const fetchTrack = useCallback(async () => {
     setLoad({ state: "loading" });
@@ -128,7 +130,7 @@ export default function TripScreen() {
         )}
       </View>
 
-      <SlideUp style={styles.panel}>
+      <SlideUp style={[styles.panel, { paddingBottom: Math.max(space.xl, bottom + space.md) }]}>
         <View style={styles.readout}>
           <Text style={styles.clock}>{fmt.timeSec(t)}</Text>
           <Text style={styles.speed}>{units.fmtSpeed(head.speedKph)}</Text>

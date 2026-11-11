@@ -13,15 +13,15 @@ export const VehicleRow = memo(function VehicleRow({ device, fmtSpeed, now, onPr
     <PressableScale onPress={() => onPress(device.deviceId)} style={styles.row} scaleTo={0.985} accessibilityRole="button" accessibilityLabel={`${displayName(device)}, ${STATE_META[state].label}`}>
       <VehicleAvatar type={device.vehicle?.type} state={state} />
       <View style={styles.flex}>
-        <View style={styles.nameLine}>
-          <Text style={styles.name} numberOfLines={1}>{displayName(device)}</Text>
+        <Text style={styles.name} numberOfLines={1}>{displayName(device)}</Text>
+        <View style={styles.subLine}>
           {device.vehicle?.licensePlate ? (
             <View style={styles.plate}>
               <Text style={styles.plateText} numberOfLines={1}>{device.vehicle.licensePlate}</Text>
             </View>
           ) : null}
+          <Text style={styles.sub} numberOfLines={1}>{statusLine(device, fmtSpeed, now)}</Text>
         </View>
-        <Text style={styles.sub} numberOfLines={1}>{statusLine(device, fmtSpeed, now)}</Text>
       </View>
       <StatusPill state={state} compact />
       <Ionicons name="chevron-forward" size={16} color={colors.border} />
@@ -34,9 +34,9 @@ export const ROW_INSET = space.lg + 46 + space.md;
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md, minHeight: 72, backgroundColor: colors.background },
-  nameLine: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  name: { flexShrink: 1, fontSize: 16, fontWeight: "700", color: colors.foreground },
-  plate: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.canvas },
+  subLine: { flexDirection: "row", alignItems: "center", gap: space.sm, marginTop: 3 },
+  name: { fontSize: 16, fontWeight: "700", color: colors.foreground },
+  plate: { flexShrink: 0, paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.canvas },
   plateText: { fontSize: 11, fontWeight: "600", color: colors.mutedForeground, letterSpacing: 0.3 },
-  sub: { fontSize: font.small, color: colors.mutedForeground, marginTop: 3 }
+  sub: { flexShrink: 1, fontSize: font.small, color: colors.mutedForeground }
 });

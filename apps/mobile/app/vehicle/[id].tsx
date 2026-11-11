@@ -7,6 +7,7 @@ import { FadeInUp } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { compassPoint, displayName, fleetState, statusLine, timeAgo } from "@/fleet/model";
+import { useBottomInset } from "@/layout";
 import { colors, font, radius, space } from "@/theme";
 
 // The map only exists in the installed app (see app/(tabs)/index.tsx).
@@ -22,6 +23,7 @@ function Row({ label, value, last }: { label: string; value: string; last?: bool
 }
 
 export default function VehicleScreen() {
+  const bottom = useBottomInset();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { devices, units } = useFleet();
@@ -58,7 +60,7 @@ export default function VehicleScreen() {
   ];
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.wrap} contentContainerStyle={[styles.content, { paddingBottom: space.xxl + bottom }]}>
       <Stack.Screen options={{ title: name }} />
 
       <FadeInUp index={0}>

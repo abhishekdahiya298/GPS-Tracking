@@ -3,7 +3,7 @@ import * as SplashScreen from "expo-splash-screen";
 import Constants from "expo-constants";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AppState, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL } from "../config";
 import { Button } from "../components/ui";
 import { colors, font, radius, space } from "../theme";
@@ -88,6 +88,7 @@ export function UpdateGate({ children }: { children: ReactNode }) {
     <>
       {children}
       <Modal visible={offer} transparent animationType="slide" onRequestClose={later}>
+        <SafeAreaProvider>
         <View style={styles.backdrop}>
           <SafeAreaView edges={["bottom"]} style={styles.sheet}>
             <View style={styles.grabber} />
@@ -102,6 +103,7 @@ export function UpdateGate({ children }: { children: ReactNode }) {
             </View>
           </SafeAreaView>
         </View>
+        </SafeAreaProvider>
       </Modal>
     </>
   );

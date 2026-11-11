@@ -8,6 +8,7 @@ import { EmptyState, ListSkeleton } from "@/components/kit";
 import { FadeInUp, PressableScale } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { haptic } from "@/haptics";
+import { useBottomInset } from "@/layout";
 import { useFleet } from "@/fleet/FleetProvider";
 import { displayName } from "@/fleet/model";
 import { colors, font, space } from "@/theme";
@@ -25,6 +26,7 @@ export default function TripsScreen() {
   const [day, setDay] = useState(today);
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [pulling, setPulling] = useState(false);
+  const bottom = useBottomInset();
   const fmt = useMemo(() => dateFormatter(timeZone, timeFormat), [timeZone, timeFormat]);
 
   const fetchDay = useCallback(
@@ -120,7 +122,7 @@ export default function TripsScreen() {
           keyExtractor={(t) => t.startAt}
           renderItem={row}
           ItemSeparatorComponent={() => <View style={styles.line} />}
-          contentContainerStyle={trips.length === 0 ? styles.emptyList : undefined}
+          contentContainerStyle={[trips.length === 0 ? styles.emptyList : undefined, { paddingBottom: bottom + space.lg }]}
           refreshControl={
             <RefreshControl
               refreshing={pulling}
