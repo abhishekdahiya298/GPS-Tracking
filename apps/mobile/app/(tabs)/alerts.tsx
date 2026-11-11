@@ -4,13 +4,13 @@ import { useRouter } from "expo-router";
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useAlerts } from "@/alerts/AlertsProvider";
 import { alertDetail, alertMeta, alertTitle, type AlertEvent } from "@/alerts/model";
-import { Banner, EmptyState, ListSkeleton } from "@/components/kit";
-import { FadeInUp, PressableScale } from "@/components/motion";
+import { Banner, EmptyState, IconWell, ListSkeleton, RowLine, ScreenHeader, Segmented, groupedRow } from "@/components/kit";
+import { FadeInUp, LoadingBar, PressableScale } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { haptic } from "@/haptics";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { timeAgo } from "@/fleet/model";
-import { colors, font, radius, space, ink, isDark, softTint } from "@/theme";
+import { colors, font, size, space, type } from "@/theme";
 
 export default function AlertsScreen() {
   const { events, unread, unreadOnly, loading, loadingMore, hasMore, error, setUnreadOnly, refresh, loadMore, acknowledge } = useAlerts();
@@ -41,6 +41,7 @@ export default function AlertsScreen() {
     ]);
   }
 
+  const last = events.length - 1;
   const row = ({ item, index }: { item: AlertEvent; index: number }) => {
     const meta = alertMeta(item.type);
     const detail = alertDetail(item, units.fmtSpeed);
@@ -49,42 +50,34 @@ export default function AlertsScreen() {
     const known = item.deviceId !== null && devices.some((d) => d.deviceId === item.deviceId);
     const body = (
       <>
-        <View style={[styles.icon, { backgroundColor: softTint(meta.color, meta.soft) }]}>
-          <Ionicons name={meta.icon} size={20} color={ink(meta.color)} />
-        </View>
+        <IconWell icon={meta.icon} color={meta.color} soft={meta.soft} />
         <View style={styles.flex}>
-          <Text style={[styles.title, isUnread && styles.titleUnread]}>{alertTitle(item)}</Text>
-          {detail ? <Text style={styles.detail}>{detail}</Text> : null}
-          <Text style={styles.sub}>
-            {timeAgo(item.occurredAt, now)} · {new Date(item.occurredAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+          <Text style={[styles.title, isUnread && styles.titleUnread]} numberOfLines={2}>{alertTitle(item)}</Text>
+          <Text style={styles.sub} numberOfLines={2}>
+            {detail ? `${detail} · ` : ""}
+            {new Date(item.occurredAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
             {item.ruleName ? ` · ${item.ruleName}` : ""}
           </Text>
         </View>
+        <View style={styles.side}>
+          <Text style={styles.time}>{timeAgo(item.occurredAt, now).replace(" ago", "")}</Text>
+          {isUnread ? <View style={styles.unreadDot} /> : null}
+        </View>
         {isUnread ? (
-          <Pressable onPress={() => void mark([item.id])} disabled={busyId !== null} hitSlop={8} style={styles.read} accessibilityRole="button" accessibilityLabel="Mark as read">
-            {busyId === item.id ? <ActivityIndicator color={colors.primary} /> : <Ionicons name="checkmark-circle-outline" size={26} color={colors.primary} />}
+          <Pressable onPress={() => void mark([item.id])} disabled={busyId !== null} hitSlop={6} style={styles.read} accessibilityRole="button" accessibilityLabel="Mark as read">
+            {busyId === item.id ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="checkmark-circle-outline" size={24} color={colors.primary} />}
           </Pressable>
         ) : null}
       </>
     );
     return (
-      <FadeInUp index={index < 10 ? index : 0} distance={index < 10 ? 12 : 0}>
+      <FadeInUp index={index < 10 ? index : 0} distance={index < 10 ? 10 : 0} style={groupedRow(index === 0, index === last)}>
         {known ? (
-          <PressableScale
-            onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: item.deviceId! } })}
-            scaleTo={0.985}
-            style={[styles.row, isUnread && styles.rowUnread]}
-            accessibilityRole="button"
-            accessibilityHint="Opens the vehicle"
-          >
-            {isUnread ? <View style={styles.unreadBar} /> : null}
+          <PressableScale onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: item.deviceId! } })} scaleTo={0.985} style={styles.row} accessibilityRole="button" accessibilityHint="Opens the vehicle">
             {body}
           </PressableScale>
         ) : (
-          <View style={[styles.row, isUnread && styles.rowUnread]}>
-            {isUnread ? <View style={styles.unreadBar} /> : null}
-            {body}
-          </View>
+          <View style={styles.row}>{body}</View>
         )}
       </FadeInUp>
     );
@@ -92,34 +85,36 @@ export default function AlertsScreen() {
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.bar}>
-        <View style={styles.segment}>
-          {[false, true].map((only) => {
-            const on = unreadOnly === only;
-            return (
-              <Pressable
-                key={String(only)}
-                onPress={() => {
-                  haptic.tap();
-                  setUnreadOnly(only);
-                }}
-                style={[styles.segmentItem, on && styles.segmentOn]} accessibilityRole="button" accessibilityState={{ selected: on }}>
-                <Text style={[styles.segmentText, on && styles.segmentTextOn]}>{only ? `Unread ${unread}` : "All"}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        {unread > 0 ? (
-          <Pressable onPress={confirmAll} disabled={busyId !== null} hitSlop={8} accessibilityRole="button">
-            {busyId === "all" ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.link}>Mark all read</Text>}
-          </Pressable>
-        ) : null}
-      </View>
+      <ScreenHeader
+        title="Alerts"
+        badge={unread > 0 ? `${unread} new` : undefined}
+        badgeTone="danger"
+        right={
+          unread > 0 ? (
+            <Pressable onPress={confirmAll} disabled={busyId !== null} hitSlop={8} style={styles.markAll} accessibilityRole="button" accessibilityLabel="Mark all read">
+              {busyId === "all" ? <ActivityIndicator color={colors.primary} /> : <Text style={styles.link}>Mark all read</Text>}
+            </Pressable>
+          ) : null
+        }
+      >
+        <Segmented
+          label="Which alerts to show"
+          value={unreadOnly}
+          onChange={setUnreadOnly}
+          options={[
+            { value: false, label: "All" },
+            { value: true, label: unread > 0 ? `Unread ${unread}` : "Unread" }
+          ]}
+        />
+      </ScreenHeader>
+      <LoadingBar active={loading} />
 
       {error && events.length > 0 ? <Banner text={`Showing the last update. ${error}`} /> : null}
 
       {loading ? (
-        <ListSkeleton />
+        <View style={styles.list}>
+          <ListSkeleton rows={6} />
+        </View>
       ) : error && events.length === 0 ? (
         <EmptyState icon="cloud-offline-outline" tone="danger" title="Can't load alerts" note={error}>
           <Button title="Try again" icon="refresh" onPress={() => void refresh()} />
@@ -129,11 +124,13 @@ export default function AlertsScreen() {
           data={events}
           keyExtractor={(e) => String(e.id)}
           renderItem={row}
-          ItemSeparatorComponent={() => <View style={styles.line} />}
+          ItemSeparatorComponent={RowLine}
           refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} tintColor={colors.primary} colors={[colors.primary]} />}
           onEndReached={() => void loadMore()}
           onEndReachedThreshold={0.4}
-          contentContainerStyle={events.length === 0 ? styles.emptyList : undefined}
+          initialNumToRender={10}
+          windowSize={9}
+          contentContainerStyle={events.length === 0 ? styles.emptyList : styles.list}
           ListFooterComponent={loadingMore ? <ActivityIndicator style={styles.footer} color={colors.primary} /> : !hasMore && events.length > 0 ? <Text style={styles.end}>No more alerts</Text> : null}
           ListEmptyComponent={
             unreadOnly ? (
@@ -149,26 +146,20 @@ export default function AlertsScreen() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
-  bar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.lg, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  segment: { flexDirection: "row", backgroundColor: colors.muted, borderRadius: radius.xl, padding: 3 },
-  segmentItem: { paddingHorizontal: space.lg, minHeight: 34, justifyContent: "center", borderRadius: radius.lg },
-  segmentOn: { backgroundColor: colors.background, shadowColor: "#101828", shadowOpacity: 0.08, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  segmentText: { fontSize: font.small, fontWeight: "500", color: colors.mutedForeground },
-  segmentTextOn: { color: colors.foreground, fontWeight: "600" },
-  link: { color: colors.primary, fontSize: font.small, fontWeight: "600" },
+  wrap: { flex: 1, backgroundColor: colors.canvas },
+  flex: { flex: 1, minWidth: 0 },
+  markAll: { minHeight: size.controlSm, justifyContent: "center" },
+  link: { color: colors.primary, fontSize: 14, lineHeight: 20, fontWeight: "600" },
+  list: { paddingTop: space.xs, paddingBottom: space.lg },
   emptyList: { flexGrow: 1 },
-  row: { flexDirection: "row", alignItems: "flex-start", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
-  rowUnread: { backgroundColor: isDark ? "#18223a" : "#f4f7ff" },
-  unreadBar: { position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: colors.primary },
-  icon: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
-  title: { fontSize: font.body, color: colors.foreground, lineHeight: 20 },
-  titleUnread: { fontWeight: "600" },
-  detail: { fontSize: font.small, color: colors.foreground, marginTop: 2 },
-  sub: { fontSize: font.small, color: colors.mutedForeground, marginTop: 2 },
-  read: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginRight: -space.sm },
-  line: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.md, minHeight: size.row + 4 },
+  title: { fontSize: font.body, lineHeight: 20, fontWeight: "500", color: colors.foreground },
+  titleUnread: { fontWeight: "700" },
+  sub: { ...type.small, marginTop: 1 },
+  side: { alignItems: "flex-end", gap: 6 },
+  time: { ...type.caption, fontVariant: ["tabular-nums"] },
+  read: { width: 36, height: size.controlSm, marginRight: -space.sm, alignItems: "center", justifyContent: "center" },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
   footer: { padding: space.lg },
-  end: { textAlign: "center", color: colors.mutedForeground, fontSize: font.small, padding: space.lg }
+  end: { ...type.small, textAlign: "center", padding: space.lg }
 });

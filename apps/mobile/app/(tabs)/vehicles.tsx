@@ -1,13 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { Banner, Chip, EmptyState, ListSkeleton, SearchBox } from "@/components/kit";
-import { FadeInUp, Skeleton } from "@/components/motion";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { FlatList, Platform, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Banner, Chip, EmptyState, ListSkeleton, RowLine, ScreenHeader, SearchBox, groupedRow } from "@/components/kit";
+import { FadeInUp, LoadingBar } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { FILTERS, STATE_META, countByFilter, selectDevices, type FleetDevice, type FleetFilter } from "@/fleet/model";
-import { ROW_INSET, VehicleRow } from "@/fleet/VehicleRow";
-import { colors, radius, space } from "@/theme";
+import { ROW_HEIGHT, VehicleRow } from "@/fleet/VehicleRow";
+import { colors, space } from "@/theme";
 
 export default function VehiclesScreen() {
   const router = useRouter();
@@ -35,13 +35,36 @@ export default function VehiclesScreen() {
     setPulling(false);
   }
 
+  const open = useCallback((deviceId: string) => router.push({ pathname: "/vehicle/[id]", params: { id: deviceId } }), [router]);
+  const last = rows.length - 1;
+  const row = useCallback(
+    ({ item, index }: { item: FleetDevice; index: number }) => (
+      <View style={groupedRow(index === 0, index === last)}>
+        <VehicleRow device={item} fmtSpeed={units.fmtSpeed} now={now} onPress={open} />
+      </View>
+    ),
+    [last, now, open, units.fmtSpeed]
+  );
+
+  const header = (
+    <ScreenHeader title="Vehicles" badge={loading ? undefined : String(devices.length)}>
+      <SearchBox value={search} onChangeText={setSearch} placeholder="Search name or plate" label="Search vehicles" />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
+        {FILTERS.map((f) => (
+          <Chip key={f.key} label={f.label} count={loading ? undefined : counts[f.key]} selected={f.key === filter} dot={f.key === "all" ? undefined : STATE_META[f.key].color} onPress={() => setFilter(f.key)} />
+        ))}
+      </ScrollView>
+    </ScreenHeader>
+  );
+
   if (loading) {
     return (
       <View style={styles.wrap}>
-        <View style={styles.top}>
-          <Skeleton width="100%" height={46} round={radius.xl} />
+        {header}
+        <LoadingBar active />
+        <View style={styles.loading}>
+          <ListSkeleton />
         </View>
-        <ListSkeleton />
       </View>
     );
   }
@@ -49,6 +72,7 @@ export default function VehiclesScreen() {
   if (error && devices.length === 0) {
     return (
       <View style={styles.wrap}>
+        {header}
         <EmptyState icon="cloud-offline-outline" tone="danger" title="Can't load vehicles" note={error}>
           <Button title="Try again" icon="refresh" onPress={() => void refresh()} />
         </EmptyState>
@@ -56,67 +80,58 @@ export default function VehiclesScreen() {
     );
   }
 
-  const open = (deviceId: string) => router.push({ pathname: "/vehicle/[id]", params: { id: deviceId } });
-  const row = ({ item, index }: { item: FleetDevice; index: number }) => (
-    // Only the first screenful staggers in; rows reached by scrolling appear at once.
-    <FadeInUp index={index < 10 ? index : 0} distance={index < 10 ? 12 : 0}>
-      <VehicleRow device={item} fmtSpeed={units.fmtSpeed} now={now} onPress={open} />
-    </FadeInUp>
-  );
-
   return (
     <View style={styles.wrap}>
-      <View style={styles.top}>
-        <SearchBox value={search} onChangeText={setSearch} placeholder="Search name or plate" label="Search vehicles" />
-      </View>
-
-      <View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
-          {FILTERS.map((f) => (
-            <Chip key={f.key} label={f.label} count={counts[f.key]} selected={f.key === filter} dot={f.key === "all" ? undefined : STATE_META[f.key].color} onPress={() => setFilter(f.key)} />
-          ))}
-        </ScrollView>
-      </View>
-
+      {header}
       {error ? <Banner text={`Showing the last update. ${error}`} /> : null}
-
-      <FlatList
-        data={rows}
-        keyExtractor={(d) => d.deviceId}
-        renderItem={row}
-        ItemSeparatorComponent={() => <View style={styles.line} />}
-        refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} tintColor={colors.primary} colors={[colors.primary]} />}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        initialNumToRender={12}
-        windowSize={9}
-        contentContainerStyle={rows.length === 0 ? styles.emptyList : styles.list}
-        ListEmptyComponent={
-          devices.length === 0 ? (
-            <EmptyState icon="bus-outline" tone="brand" title="No vehicles yet" note="Trackers added on the website will appear here." />
-          ) : (
-            <EmptyState icon="search" title="Nothing matches" note="Try another name, plate or status.">
-              <Button
-                variant="outline"
-                title="Clear search and filters"
-                onPress={() => {
-                  setSearch("");
-                  setFilter("all");
-                }}
-              />
-            </EmptyState>
-          )
-        }
-      />
+      {/* Keyed by filter: choosing another status slides the new list in. */}
+      <FadeInUp key={filter} style={styles.flex} distance={8}>
+        <FlatList
+          data={rows}
+          keyExtractor={keyOf}
+          renderItem={row}
+          ItemSeparatorComponent={RowLine}
+          // Every row has the same height, so the list never has to measure one.
+          getItemLayout={(_, index) => ({ length: ROW_HEIGHT + StyleSheet.hairlineWidth, offset: (ROW_HEIGHT + StyleSheet.hairlineWidth) * index + space.xs, index })}
+          refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} tintColor={colors.primary} colors={[colors.primary]} />}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={9}
+          removeClippedSubviews={Platform.OS === "android"}
+          contentContainerStyle={rows.length === 0 ? styles.emptyList : styles.list}
+          ListEmptyComponent={
+            devices.length === 0 ? (
+              <EmptyState icon="car-outline" tone="brand" title="No vehicles yet" note="Trackers added on the website will appear here." />
+            ) : (
+              <EmptyState icon="search" title="Nothing matches" note="Try another name, plate or status.">
+                <Button
+                  variant="outline"
+                  title="Clear search and filters"
+                  onPress={() => {
+                    setSearch("");
+                    setFilter("all");
+                  }}
+                />
+              </EmptyState>
+            )
+          }
+        />
+      </FadeInUp>
     </View>
   );
 }
 
+const keyOf = (d: FleetDevice) => d.deviceId;
+
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.background },
-  top: { paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.xs },
-  list: { paddingBottom: space.lg },
+  wrap: { flex: 1, backgroundColor: colors.canvas },
+  flex: { flex: 1 },
+  loading: { paddingTop: space.xs },
+  list: { paddingTop: space.xs, paddingBottom: space.lg },
   emptyList: { flexGrow: 1 },
-  chips: { paddingHorizontal: space.lg, paddingVertical: space.sm, gap: space.sm },
-  line: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: ROW_INSET }
+  // The chips run to the screen edge, so a chip half in view shows there are more to the side.
+  chipScroll: { marginHorizontal: -space.lg },
+  chips: { paddingHorizontal: space.lg, gap: 6 }
 });

@@ -1,24 +1,16 @@
 import { Tabs } from "expo-router";
 import { useAlerts } from "@/alerts/AlertsProvider";
 import { badgeText } from "@/alerts/model";
-import { HeaderBackground } from "@/components/kit";
 import { TabBar } from "@/components/TabBar";
 import { colors } from "@/theme";
 
+/** The five tabs. Each screen draws its own title, so the system header is off. */
 export default function TabsLayout() {
   const { unread } = useAlerts();
   return (
-    <Tabs
-      tabBar={(props) => <TabBar {...props} />}
-      screenOptions={{
-        headerBackground: () => <HeaderBackground />,
-        headerTintColor: colors.primaryForeground,
-        headerTitleStyle: { fontWeight: "700", fontSize: 18 },
-        headerShadowVisible: false
-      }}
-    >
-      <Tabs.Screen name="index" options={{ title: "Home", headerShown: false }} />
-      <Tabs.Screen name="map" options={{ title: "Map", headerShown: false }} />
+    <Tabs tabBar={(props) => <TabBar {...props} />} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.canvas } }}>
+      <Tabs.Screen name="index" options={{ title: "Home" }} />
+      <Tabs.Screen name="map" options={{ title: "Map" }} />
       <Tabs.Screen name="vehicles" options={{ title: "Vehicles" }} />
       <Tabs.Screen name="alerts" options={{ title: "Alerts", tabBarBadge: badgeText(unread) }} />
       <Tabs.Screen name="account" options={{ title: "Account" }} />

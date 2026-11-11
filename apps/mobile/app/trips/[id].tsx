@@ -5,13 +5,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { ApiError, api } from "@/api";
 import { EmptyState, ListSkeleton } from "@/components/kit";
-import { FadeInUp, PressableScale } from "@/components/motion";
+import { FadeInUp, LoadingBar, PressableScale } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { haptic } from "@/haptics";
 import { useBottomInset } from "@/layout";
 import { useFleet } from "@/fleet/FleetProvider";
 import { displayName } from "@/fleet/model";
-import { colors, font, space } from "@/theme";
+import { colors, font, ink, radius, size, space, type } from "@/theme";
 import { dayLabel, dayRange, durationText, shiftDay, todayKey, type TripDto, type TripReport } from "@/trips/model";
 
 type Load = { state: "loading" } | { state: "ready"; report: TripReport } | { state: "failed"; message: string };
@@ -53,65 +53,81 @@ export default function TripsScreen() {
 
   const row = ({ item, index }: { item: TripDto; index: number }) => (
     <FadeInUp index={index < 10 ? index : 0} distance={index < 10 ? 12 : 0}>
-    <PressableScale
-      onPress={() => router.push({ pathname: "/trip", params: { id, from: item.startAt, to: item.endAt, name } })}
-      style={styles.row}
-      scaleTo={0.985}
-      accessibilityRole="button"
-      accessibilityLabel={`Trip from ${fmt.time(item.startAt)} to ${fmt.time(item.endAt)}`}
-    >
-      <View style={styles.number}>
-        <Text style={styles.numberText}>{trips.length - index}</Text>
-      </View>
-      <View style={styles.flex}>
-        <Text style={styles.times}>
-          {fmt.time(item.startAt)} to {fmt.time(item.endAt)}
-        </Text>
-        <Text style={styles.sub}>
-          {units.fmtDist(item.distanceKm)} · {durationText(item.durationMin)}
-          {item.idleMin >= 1 ? ` · idle ${durationText(item.idleMin)}` : ""}
-        </Text>
-        <Text style={styles.sub}>Top speed {units.fmtSpeed(item.maxSpeedKph)}</Text>
-      </View>
-      <Ionicons name="play-circle" size={30} color={colors.primary} />
-    </PressableScale>
+      <PressableScale
+        onPress={() => router.push({ pathname: "/trip", params: { id, from: item.startAt, to: item.endAt, name } })}
+        style={styles.trip}
+        scaleTo={0.985}
+        accessibilityRole="button"
+        accessibilityLabel={`Trip from ${fmt.time(item.startAt)} to ${fmt.time(item.endAt)}. Opens the route.`}
+      >
+        <View style={styles.tripHead}>
+          <View style={styles.number}>
+            <Text style={styles.numberText}>{trips.length - index}</Text>
+          </View>
+          <Text style={styles.times} numberOfLines={1}>
+            {fmt.time(item.startAt)} – {fmt.time(item.endAt)}
+          </Text>
+          <Text style={[type.small, styles.tabular]}>{durationText(item.durationMin)}</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.borderStrong} />
+        </View>
+        <View style={styles.tripFacts}>
+          <TripFact icon="git-commit-outline" text={units.fmtDist(item.distanceKm)} />
+          <TripFact icon="speedometer-outline" text={`Top ${units.fmtSpeed(item.maxSpeedKph)}`} />
+          {item.idleMin >= 1 ? <TripFact icon="pause-circle-outline" text={`Idle ${durationText(item.idleMin)}`} /> : null}
+        </View>
+      </PressableScale>
     </FadeInUp>
   );
 
   return (
     <View style={styles.wrap}>
-      <Stack.Screen options={{ title: `${name} trips` }} />
+      <Stack.Screen options={{ title: "Trip history" }} />
+      <LoadingBar active={load.state === "loading"} />
 
-      <View style={styles.dayBar}>
-        <Pressable onPress={() => {
-            haptic.tap();
-            setDay(shiftDay(day, -1, today));
-          }} hitSlop={8} style={styles.arrow} accessibilityRole="button" accessibilityLabel="Previous day">
-          <Ionicons name="chevron-back" size={22} color={colors.primary} />
-        </Pressable>
-        <Pressable onPress={() => setDay(today)} style={styles.dayLabel} accessibilityRole="button" accessibilityLabel="Go to today">
-          <Text style={styles.dayText}>{dayLabel(day, today)}</Text>
-          <Text style={styles.zone}>Times in {fmt.abbr()}</Text>
-        </Pressable>
-        <Pressable onPress={() => {
-            haptic.tap();
-            setDay(shiftDay(day, 1, today));
-          }} disabled={day >= today} hitSlop={8} style={[styles.arrow, day >= today && { opacity: 0.3 }]} accessibilityRole="button" accessibilityLabel="Next day">
-          <Ionicons name="chevron-forward" size={22} color={colors.primary} />
-        </Pressable>
+      <View style={styles.top}>
+        <Text style={[type.small, styles.vehicle]} numberOfLines={1}>{name} · times in {fmt.abbr()}</Text>
+        <View style={styles.dayBar}>
+          <Pressable
+            onPress={() => {
+              haptic.tap();
+              setDay(shiftDay(day, -1, today));
+            }}
+            style={styles.arrow}
+            accessibilityRole="button"
+            accessibilityLabel="Previous day"
+          >
+            <Ionicons name="chevron-back" size={size.icon} color={colors.foreground} />
+          </Pressable>
+          <Pressable onPress={() => setDay(today)} style={styles.dayLabel} accessibilityRole="button" accessibilityLabel="Go to today">
+            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+            <Text style={styles.dayText}>{dayLabel(day, today)}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              haptic.tap();
+              setDay(shiftDay(day, 1, today));
+            }}
+            disabled={day >= today}
+            style={[styles.arrow, day >= today && styles.dim]}
+            accessibilityRole="button"
+            accessibilityLabel="Next day"
+          >
+            <Ionicons name="chevron-forward" size={size.icon} color={colors.foreground} />
+          </Pressable>
+        </View>
+
+        {totals && totals.trips > 0 ? (
+          <FadeInUp key={day} distance={6} style={styles.totals}>
+            <Total label="Trips" value={String(totals.trips)} />
+            <Total label="Distance" value={units.fmtDist(totals.distanceKm)} />
+            <Total label="Driving" value={durationText(totals.drivingMin)} />
+            <Total label="Top speed" value={units.fmtSpeed(totals.maxSpeedKph)} />
+          </FadeInUp>
+        ) : null}
       </View>
 
-      {totals && totals.trips > 0 ? (
-        <View style={styles.totals}>
-          <Total label="Trips" value={String(totals.trips)} />
-          <Total label="Distance" value={units.fmtDist(totals.distanceKm)} />
-          <Total label="Driving" value={durationText(totals.drivingMin)} />
-          <Total label="Top speed" value={units.fmtSpeed(totals.maxSpeedKph)} />
-        </View>
-      ) : null}
-
       {load.state === "loading" ? (
-        <ListSkeleton rows={5} />
+        <ListSkeleton rows={4} />
       ) : load.state === "failed" ? (
         <EmptyState icon="cloud-offline-outline" tone="danger" title="Can't load trips" note={load.message}>
           <Button title="Try again" icon="refresh" onPress={() => void fetchDay()} />
@@ -121,8 +137,7 @@ export default function TripsScreen() {
           data={trips}
           keyExtractor={(t) => t.startAt}
           renderItem={row}
-          ItemSeparatorComponent={() => <View style={styles.line} />}
-          contentContainerStyle={[trips.length === 0 ? styles.emptyList : undefined, { paddingBottom: bottom + space.lg }]}
+          contentContainerStyle={[trips.length === 0 ? styles.emptyList : styles.list, { paddingBottom: bottom + space.lg }]}
           refreshControl={
             <RefreshControl
               refreshing={pulling}
@@ -135,9 +150,7 @@ export default function TripsScreen() {
               }}
             />
           }
-          ListEmptyComponent={
-            <EmptyState icon="trail-sign-outline" title="No trips this day" note="The vehicle did not drive, or its tracker was not reporting." />
-          }
+          ListEmptyComponent={<EmptyState icon="trail-sign-outline" title="No trips this day" note="The vehicle did not drive, or its tracker was not reporting." />}
         />
       )}
     </View>
@@ -148,28 +161,40 @@ function Total({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.total}>
       <Text style={styles.totalValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
-      <Text style={styles.totalLabel}>{label}</Text>
+      <Text style={type.caption}>{label}</Text>
+    </View>
+  );
+}
+
+function TripFact({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+  return (
+    <View style={styles.tripFact}>
+      <Ionicons name={icon} size={14} color={colors.mutedForeground} />
+      <Text style={[type.small, styles.tabular]}>{text}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.background },
-  flex: { flex: 1 },
-  dayBar: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.sm, paddingVertical: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  arrow: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  dayLabel: { flex: 1, alignItems: "center" },
-  dayText: { fontSize: font.title, fontWeight: "600", color: colors.foreground },
-  zone: { fontSize: 12, color: colors.mutedForeground, marginTop: 2 },
-  totals: { flexDirection: "row", backgroundColor: colors.canvas, paddingVertical: space.md, paddingHorizontal: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  total: { flex: 1, alignItems: "center", paddingHorizontal: 2 },
-  totalValue: { fontSize: 16, fontWeight: "800", color: colors.foreground },
-  totalLabel: { fontSize: 12, color: colors.mutedForeground, marginTop: 2 },
+  wrap: { flex: 1, backgroundColor: colors.canvas },
+  tabular: { fontVariant: ["tabular-nums"] },
+  dim: { opacity: 0.3 },
+  top: { paddingHorizontal: space.lg, paddingBottom: space.md, gap: space.md },
+  vehicle: { textAlign: "center", marginTop: -space.xs },
+  dayBar: { flexDirection: "row", alignItems: "center", height: size.control, paddingHorizontal: 2, backgroundColor: colors.background, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border },
+  arrow: { width: size.controlSm, height: size.controlSm, alignItems: "center", justifyContent: "center" },
+  dayLabel: { flex: 1, height: size.controlSm, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm },
+  dayText: { fontSize: font.body, lineHeight: 20, fontWeight: "600", color: colors.foreground },
+  totals: { flexDirection: "row", backgroundColor: colors.background, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, paddingVertical: space.md, paddingHorizontal: space.sm },
+  total: { flex: 1, alignItems: "center", gap: 2, paddingHorizontal: 2 },
+  totalValue: { fontSize: 17, lineHeight: 22, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
+  list: { paddingHorizontal: space.lg, gap: space.md },
   emptyList: { flexGrow: 1 },
-  row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.lg, paddingVertical: space.md },
-  number: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
-  numberText: { color: colors.primary, fontWeight: "700", fontSize: font.small },
-  times: { fontSize: font.body, fontWeight: "600", color: colors.foreground },
-  sub: { fontSize: font.small, color: colors.mutedForeground, marginTop: 2 },
-  line: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: space.lg + 32 + space.md }
+  trip: { backgroundColor: colors.background, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 10 },
+  tripHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  number: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
+  numberText: { color: ink(colors.primary), fontWeight: "700", fontSize: font.caption },
+  times: { flex: 1, fontSize: font.body, lineHeight: 20, fontWeight: "600", color: colors.foreground, fontVariant: ["tabular-nums"] },
+  tripFacts: { flexDirection: "row", flexWrap: "wrap", columnGap: space.lg, rowGap: 4, paddingLeft: 24 + space.sm },
+  tripFact: { flexDirection: "row", alignItems: "center", gap: 5 }
 });

@@ -3,15 +3,15 @@ import { dateFormatter } from "@rio-gps/core/timezones";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
+import { StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
 import { ApiError, api } from "@/api";
+import { EmptyState, Loading, Segmented } from "@/components/kit";
 import { PressableScale, SlideUp } from "@/components/motion";
 import { Button } from "@/components/ui";
-import { haptic } from "@/haptics";
 import { useBottomInset } from "@/layout";
 import { Placeholder } from "@/components/Placeholder";
 import { useFleet } from "@/fleet/FleetProvider";
-import { colors, elevation, font, radius, space } from "@/theme";
+import { colors, elevation, font, ink, size, space, type } from "@/theme";
 import { SPEEDS, advance, buildTrack, positionAt, progressOf, timeAtProgress, type HistoryPage, type HistoryPoint, type Track } from "@/trips/model";
 
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -94,21 +94,13 @@ export default function TripScreen() {
       <View style={styles.center}>
         <Stack.Screen options={{ title }} />
         {load.state === "loading" ? (
-          <>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.muted}>Loading the route</Text>
-          </>
+          <Loading text="Loading the route" />
+        ) : load.state === "empty" ? (
+          <EmptyState icon="trail-sign-outline" title="No route recorded" note="This trip has too few positions to draw." />
         ) : (
-          <>
-            <Ionicons name={load.state === "empty" ? "trail-sign-outline" : "cloud-offline-outline"} size={36} color={colors.offline} />
-            <Text style={styles.emptyTitle}>{load.state === "empty" ? "No route recorded" : "Can't load the route"}</Text>
-            <Text style={styles.muted}>{load.state === "failed" ? load.message : "This trip has too few positions to draw."}</Text>
-            {load.state === "failed" ? (
-              <View style={styles.retry}>
-                <Button title="Try again" onPress={() => void fetchTrack()} />
-              </View>
-            ) : null}
-          </>
+          <EmptyState icon="cloud-offline-outline" tone="danger" title="Can't load the route" note={load.state === "failed" ? load.message : undefined}>
+            <Button title="Try again" icon="refresh" onPress={() => void fetchTrack()} />
+          </EmptyState>
         )}
       </View>
     );
@@ -122,7 +114,7 @@ export default function TripScreen() {
       <Stack.Screen options={{ title }} />
       <View style={styles.flex}>
         {TripMap ? (
-          <Suspense fallback={<View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>}>
+          <Suspense fallback={<Loading text="Opening the map" />}>
             <TripMap track={track} at={head.at} />
           </Suspense>
         ) : (
@@ -131,6 +123,7 @@ export default function TripScreen() {
       </View>
 
       <SlideUp style={[styles.panel, { paddingBottom: Math.max(space.xl, bottom + space.md) }]}>
+        <View style={styles.grabber} />
         <View style={styles.readout}>
           <Text style={styles.clock}>{fmt.timeSec(t)}</Text>
           <Text style={styles.speed}>{units.fmtSpeed(head.speedKph)}</Text>
@@ -159,20 +152,10 @@ export default function TripScreen() {
 
         <View style={styles.controls}>
           <PressableScale onPress={togglePlay} feedback="press" scaleTo={0.92} style={styles.play} accessibilityRole="button" accessibilityLabel={playing ? "Pause" : "Play"}>
-            <Ionicons name={playing ? "pause" : "play"} size={26} color={colors.primaryForeground} />
+            <Ionicons name={playing ? "pause" : "play"} size={24} color={colors.primaryForeground} />
           </PressableScale>
           <View style={styles.speeds}>
-            {SPEEDS.map((s) => (
-              <Pressable
-                key={s}
-                onPress={() => {
-                  haptic.tap();
-                  setSpeed(s);
-                }}
-                style={[styles.speedChip, speed === s && styles.speedChipOn]} accessibilityRole="button" accessibilityState={{ selected: speed === s }} accessibilityLabel={`Speed ${s} times`}>
-                <Text style={[styles.speedText, speed === s && styles.speedTextOn]}>{s}x</Text>
-              </Pressable>
-            ))}
+            <Segmented label="Playback speed" value={speed} onChange={setSpeed} options={SPEEDS.map((v) => ({ value: v, label: `${v}x` }))} />
           </View>
         </View>
       </SlideUp>
@@ -183,25 +166,19 @@ export default function TripScreen() {
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.sm, backgroundColor: colors.canvas },
-  retry: { marginTop: space.md, alignSelf: "stretch" },
-  emptyTitle: { fontSize: font.title, fontWeight: "600", color: colors.foreground, marginTop: space.sm },
-  muted: { fontSize: font.body, color: colors.mutedForeground, textAlign: "center", lineHeight: 21 },
-  panel: { backgroundColor: colors.background, paddingHorizontal: space.lg, paddingTop: space.lg, paddingBottom: space.xl, borderTopLeftRadius: 20, borderTopRightRadius: 20, marginTop: -16, ...elevation.lg },
+  center: { flex: 1, backgroundColor: colors.canvas },
+  panel: { backgroundColor: colors.background, paddingHorizontal: space.lg, paddingTop: 10, paddingBottom: space.xl, borderTopLeftRadius: 20, borderTopRightRadius: 20, marginTop: -16, ...elevation.lg },
+  grabber: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: space.md },
   readout: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
-  clock: { fontSize: 22, fontWeight: "800", color: colors.foreground, fontVariant: ["tabular-nums"] },
-  speed: { fontSize: font.title, fontWeight: "700", color: colors.primary, fontVariant: ["tabular-nums"] },
-  barHit: { height: 44, justifyContent: "center" },
+  clock: { fontSize: 20, lineHeight: 26, fontWeight: "700", letterSpacing: -0.2, color: colors.foreground, fontVariant: ["tabular-nums"] },
+  speed: { fontSize: font.title, lineHeight: 22, fontWeight: "700", color: ink(colors.primary), fontVariant: ["tabular-nums"] },
+  barHit: { height: size.controlSm, justifyContent: "center" },
   bar: { height: 6, borderRadius: 3, backgroundColor: colors.muted, overflow: "hidden" },
   barFill: { height: 6, backgroundColor: colors.primary },
-  knob: { position: "absolute", width: 20, height: 20, borderRadius: 10, marginLeft: -10, backgroundColor: colors.primary, borderWidth: 3, borderColor: colors.background, top: 12, shadowColor: "#101828", shadowOpacity: 0.2, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
+  knob: { position: "absolute", width: 20, height: 20, borderRadius: 10, marginLeft: -10, backgroundColor: colors.primary, borderWidth: 3, borderColor: colors.background, top: 12, ...elevation.sm },
   ends: { flexDirection: "row", justifyContent: "space-between", marginTop: -space.xs },
-  endText: { fontSize: 12, color: colors.mutedForeground },
-  controls: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: space.md },
-  play: { width: 58, height: 58, borderRadius: 29, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", ...elevation.md },
-  speeds: { flexDirection: "row", backgroundColor: colors.muted, borderRadius: radius.xl, padding: 3 },
-  speedChip: { minWidth: 52, minHeight: 38, alignItems: "center", justifyContent: "center", borderRadius: radius.lg },
-  speedChipOn: { backgroundColor: colors.background },
-  speedText: { fontSize: font.small, fontWeight: "500", color: colors.mutedForeground },
-  speedTextOn: { color: colors.foreground, fontWeight: "700" }
+  endText: { ...type.caption, fontVariant: ["tabular-nums"] },
+  controls: { flexDirection: "row", alignItems: "center", gap: space.lg, marginTop: space.md },
+  play: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", ...elevation.md },
+  speeds: { flex: 1 }
 });

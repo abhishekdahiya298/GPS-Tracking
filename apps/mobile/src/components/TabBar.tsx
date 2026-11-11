@@ -1,25 +1,24 @@
 /**
- * The bottom tab bar: a pill slides under the active tab, the active icon fills in and
- * pops slightly, and the alert count sits on the bell.
+ * The bottom tab bar: five tabs of equal width. The active tab turns blue, its icon fills in
+ * and pops slightly, and the alert count sits on the bell.
  */
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import type { Tabs } from "expo-router";
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { useEffect, useRef, type ComponentProps } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { haptic } from "../haptics";
-import { colors, elevation } from "../theme";
+import { colors, size } from "../theme";
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 type IconName = keyof typeof Ionicons.glyphMap;
 
 /** Outline icon when idle, filled when active. Keyed by route name. */
-export const TAB_ICONS: Record<string, { idle: IconName; active: IconName }> = {
+const TAB_ICONS: Record<string, { idle: IconName; active: IconName }> = {
   index: { idle: "home-outline", active: "home" },
   map: { idle: "map-outline", active: "map" },
-  vehicles: { idle: "bus-outline", active: "bus" },
   alerts: { idle: "notifications-outline", active: "notifications" },
-  account: { idle: "person-circle-outline", active: "person-circle" }
+  account: { idle: "person-outline", active: "person" }
 };
 
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
@@ -27,32 +26,23 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   useEffect(() => {
     Animated.spring(pop, { toValue: focused ? 1 : 0, useNativeDriver: true, speed: 22, bounciness: 12 }).start();
   }, [focused, pop]);
-  const icons = TAB_ICONS[name] ?? { idle: "ellipse-outline" as IconName, active: "ellipse" as IconName };
+  const tint = focused ? colors.primary : colors.mutedForeground;
+  const icons = TAB_ICONS[name];
   return (
-    <Animated.View style={{ transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.14] }) }, { translateY: pop.interpolate({ inputRange: [0, 1], outputRange: [0, -1] }) }] }}>
-      <Ionicons name={focused ? icons.active : icons.idle} size={24} color={focused ? colors.primary : colors.offline} />
+    <Animated.View style={{ transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] }) }] }}>
+      {name === "vehicles" ? (
+        <MaterialCommunityIcons name={focused ? "truck" : "truck-outline"} size={size.tabIcon + 1} color={tint} />
+      ) : (
+        <Ionicons name={focused ? (icons?.active ?? "ellipse") : (icons?.idle ?? "ellipse-outline")} size={size.tabIcon} color={tint} />
+      )}
     </Animated.View>
   );
 }
 
 export function TabBar({ state, descriptors, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
-  const [width, setWidth] = useState(0);
-  const count = state.routes.length;
-  const tabWidth = count > 0 ? width / count : 0;
-  const slide = useRef(new Animated.Value(state.index)).current;
-
-  useEffect(() => {
-    Animated.spring(slide, { toValue: state.index, useNativeDriver: true, speed: 18, bounciness: 7 }).start();
-  }, [state.index, slide]);
-
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-      {tabWidth > 0 ? (
-        <Animated.View pointerEvents="none" style={[styles.indicatorSlot, { width: tabWidth, transform: [{ translateX: Animated.multiply(slide, tabWidth) }] }]}>
-          <View style={styles.indicator} />
-        </Animated.View>
-      ) : null}
+    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       {state.routes.map((route, index) => {
         const options = descriptors[route.key]?.options ?? {};
         const focused = state.index === index;
@@ -94,12 +84,10 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
 }
 
 const styles = StyleSheet.create({
-  bar: { flexDirection: "row", backgroundColor: colors.background, paddingTop: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, ...elevation.md },
-  indicatorSlot: { position: "absolute", top: 6, left: 0, height: 34, alignItems: "center", justifyContent: "center" },
-  indicator: { width: 52, height: 34, borderRadius: 17, backgroundColor: colors.primarySoft },
-  tab: { flex: 1, alignItems: "center", gap: 3, minHeight: 52 },
-  label: { fontSize: 11, fontWeight: "500", color: colors.offline },
-  labelOn: { color: colors.primary, fontWeight: "700" },
-  badge: { position: "absolute", top: -4, right: -12, minWidth: 18, height: 18, paddingHorizontal: 4, borderRadius: 9, backgroundColor: colors.danger, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.background },
-  badgeText: { color: "#ffffff", fontSize: 10, fontWeight: "700" }
+  bar: { flexDirection: "row", backgroundColor: colors.background, paddingTop: 6, paddingHorizontal: 8, borderTopWidth: 1, borderTopColor: colors.border },
+  tab: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3, minHeight: 48 },
+  label: { fontSize: 11, lineHeight: 14, fontWeight: "500", color: colors.mutedForeground },
+  labelOn: { color: colors.primary, fontWeight: "600" },
+  badge: { position: "absolute", top: -4, right: -10, minWidth: 16, height: 16, paddingHorizontal: 4, borderRadius: 8, backgroundColor: colors.danger, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.background },
+  badgeText: { color: "#ffffff", fontSize: 10, lineHeight: 12, fontWeight: "700" }
 });

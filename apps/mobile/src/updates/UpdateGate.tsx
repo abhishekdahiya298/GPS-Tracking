@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(10,36,99,0.45)" },
   sheet: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: space.xl, gap: space.md },
   grabber: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border },
-  sheetTitle: { fontSize: font.title, fontWeight: "700", color: colors.primaryDark },
+  sheetTitle: { fontSize: font.title, fontWeight: "700", color: colors.foreground },
   body: { fontSize: font.body, color: colors.foreground, lineHeight: 22 },
   notes: { fontSize: font.small, color: colors.mutedForeground, lineHeight: 19 },
   actions: { gap: space.sm }

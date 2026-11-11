@@ -2,13 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Card, EmptyState, StatusPill, VehicleAvatar } from "@/components/kit";
-import { FadeInUp } from "@/components/motion";
+import { Card, EmptyState, IconWell, StatusPill, VehicleAvatar } from "@/components/kit";
+import { FadeInUp, PressableScale } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { compassPoint, displayName, fleetState, statusLine, timeAgo } from "@/fleet/model";
 import { useBottomInset } from "@/layout";
-import { colors, font, radius, space } from "@/theme";
+import { colors, radius, size, space, type } from "@/theme";
 
 // The map only exists in the installed app (see app/(tabs)/index.tsx).
 const hasMap = Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
@@ -52,7 +52,7 @@ export default function VehicleScreen() {
     Linking.openURL(url).catch(() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${at}`));
   }
 
-  const type = device.vehicle?.type;
+  const kind = device.vehicle?.type;
   const stats: Array<{ icon: keyof typeof Ionicons.glyphMap; label: string; value: string }> = [
     { icon: "speedometer-outline", label: "Speed", value: loc && state !== "offline" && state !== "parked" ? units.fmtSpeed(loc.speedKph) : "—" },
     { icon: "compass-outline", label: "Heading", value: loc?.headingDeg != null && point ? `${point} ${Math.round(loc.headingDeg)}°` : "—" },
@@ -60,51 +60,77 @@ export default function VehicleScreen() {
   ];
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={[styles.content, { paddingBottom: space.xxl + bottom }]}>
+    <ScrollView style={styles.wrap} contentContainerStyle={[styles.content, { paddingBottom: space.xl + bottom }]}>
       <Stack.Screen options={{ title: name }} />
 
       <FadeInUp index={0}>
-        <Card>
+        <Card style={styles.hero}>
           <View style={styles.head}>
-            <VehicleAvatar type={type} state={state} size={54} />
+            <VehicleAvatar type={kind} state={state} size={52} />
             <View style={styles.flex}>
-              <Text style={styles.name}>{name}</Text>
-              {device.vehicle?.licensePlate ? (
-                <View style={styles.plate}>
-                  <Text style={styles.plateText}>{device.vehicle.licensePlate}</Text>
-                </View>
-              ) : null}
+              <Text style={styles.name} numberOfLines={2}>{name}</Text>
+              <Text style={type.small} numberOfLines={1}>
+                {[kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : null, device.vehicle?.licensePlate].filter(Boolean).join(" · ") || statusLine(device, units.fmtSpeed, now)}
+              </Text>
             </View>
             <StatusPill state={state} compact />
           </View>
-          <Text style={styles.summary}>{statusLine(device, units.fmtSpeed, now)}</Text>
+          <View style={styles.rule} />
+          <View style={styles.stats}>
+            {stats.map((s) => (
+              <View key={s.label} style={styles.stat}>
+                <View style={styles.statHead}>
+                  <Ionicons name={s.icon} size={14} color={colors.mutedForeground} />
+                  <Text style={type.caption}>{s.label}</Text>
+                </View>
+                <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{s.value}</Text>
+              </View>
+            ))}
+          </View>
         </Card>
       </FadeInUp>
 
-      <FadeInUp index={1} style={styles.stats}>
-        {stats.map((s) => (
-          <Card key={s.label} style={styles.stat}>
-            <Ionicons name={s.icon} size={18} color={colors.primary} />
-            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{s.value}</Text>
-            <Text style={styles.statLabel}>{s.label}</Text>
-          </Card>
-        ))}
+      <FadeInUp index={1}>
+        <Card style={styles.place}>
+          <View style={styles.placeHead}>
+            <IconWell icon="location-outline" />
+            <View style={styles.flex}>
+              <Text style={type.rowTitle}>{loc ? `Last position ${timeAgo(loc.recordedAt, now)}` : "No position yet"}</Text>
+              <Text style={[type.small, styles.tabular]} selectable>
+                {loc ? `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}` : "This tracker has not reported a position."}
+              </Text>
+            </View>
+          </View>
+          {loc ? (
+            <View style={styles.placeActions}>
+              {hasMap ? (
+                <View style={styles.flex}>
+                  <Button compact title="Show on map" icon="map-outline" onPress={() => router.navigate({ pathname: "/(tabs)/map", params: { device: device.deviceId } })} />
+                </View>
+              ) : null}
+              <View style={styles.flex}>
+                <Button compact variant="outline" title="Open in Maps" icon="navigate-outline" onPress={openInMaps} />
+              </View>
+            </View>
+          ) : null}
+        </Card>
       </FadeInUp>
 
       <FadeInUp index={2}>
         <Card style={styles.rows}>
-          <Row label="Last position" value={loc ? `${timeAgo(loc.recordedAt, now)} · ${new Date(loc.recordedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : "None yet"} />
-          <Row label="Tracker last heard" value={device.lastSeenAt ? timeAgo(device.lastSeenAt, now) : "Never"} />
-          <Row label="Coordinates" value={loc ? `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}` : "None yet"} />
-          {type ? <Row label="Type" value={type.charAt(0).toUpperCase() + type.slice(1)} /> : null}
+          <Row label="Last position" value={loc ? new Date(loc.recordedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "None yet"} />
+          <Row label="Tracker last heard" value={device.lastSeenAt ? timeAgo(device.lastSeenAt, now) : "Never"} last={!kind && !device.model} />
+          {kind ? <Row label="Type" value={kind.charAt(0).toUpperCase() + kind.slice(1)} last={!device.model} /> : null}
           {device.model ? <Row label="Tracker" value={device.model} last /> : null}
         </Card>
       </FadeInUp>
 
-      <FadeInUp index={3} style={styles.actions}>
-        {loc && hasMap ? <Button title="Show on map" icon="navigate" onPress={() => router.navigate({ pathname: "/(tabs)/map", params: { device: device.deviceId } })} /> : null}
-        <Button variant={loc && hasMap ? "outline" : "primary"} icon="time-outline" title="Trip history" onPress={() => router.push({ pathname: "/trips/[id]", params: { id: device.deviceId } })} />
-        {loc ? <Button variant="outline" icon="open-outline" title="Open in Maps" onPress={openInMaps} /> : null}
+      <FadeInUp index={3}>
+        <PressableScale onPress={() => router.push({ pathname: "/trips/[id]", params: { id: device.deviceId } })} scaleTo={0.985} style={styles.linkCard} accessibilityRole="button" accessibilityLabel="Trip history">
+          <IconWell icon="git-commit-outline" box={36} />
+          <Text style={[type.rowTitle, styles.flex]}>Trip history</Text>
+          <Ionicons name="chevron-forward" size={18} color={colors.borderStrong} />
+        </PressableScale>
       </FadeInUp>
     </ScrollView>
   );
@@ -112,23 +138,25 @@ export default function VehicleScreen() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
-  content: { padding: space.lg, gap: space.md, paddingBottom: space.xxl },
-  flex: { flex: 1 },
+  content: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.md },
+  flex: { flex: 1, minWidth: 0 },
+  tabular: { fontVariant: ["tabular-nums"] },
   missing: { flex: 1, backgroundColor: colors.canvas },
+  hero: { padding: 14, gap: space.md },
   head: { flexDirection: "row", alignItems: "center", gap: space.md },
-  name: { fontSize: 20, fontWeight: "800", color: colors.foreground },
-  // Left-aligned under the name (it used to be centred, which looked broken).
-  plate: { alignSelf: "flex-start", marginTop: 4, paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.canvas },
-  plateText: { fontSize: 12, fontWeight: "600", color: colors.mutedForeground, letterSpacing: 0.4 },
-  summary: { fontSize: font.body, color: colors.mutedForeground, marginTop: space.md },
-  stats: { flexDirection: "row", gap: space.md },
-  stat: { flex: 1, padding: space.md, gap: 4 },
-  statValue: { fontSize: 20, fontWeight: "800", color: colors.foreground },
-  statLabel: { fontSize: 12, color: colors.mutedForeground, fontWeight: "500" },
-  rows: { paddingVertical: space.xs },
-  row: { flexDirection: "row", justifyContent: "space-between", gap: space.lg, paddingVertical: space.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  name: { fontSize: 20, lineHeight: 26, fontWeight: "700", letterSpacing: -0.2, color: colors.foreground },
+  rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  stats: { flexDirection: "row", gap: space.sm },
+  stat: { flex: 1, gap: 4 },
+  statHead: { flexDirection: "row", alignItems: "center", gap: 5 },
+  statValue: { fontSize: 17, lineHeight: 22, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
+  place: { padding: 14, gap: space.md },
+  placeHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  placeActions: { flexDirection: "row", gap: space.sm },
+  rows: { paddingVertical: 0, paddingHorizontal: 14 },
+  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.lg, minHeight: size.control, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   rowLast: { borderBottomWidth: 0 },
-  label: { fontSize: font.body, color: colors.mutedForeground },
-  value: { flex: 1, fontSize: font.body, fontWeight: "500", color: colors.foreground, textAlign: "right" },
-  actions: { gap: space.sm, marginTop: space.xs }
+  label: { fontSize: 14, lineHeight: 20, color: colors.mutedForeground },
+  value: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground, textAlign: "right", fontVariant: ["tabular-nums"] },
+  linkCard: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 56, paddingLeft: space.md, paddingRight: 10, backgroundColor: colors.background, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border }
 });

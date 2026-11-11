@@ -2,11 +2,13 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text } from "react-native";
 import { ApiError, api, tokenStore } from "@/api";
+import { Ionicons } from "@expo/vector-icons";
 import { Card } from "@/components/kit";
+import { PopIn } from "@/components/motion";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { haptic } from "@/haptics";
 import { useBottomInset } from "@/layout";
-import { colors, font, space } from "@/theme";
+import { colors, space, type } from "@/theme";
 
 /** Same rule as the server (web lib/auth.ts minPasswordLength). */
 const MIN_LENGTH = 6;
@@ -57,6 +59,9 @@ export default function ChangePasswordScreen() {
         <Card style={styles.card}>
           {done ? (
             <>
+              <PopIn style={styles.done}>
+                <Ionicons name="checkmark" size={28} color={colors.success} />
+              </PopIn>
               <Text style={styles.title}>Password changed</Text>
               <Text style={styles.note}>
                 {kept ? "Your other devices have been signed out. Use the new password the next time you sign in, here and on the website." : "All devices have been signed out, including this phone. Sign in again with the new password."}
@@ -65,9 +70,9 @@ export default function ChangePasswordScreen() {
             </>
           ) : (
             <>
-              <Field label="Current password" value={current} onChangeText={setCurrent} secureTextEntry autoCapitalize="none" autoComplete="current-password" textContentType="password" />
-              <Field label="New password" value={next} onChangeText={setNext} secureTextEntry autoCapitalize="none" autoComplete="new-password" textContentType="newPassword" />
-              <Field label="New password again" value={confirm} onChangeText={setConfirm} secureTextEntry autoCapitalize="none" autoComplete="new-password" textContentType="newPassword" onSubmitEditing={submit} returnKeyType="done" />
+              <Field icon="lock-closed-outline" label="Current password" value={current} onChangeText={setCurrent} secureTextEntry autoCapitalize="none" autoComplete="current-password" textContentType="password" />
+              <Field icon="key-outline" label="New password" value={next} onChangeText={setNext} secureTextEntry autoCapitalize="none" autoComplete="new-password" textContentType="newPassword" />
+              <Field icon="key-outline" label="New password again" value={confirm} onChangeText={setConfirm} secureTextEntry autoCapitalize="none" autoComplete="new-password" textContentType="newPassword" onSubmitEditing={submit} returnKeyType="done" />
               {error ? <ErrorNote text={error} /> : null}
               <Button title="Change password" onPress={submit} loading={busy} />
             </>
@@ -80,8 +85,9 @@ export default function ChangePasswordScreen() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
-  content: { padding: space.lg },
+  content: { paddingHorizontal: space.lg, paddingTop: space.sm },
   card: { gap: space.lg },
-  title: { fontSize: font.title, fontWeight: "800", color: colors.foreground },
-  note: { fontSize: font.body, color: colors.mutedForeground, lineHeight: 21 }
+  done: { alignSelf: "center", width: 56, height: 56, borderRadius: 28, backgroundColor: colors.successSoft, alignItems: "center", justifyContent: "center" },
+  title: { ...type.title, textAlign: "center" },
+  note: { ...type.body, color: colors.mutedForeground, textAlign: "center" }
 });
