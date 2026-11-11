@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
 import { ApiError, api } from "../api";
+import { useFleet } from "../fleet/FleetProvider";
 import { markRead, mergeEvents, type AlertEvent, type AlertsResponse } from "./model";
 
 const PAGE = 50;
@@ -120,6 +121,10 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
       sub.remove();
     };
   }, [load]);
+
+  // A new alert on the live stream: fetch it now instead of waiting for the next timed refresh.
+  const { onLiveAlert } = useFleet();
+  useEffect(() => onLiveAlert(() => void load("top")), [onLiveAlert, load]);
 
   const refresh = useCallback(() => load("top"), [load]);
   const value = useMemo<AlertsValue>(

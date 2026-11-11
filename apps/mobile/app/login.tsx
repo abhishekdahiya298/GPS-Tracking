@@ -1,10 +1,16 @@
-import { useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import Constants from "expo-constants";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { codeFailure, signInMessage, type CodeKind } from "@/auth/service";
 import { useSession } from "@/auth/SessionProvider";
+import { FadeInUp } from "@/components/motion";
 import { Button, ErrorNote, Field } from "@/components/ui";
-import { colors, font, radius, space } from "@/theme";
+import { useBottomInset, useScreen } from "@/layout";
+import { colors, space, type } from "@/theme";
+
+const ROUTE = require("../assets/signin-route.png"); // eslint-disable-line @typescript-eslint/no-require-imports -- React Native loads images with require()
+const LOGO = require("../assets/logo.png"); // eslint-disable-line @typescript-eslint/no-require-imports -- React Native loads images with require()
 
 export default function LoginScreen() {
   const { signIn, verifyCode } = useSession();
@@ -17,6 +23,21 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const passwordRef = useRef<TextInput>(null);
+  const { compact, scale, height } = useScreen();
+  // The picture along the bottom shows only when there is room for it: a tall phone, keyboard closed.
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setTyping(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setTyping(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  const roomy = height >= 780 && !typing;
+  const bottom = useBottomInset();
+  // A short phone gets a smaller logo and tighter spacing so the whole form fits above the keyboard.
+  const logoWidth = compact ? scale(140) : scale(172);
 
   function startAgain(message: string | null = null) {
     setPending(null);
@@ -67,24 +88,32 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.brand}>
-            <Text style={styles.brandName}>RIO GPS</Text>
-            <Text style={styles.brandNote}>Fleet tracking</Text>
-          </View>
+    <SafeAreaView style={styles.screen}>
+      {/* A quiet picture along the bottom edge. Hidden on a short phone, where the form needs the room. */}
+      {!roomy ? null : <Image source={ROUTE} style={styles.route} resizeMode="stretch" accessibilityElementsHidden importantForAccessibility="no" />}
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: space.lg + bottom }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
+          <FadeInUp style={[styles.brand, compact && { marginBottom: space.lg }]} distance={16}>
+            <Image source={LOGO} style={{ width: logoWidth, height: Math.round(logoWidth * (352 / 720)) }} resizeMode="contain" accessibilityLabel="RIO GPS" />
+            <View style={styles.heading}>
+              <Text style={type.largeTitle} accessibilityRole="header">{pending ? "Two-step verification" : "Sign in"}</Text>
+              <Text style={styles.help}>
+                {pending
+                  ? kind === "backup"
+                    ? "Enter one of the backup codes you saved when you turned on two-step verification."
+                    : "Enter the 6-digit code from your authenticator app."
+                  : "Track your fleet live, from anywhere."}
+              </Text>
+            </View>
+          </FadeInUp>
 
-          <View style={styles.card}>
+          <FadeInUp key={pending ? "code" : "password"} index={1} distance={16} style={styles.form}>
             {pending ? (
               <>
-                <Text style={styles.title}>Two-step verification</Text>
-                <Text style={styles.help}>
-                  {kind === "backup" ? "Enter one of the backup codes you saved when you turned on two-step verification." : "Enter the 6-digit code from your authenticator app."}
-                </Text>
                 <Field
                   key={kind}
                   label={kind === "backup" ? "Backup code" : "Verification code"}
+                  icon="shield-checkmark-outline"
                   value={code}
                   onChangeText={setCode}
                   autoFocus
@@ -116,9 +145,10 @@ export default function LoginScreen() {
               </>
             ) : (
               <>
-                <Text style={styles.title}>Sign in</Text>
                 <Field
                   label="Email"
+                  icon="mail-outline"
+                  placeholder="you@company.com"
                   value={email}
                   onChangeText={setEmail}
                   autoCapitalize="none"
@@ -132,6 +162,8 @@ export default function LoginScreen() {
                 <Field
                   ref={passwordRef}
                   label="Password"
+                  icon="lock-closed-outline"
+                  placeholder="Your password"
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry
@@ -141,28 +173,32 @@ export default function LoginScreen() {
                   onSubmitEditing={onSignIn}
                 />
                 {error && <ErrorNote text={error} />}
-                <Button title="Sign in" onPress={onSignIn} loading={busy} />
+                <View style={styles.submit}>
+                  <Button title="Sign in" onPress={onSignIn} loading={busy} />
+                </View>
                 <Text style={styles.footnote}>Accounts are created by your administrator. To reset a password, use the website.</Text>
               </>
             )}
-          </View>
+          </FadeInUp>
         </ScrollView>
       </KeyboardAvoidingView>
+      {!roomy ? null : <Text style={[styles.version, { bottom: bottom + space.lg }]}>Version {Constants.expoConfig?.version ?? ""}</Text>}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.primaryDark },
+  screen: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: "center", padding: space.lg },
-  brand: { alignItems: "center", marginBottom: space.xl },
-  brandName: { color: colors.primaryForeground, fontSize: 30, fontWeight: "700", letterSpacing: 1 },
-  brandNote: { color: "#c7d3f2", fontSize: font.body, marginTop: space.xs },
-  card: { backgroundColor: colors.background, borderRadius: radius.xl, padding: space.xl, gap: space.lg },
-  title: { fontSize: font.heading, fontWeight: "700", color: colors.foreground },
-  help: { fontSize: font.body, color: colors.mutedForeground, lineHeight: 21, marginTop: -space.sm },
+  scroll: { flexGrow: 1, justifyContent: "center", paddingHorizontal: space.xl, paddingTop: space.lg },
+  brand: { alignItems: "center", gap: space.lg, marginBottom: space.xxl },
+  heading: { alignItems: "center", gap: space.xs },
+  help: { ...type.body, color: colors.mutedForeground, textAlign: "center" },
+  form: { gap: space.lg },
+  submit: { marginTop: space.sm },
   code: { letterSpacing: 4, fontSize: 20 },
   links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: -space.sm },
-  footnote: { fontSize: font.small, color: colors.mutedForeground, textAlign: "center", lineHeight: 19 }
+  footnote: { ...type.small, textAlign: "center" },
+  route: { position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: 150 },
+  version: { ...type.caption, position: "absolute", left: 0, right: 0, textAlign: "center" }
 });

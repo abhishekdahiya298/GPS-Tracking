@@ -21,15 +21,32 @@ export interface AlertsResponse {
   unacknowledged: number;
 }
 
-export type AlertIcon = "speedometer-outline" | "cloud-offline-outline" | "enter-outline" | "exit-outline" | "key-outline" | "notifications-outline";
+export type AlertIcon =
+  | "speedometer-outline"
+  | "cloud-offline-outline"
+  | "enter-outline"
+  | "exit-outline"
+  | "key-outline"
+  | "notifications-outline"
+  | "time-outline"
+  | "location-outline"
+  | "pause-circle-outline"
+  | "flag-outline"
+  | "checkmark-done-outline";
 
 const META: Record<string, { label: string; verb: string; color: string; soft: string; icon: AlertIcon }> = {
   speeding: { label: "Speeding", verb: "is speeding", color: "#c42b2b", soft: "#fdecec", icon: "speedometer-outline" },
   device_offline: { label: "Device offline", verb: "went offline", color: "#b45309", soft: "#fff5e1", icon: "cloud-offline-outline" },
   geofence_enter: { label: "Entered zone", verb: "entered a zone", color: "#0369a1", soft: "#e8f4fb", icon: "enter-outline" },
   geofence_exit: { label: "Left zone", verb: "left a zone", color: "#0369a1", soft: "#e8f4fb", icon: "exit-outline" },
-  ignition_on: { label: "Ignition on", verb: "ignition on", color: "#5b6472", soft: "#f3f4f6", icon: "key-outline" },
-  ignition_off: { label: "Ignition off", verb: "ignition off", color: "#5b6472", soft: "#f3f4f6", icon: "key-outline" }
+  ignition_on: { label: "Ignition on", verb: "engine started", color: "#5b6472", soft: "#f3f4f6", icon: "key-outline" },
+  ignition_off: { label: "Ignition off", verb: "engine stopped", color: "#5b6472", soft: "#f3f4f6", icon: "key-outline" },
+  // Broker loads. Wording matches the web app's alerts page.
+  load_late: { label: "Load late", verb: "is running late", color: "#c42b2b", soft: "#fdecec", icon: "time-outline" },
+  load_no_signal: { label: "Load: no location", verb: "has no recent location", color: "#b45309", soft: "#fff5e1", icon: "location-outline" },
+  load_paused: { label: "Load: driver paused", verb: "driver paused sharing", color: "#b45309", soft: "#fff5e1", icon: "pause-circle-outline" },
+  load_arrived: { label: "Load arrived", verb: "arrived", color: "#0369a1", soft: "#e8f4fb", icon: "flag-outline" },
+  load_delivered: { label: "Load delivered", verb: "was delivered", color: "#15803d", soft: "#e9f7ee", icon: "checkmark-done-outline" }
 };
 
 export function alertMeta(type: string) {
@@ -42,7 +59,9 @@ const text = (v: unknown): string | null => (typeof v === "string" && v.trim() ?
 
 /** The headline: who and what, e.g. "Truck 1 is speeding" or "Truck 1 entered Yard". */
 export function alertTitle(e: AlertEvent): string {
-  const who = e.vehicleName ?? "A vehicle";
+  // A load alert is about the load ("Load DEMO-102 is running late"), not a vehicle.
+  const load = text(e.details?.reference);
+  const who = load ? `Load ${load}` : (e.vehicleName ?? (e.type.startsWith("load_") ? "A load" : "A vehicle"));
   const zone = text(e.details?.geofence);
   if (e.type === "geofence_enter") return `${who} entered ${zone ?? "a zone"}`;
   if (e.type === "geofence_exit") return `${who} left ${zone ?? "a zone"}`;
@@ -62,6 +81,18 @@ export function alertDetail(e: AlertEvent, fmtSpeed: (kph: number | null) => str
     if (minutes === null) return null;
     const rounded = Math.round(minutes);
     return rounded < 60 ? `No signal for ${rounded} min` : `No signal for ${Math.round(rounded / 60)} h`;
+  }
+  if (e.type === "load_no_signal") {
+    const minutes = num(e.details?.minutes);
+    if (minutes === null) return null;
+    const rounded = Math.round(minutes);
+    return rounded < 60 ? `No location for ${rounded} min` : `No location for ${Math.round(rounded / 60)} h`;
+  }
+  if (e.type === "load_late") {
+    const late = num(e.details?.lateByMinutes);
+    if (late === null) return null;
+    const rounded = Math.round(late);
+    return rounded < 60 ? `About ${rounded} min late` : `About ${Math.round(rounded / 60)} h late`;
   }
   return null;
 }

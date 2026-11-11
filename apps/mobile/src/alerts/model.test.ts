@@ -13,7 +13,18 @@ describe("alert wording", () => {
     expect(alertTitle(ev({ type: "device_offline" }))).toBe("Truck 1 went offline");
     expect(alertTitle(ev({ type: "geofence_enter", details: { geofence: "Yard" } }))).toBe("Truck 1 entered Yard");
     expect(alertTitle(ev({ type: "geofence_exit", details: {} }))).toBe("Truck 1 left a zone");
-    expect(alertTitle(ev({ type: "ignition_on", vehicleName: null }))).toBe("A vehicle ignition on");
+    expect(alertTitle(ev({ type: "ignition_on", vehicleName: null }))).toBe("A vehicle engine started");
+    expect(alertTitle(ev({ type: "ignition_off" }))).toBe("Truck 1 engine stopped");
+  });
+  it("names the load, not a vehicle, for load alerts", () => {
+    const load = { vehicleName: null, deviceId: null, vehicleId: null };
+    expect(alertTitle(ev({ ...load, type: "load_no_signal", details: { reference: "DEMO-102", minutes: 45 } }))).toBe("Load DEMO-102 has no recent location");
+    expect(alertTitle(ev({ ...load, type: "load_late", details: { reference: "DEMO-102" } }))).toBe("Load DEMO-102 is running late");
+    expect(alertTitle(ev({ ...load, type: "load_delivered", details: {} }))).toBe("A load was delivered");
+    expect(alertMeta("load_paused").label).toBe("Load: driver paused");
+    expect(alertDetail(ev({ ...load, type: "load_no_signal", details: { minutes: 45 } }), mph)).toBe("No location for 45 min");
+    expect(alertDetail(ev({ ...load, type: "load_late", details: { lateByMinutes: 130 } }), mph)).toBe("About 2 h late");
+    expect(alertDetail(ev({ ...load, type: "load_arrived", details: {} }), mph)).toBeNull();
   });
   it("adds speed and limit, or how long a tracker was silent", () => {
     expect(alertDetail(ev({ details: { speedKph: 120.7, limitKph: 104.6 } }), mph)).toBe("75 mph, limit 65 mph");

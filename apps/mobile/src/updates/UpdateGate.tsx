@@ -3,7 +3,7 @@ import * as SplashScreen from "expo-splash-screen";
 import Constants from "expo-constants";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AppState, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL } from "../config";
 import { Button } from "../components/ui";
 import { colors, font, radius, space } from "../theme";
@@ -88,6 +88,7 @@ export function UpdateGate({ children }: { children: ReactNode }) {
     <>
       {children}
       <Modal visible={offer} transparent animationType="slide" onRequestClose={later}>
+        <SafeAreaProvider>
         <View style={styles.backdrop}>
           <SafeAreaView edges={["bottom"]} style={styles.sheet}>
             <View style={styles.grabber} />
@@ -102,6 +103,7 @@ export function UpdateGate({ children }: { children: ReactNode }) {
             </View>
           </SafeAreaView>
         </View>
+        </SafeAreaProvider>
       </Modal>
     </>
   );
@@ -167,7 +169,7 @@ const styles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(10,36,99,0.45)" },
   sheet: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: space.xl, gap: space.md },
   grabber: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border },
-  sheetTitle: { fontSize: font.title, fontWeight: "700", color: colors.primaryDark },
+  sheetTitle: { fontSize: font.title, fontWeight: "700", color: colors.foreground },
   body: { fontSize: font.body, color: colors.foreground, lineHeight: 22 },
   notes: { fontSize: font.small, color: colors.mutedForeground, lineHeight: 19 },
   actions: { gap: space.sm }

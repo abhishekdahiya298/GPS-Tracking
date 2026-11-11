@@ -1,8 +1,8 @@
 import { Camera, GeoJSONSource, Layer, Map, type CameraRef } from "@maplibre/maplibre-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
-import { colors } from "@/theme";
-import { MAP_STYLE_URL } from "@/map/model";
+import { colors, isDark } from "@/theme";
+import { styleUrl } from "@/map/model";
 import { trackBounds, type Track } from "./model";
 
 /** The route of one trip with a marker at the playhead. Native code: never loaded in Expo Go. */
@@ -29,7 +29,7 @@ export default function TripMap({ track, at }: { track: Track; at: [number, numb
   }, [ready, bounds]);
 
   return (
-    <Map style={styles.map} mapStyle={MAP_STYLE_URL} logo={false} touchPitch={false} onDidFinishLoadingMap={() => setReady(true)}>
+    <Map style={styles.map} mapStyle={styleUrl(isDark ? "dark" : "streets")} logo={false} touchPitch={false} onDidFinishLoadingMap={() => setReady(true)}>
       <Camera ref={camera} initialViewState={{ bounds, padding: { top: 50, right: 50, bottom: 50, left: 50 } }} maxZoom={18} />
       <GeoJSONSource id="trip-route" data={route}>
         <Layer id="trip-route-casing" type="line" layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": "#ffffff", "line-width": 7 }} />
