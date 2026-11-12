@@ -5,7 +5,7 @@ import { Chip, EmptyState, SearchBox } from "@/components/kit";
 import { Button } from "@/components/ui";
 import { FILTERS, STATE_META, countByFilter, selectDevices, type FleetDevice, type FleetFilter } from "@/fleet/model";
 import { ROW_HEIGHT, ROW_INSET, VehicleRow } from "@/fleet/VehicleRow";
-import { colors, space, type } from "@/theme";
+import { colors, space, type, themed } from "@/theme";
 
 /**
  * The fleet list that slides up over the map: search, status chips, and every vehicle.
@@ -84,7 +84,7 @@ export function FleetSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.background },
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingLeft: space.lg, paddingRight: space.sm, paddingTop: space.md },
   title: { ...type.title },
@@ -92,4 +92,4 @@ const styles = StyleSheet.create({
   chips: { paddingHorizontal: space.lg, paddingVertical: space.md, gap: 6 },
   emptyList: { flexGrow: 1 },
   line: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: ROW_INSET }
-});
+}));

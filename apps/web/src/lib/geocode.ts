@@ -105,3 +105,63 @@ export async function geocode(q: string, fetchImpl: typeof fetch = fetch): Promi
   }
   return results;
 }
+
+// ---------- address of a position (reverse lookup) ----------
+
+const REVERSE_ENDPOINT = "https://nominatim.openstreetmap.org/reverse";
+const REVERSE_CACHE_SECONDS = 30 * 24 * 3600;
+
+/**
+ * A short street address for a vehicle card: "1200 Lenwood Road, Barstow, CA 92311".
+ * More local detail than cleanAddress (neighbourhood when there is no street), no country.
+ */
+export function streetAddress(r: NominatimRow): string {
+  const a = r.address ?? {};
+  const street = [a.house_number, a.road].filter(Boolean).join(" ");
+  const area = a.neighbourhood ?? a.suburb ?? a.quarter ?? a.city_district ?? null;
+  const city = a.city ?? a.town ?? a.village ?? a.hamlet ?? a.municipality ?? a.county ?? null;
+  const iso = a["ISO3166-2-lvl4"];
+  const state = iso && /^[A-Z]{2}-[A-Z0-9]{1,3}$/.test(iso) ? iso.split("-")[1]! : (a.state ?? null);
+  const region = [state, a.postcode].filter(Boolean).join(" ");
+  const parts = [street || (r.name && r.name !== city ? r.name : null), area && area !== city ? area : null, city, region].filter(Boolean);
+  return parts.length > 0 ? parts.join(", ") : String(r.display_name ?? "");
+}
+
+/**
+ * The address nearest to a position, or null when there is none or the lookup fails.
+ * Positions are rounded to about 11 m and cached for 30 days, so a parked vehicle costs one lookup.
+ */
+export async function reverseGeocode(latitude: number, longitude: number, fetchImpl: typeof fetch = fetch): Promise<string | null> {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+  const lat = latitude.toFixed(4);
+  const lon = longitude.toFixed(4);
+  const cacheKey = `geocode:rev:v1:${lat},${lon}`;
+  try {
+    const cached = await (await getReadyRedisPublisher()).get(cacheKey);
+    if (cached !== null) return cached || null;
+  } catch {
+    // cache is optional
+  }
+
+  await waitForSlot();
+  let address: string | null = null;
+  try {
+    const url = `${REVERSE_ENDPOINT}?${new URLSearchParams({ lat, lon, format: "jsonv2", zoom: "18", addressdetails: "1" })}`;
+    const res = await fetchImpl(url, { headers: { "user-agent": USER_AGENT, "accept-language": "en" }, signal: AbortSignal.timeout(8_000) });
+    if (!res.ok) {
+      logger.warn("geocode.reverse_http_error", { status: res.status });
+      return null;
+    }
+    const row = (await res.json()) as NominatimRow & { error?: string };
+    address = row.error ? null : streetAddress(row) || null;
+  } catch (err) {
+    logger.warn("geocode.reverse_failed", {}, err);
+    return null;
+  }
+  try {
+    await (await getReadyRedisPublisher()).set(cacheKey, address ?? "", "EX", REVERSE_CACHE_SECONDS);
+  } catch {
+    // ignore
+  }
+  return address;
+}

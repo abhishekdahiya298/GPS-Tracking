@@ -3,14 +3,14 @@ import { Suspense, lazy } from "react";
 import { StyleSheet, View } from "react-native";
 import { Loading } from "@/components/kit";
 import { Placeholder } from "@/components/Placeholder";
-import { colors } from "@/theme";
+import { colors, themed } from "@/theme";
 
 // The map engine is native code that Expo Go does not contain. Loading it there would crash the
 // whole app, so it is only loaded in the installed app.
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 const LiveMap = inExpoGo ? null : lazy(() => import("@/map/LiveMap"));
 
-/** The Map tab. The map runs edge to edge, under the status bar; its controls float on top. */
+/** The live map, full screen: edge to edge, under the status bar, with no tab bar. Its controls float on top. */
 export default function MapScreen() {
   if (!LiveMap) return <Placeholder icon="map-outline" title="Live map" note="The map needs the installed RIO GPS app. It can't run inside Expo Go." />;
   return (
@@ -22,4 +22,4 @@ export default function MapScreen() {
   );
 }
 
-const styles = StyleSheet.create({ wrap: { flex: 1, backgroundColor: colors.canvas } });
+const styles = themed(() => StyleSheet.create({ wrap: { flex: 1, backgroundColor: colors.canvas } }));

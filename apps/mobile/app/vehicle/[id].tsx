@@ -2,13 +2,15 @@ import { Ionicons } from "@expo/vector-icons";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useAddress } from "@/address/useAddress";
+import { Icon3D } from "@/components/Icon3D";
 import { Card, EmptyState, IconWell, StatusPill, VehicleAvatar } from "@/components/kit";
 import { FadeInUp, PressableScale } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { compassPoint, displayName, fleetState, statusLine, timeAgo } from "@/fleet/model";
 import { useBottomInset } from "@/layout";
-import { colors, radius, size, space, type } from "@/theme";
+import { colors, radius, size, space, type, themed } from "@/theme";
 
 // The map only exists in the installed app (see app/(tabs)/index.tsx).
 const hasMap = Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
@@ -29,6 +31,7 @@ export default function VehicleScreen() {
   const { devices, units } = useFleet();
   const now = useNow();
   const device = devices.find((d) => d.deviceId === id);
+  const address = useAddress(device?.location?.latitude, device?.location?.longitude);
 
   if (!device) {
     return (
@@ -53,10 +56,10 @@ export default function VehicleScreen() {
   }
 
   const kind = device.vehicle?.type;
-  const stats: Array<{ icon: keyof typeof Ionicons.glyphMap; label: string; value: string }> = [
-    { icon: "speedometer-outline", label: "Speed", value: loc && state !== "offline" && state !== "parked" ? units.fmtSpeed(loc.speedKph) : "—" },
-    { icon: "compass-outline", label: "Heading", value: loc?.headingDeg != null && point ? `${point} ${Math.round(loc.headingDeg)}°` : "—" },
-    { icon: "key-outline", label: "Engine", value: loc?.ignition === true ? "On" : loc?.ignition === false ? "Off" : "—" }
+  const stats: Array<{ icon: keyof typeof Ionicons.glyphMap; tone: "blue" | "violet" | "amber"; label: string; value: string }> = [
+    { icon: "speedometer", tone: "blue", label: "Speed", value: loc && state !== "offline" && state !== "parked" ? units.fmtSpeed(loc.speedKph) : "—" },
+    { icon: "compass", tone: "violet", label: "Heading", value: loc?.headingDeg != null && point ? `${point} ${Math.round(loc.headingDeg)}°` : "—" },
+    { icon: "key", tone: "amber", label: "Engine", value: loc?.ignition === true ? "On" : loc?.ignition === false ? "Off" : "—" }
   ];
 
   return (
@@ -80,7 +83,7 @@ export default function VehicleScreen() {
             {stats.map((s) => (
               <View key={s.label} style={styles.stat}>
                 <View style={styles.statHead}>
-                  <Ionicons name={s.icon} size={14} color={colors.mutedForeground} />
+                  <Icon3D icon={s.icon} tone={s.tone} box={22} />
                   <Text style={type.caption}>{s.label}</Text>
                 </View>
                 <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{s.value}</Text>
@@ -93,9 +96,10 @@ export default function VehicleScreen() {
       <FadeInUp index={1}>
         <Card style={styles.place}>
           <View style={styles.placeHead}>
-            <IconWell icon="location-outline" />
+            <IconWell icon="location" color="#dc2626" />
             <View style={styles.flex}>
               <Text style={type.rowTitle}>{loc ? `Last position ${timeAgo(loc.recordedAt, now)}` : "No position yet"}</Text>
+              {address ? <Text style={styles.address} selectable>{address}</Text> : null}
               <Text style={[type.small, styles.tabular]} selectable>
                 {loc ? `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}` : "This tracker has not reported a position."}
               </Text>
@@ -105,7 +109,7 @@ export default function VehicleScreen() {
             <View style={styles.placeActions}>
               {hasMap ? (
                 <View style={styles.flex}>
-                  <Button compact title="Show on map" icon="map-outline" onPress={() => router.navigate({ pathname: "/(tabs)/map", params: { device: device.deviceId } })} />
+                  <Button compact title="Show on map" icon="map-outline" onPress={() => router.navigate({ pathname: "/map", params: { device: device.deviceId } })} />
                 </View>
               ) : null}
               <View style={styles.flex}>
@@ -127,7 +131,7 @@ export default function VehicleScreen() {
 
       <FadeInUp index={3}>
         <PressableScale onPress={() => router.push({ pathname: "/trips/[id]", params: { id: device.deviceId } })} scaleTo={0.985} style={styles.linkCard} accessibilityRole="button" accessibilityLabel="Trip history">
-          <IconWell icon="git-commit-outline" box={36} />
+          <IconWell icon="trail-sign" color="#6d28d9" box={36} />
           <Text style={[type.rowTitle, styles.flex]}>Trip history</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.borderStrong} />
         </PressableScale>
@@ -136,7 +140,7 @@ export default function VehicleScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   content: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.md },
   flex: { flex: 1, minWidth: 0 },
@@ -156,7 +160,8 @@ const styles = StyleSheet.create({
   rows: { paddingVertical: 0, paddingHorizontal: 14 },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.lg, minHeight: size.control, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   rowLast: { borderBottomWidth: 0 },
+  address: { fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground, marginTop: 2 },
   label: { fontSize: 14, lineHeight: 20, color: colors.mutedForeground },
   value: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground, textAlign: "right", fontVariant: ["tabular-nums"] },
   linkCard: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 56, paddingLeft: space.md, paddingRight: 10, backgroundColor: colors.background, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border }
-});
+}));

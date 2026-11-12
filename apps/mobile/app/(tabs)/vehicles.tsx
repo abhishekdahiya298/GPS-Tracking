@@ -1,13 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Platform, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { Banner, Chip, EmptyState, ListSkeleton, RowLine, ScreenHeader, SearchBox, groupedRow } from "@/components/kit";
+import { Banner, Chip, EmptyState, ListSkeleton, ScreenHeader, SearchBox } from "@/components/kit";
 import { FadeInUp, LoadingBar } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { FILTERS, STATE_META, countByFilter, selectDevices, type FleetDevice, type FleetFilter } from "@/fleet/model";
-import { ROW_HEIGHT, VehicleRow } from "@/fleet/VehicleRow";
-import { colors, space } from "@/theme";
+import { CARD_GAP, CARD_HEIGHT, VehicleCard } from "@/fleet/VehicleRow";
+import { colors, space, themed } from "@/theme";
 
 export default function VehiclesScreen() {
   const router = useRouter();
@@ -36,14 +36,13 @@ export default function VehiclesScreen() {
   }
 
   const open = useCallback((deviceId: string) => router.push({ pathname: "/vehicle/[id]", params: { id: deviceId } }), [router]);
-  const last = rows.length - 1;
   const row = useCallback(
-    ({ item, index }: { item: FleetDevice; index: number }) => (
-      <View style={groupedRow(index === 0, index === last)}>
-        <VehicleRow device={item} fmtSpeed={units.fmtSpeed} now={now} onPress={open} />
+    ({ item }: { item: FleetDevice }) => (
+      <View style={styles.cardSlot}>
+        <VehicleCard device={item} fmtSpeed={units.fmtSpeed} now={now} onPress={open} />
       </View>
     ),
-    [last, now, open, units.fmtSpeed]
+    [now, open, units.fmtSpeed]
   );
 
   const header = (
@@ -90,9 +89,8 @@ export default function VehiclesScreen() {
           data={rows}
           keyExtractor={keyOf}
           renderItem={row}
-          ItemSeparatorComponent={RowLine}
-          // Every row has the same height, so the list never has to measure one.
-          getItemLayout={(_, index) => ({ length: ROW_HEIGHT + StyleSheet.hairlineWidth, offset: (ROW_HEIGHT + StyleSheet.hairlineWidth) * index + space.xs, index })}
+          // Every card has the same height, so the list never has to measure one.
+          getItemLayout={(_, index) => ({ length: CARD_HEIGHT + CARD_GAP, offset: (CARD_HEIGHT + CARD_GAP) * index + space.xs, index })}
           refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} tintColor={colors.primary} colors={[colors.primary]} />}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -125,13 +123,14 @@ export default function VehiclesScreen() {
 
 const keyOf = (d: FleetDevice) => d.deviceId;
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   loading: { paddingTop: space.xs },
+  cardSlot: { height: CARD_HEIGHT + CARD_GAP, paddingHorizontal: space.lg },
   list: { paddingTop: space.xs, paddingBottom: space.lg },
   emptyList: { flexGrow: 1 },
   // The chips run to the screen edge, so a chip half in view shows there are more to the side.
   chipScroll: { marginHorizontal: -space.lg },
   chips: { paddingHorizontal: space.lg, gap: 6 }
-});
+}));

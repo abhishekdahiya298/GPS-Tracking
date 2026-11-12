@@ -68,7 +68,7 @@ describe("parseCoordinates", () => {
   });
 });
 
-import { cleanAddress } from "./geocode";
+import { cleanAddress, streetAddress } from "./geocode";
 import { shortPlace } from "./load-meta";
 
 describe("clean addresses and short places", () => {
@@ -104,5 +104,16 @@ describe("manual invite", () => {
     expect(manual).toContain(link);
     expect(manual).not.toContain("STOP");
     expect(inviteText("Northbound Brokerage", "L-1", link)).toContain("Reply STOP");
+  });
+});
+
+describe("streetAddress", () => {
+  it("gives street, area, city and region without the country", () => {
+    expect(streetAddress({ address: { house_number: "2100", road: "Lenwood Road", city: "Barstow", "ISO3166-2-lvl4": "US-CA", postcode: "92311", country: "United States" } })).toBe("2100 Lenwood Road, Barstow, CA 92311");
+    expect(streetAddress({ address: { road: "Sector 32 Road", suburb: "Sector 32", city: "Chandigarh", state: "Chandigarh", postcode: "160030" } })).toBe("Sector 32 Road, Sector 32, Chandigarh, Chandigarh 160030");
+  });
+  it("falls back to the place name, then the display name", () => {
+    expect(streetAddress({ name: "Love's Travel Stop", address: { city: "Barstow", state: "California" } })).toBe("Love's Travel Stop, Barstow, California");
+    expect(streetAddress({ display_name: "Somewhere", address: {} })).toBe("Somewhere");
   });
 });

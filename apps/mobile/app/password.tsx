@@ -8,7 +8,7 @@ import { PopIn } from "@/components/motion";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { haptic } from "@/haptics";
 import { useBottomInset } from "@/layout";
-import { colors, space, type } from "@/theme";
+import { colors, space, type, themed } from "@/theme";
 
 /** Same rule as the server (web lib/auth.ts minPasswordLength). */
 const MIN_LENGTH = 6;
@@ -83,11 +83,11 @@ export default function ChangePasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   content: { paddingHorizontal: space.lg, paddingTop: space.sm },
   card: { gap: space.lg },
   done: { alignSelf: "center", width: 56, height: 56, borderRadius: 28, backgroundColor: colors.successSoft, alignItems: "center", justifyContent: "center" },
   title: { ...type.title, textAlign: "center" },
   note: { ...type.body, color: colors.mutedForeground, textAlign: "center" }
-});
+}));

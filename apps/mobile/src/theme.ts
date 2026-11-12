@@ -64,8 +64,7 @@ function readChoice(): ThemeChoice {
   }
 }
 
-/** Saves the look for the next start. The caller restarts the app so every screen picks it up. */
-export function saveThemeChoice(choice: ThemeChoice): void {
+function store(choice: ThemeChoice): void {
   try {
     SecureStore.setItem(THEME_KEY, choice);
   } catch {
@@ -73,15 +72,99 @@ export function saveThemeChoice(choice: ThemeChoice): void {
   }
 }
 
+const resolveDark = (choice: ThemeChoice): boolean => (choice === "system" ? Appearance.getColorScheme() === "dark" : choice === "dark");
+
 /**
- * The look is decided once, when the app starts: every screen builds its styles from `colors`
- * at that moment. Changing it in Account restarts the app, which takes well under a second.
+ * The look can change while the app is open. `colors`, `type` and every screen's styles read
+ * the palette in use at the moment they are asked, and the app redraws when it changes, so
+ * there is no restart and no blank screen.
  */
-export const themeChoice: ThemeChoice = readChoice();
-export const isDark = themeChoice === "system" ? Appearance.getColorScheme() === "dark" : themeChoice === "dark";
-export const colors = isDark ? dark : light;
+export let themeChoice: ThemeChoice = readChoice();
+export let isDark = resolveDark(themeChoice);
+let palette = isDark ? dark : light;
+let version = 0;
+const listeners = new Set<() => void>();
+
+/** The colours of the look in use. Always current: read them when drawing, don't copy them. */
+export const colors: typeof light = new Proxy(light, { get: (_, key) => palette[key as keyof typeof light] });
+
+/** Counts up each time the look changes. */
+export const themeVersion = (): number => version;
+export function onThemeChange(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => void listeners.delete(listener);
+}
+
+function apply(): void {
+  const next = resolveDark(themeChoice);
+  if (next === isDark) return;
+  isDark = next;
+  palette = next ? dark : light;
+  version++;
+  listeners.forEach((l) => l());
+}
+
+/** Picks the look, saves it for the next start and redraws the app in it. */
+export function setThemeChoice(choice: ThemeChoice): void {
+  themeChoice = choice;
+  store(choice);
+  // The phone's own pieces follow too: keyboard, alerts, pickers.
+  try {
+    Appearance.setColorScheme(choice === "system" ? "unspecified" : choice);
+  } catch {
+    // Not supported on this platform.
+  }
+  apply();
+}
+
+/** The canvas colour a look would have, for the short fade while the look changes. */
+export const canvasOf = (choice: ThemeChoice): string => (resolveDark(choice) ? dark : light).canvas;
+
+// "System": follow the phone when it switches between light and dark.
+Appearance.addChangeListener(() => {
+  if (themeChoice === "system") apply();
+});
+
+/**
+ * Styles that follow the look. Wrap a StyleSheet in this: it is built on first use and built
+ * again after the look changes.
+ */
+export function themed<T extends object>(make: () => T): T {
+  let built: T | null = null;
+  let builtFor = -1;
+  const current = (): T => {
+    if (!built || builtFor !== version) {
+      built = make();
+      builtFor = version;
+    }
+    return built;
+  };
+  return new Proxy({} as T, {
+    get: (_, key) => current()[key as keyof T],
+    has: (_, key) => key in current(),
+    ownKeys: () => Reflect.ownKeys(current()),
+    getOwnPropertyDescriptor: (_, key) => {
+      const d = Reflect.getOwnPropertyDescriptor(current(), key);
+      return d ? { ...d, configurable: true } : undefined;
+    }
+  });
+}
 
 /** Brighter twins of the fixed status and alert colours, for dark surfaces. */
+/** A colour group: the two ends of a gradient, the glow under it and the pale tint. Used by the colourful tiles and the 3D icons. */
+export interface Tone { from: string; to: string; glow: string }
+export const tones = {
+  green: { from: "#34d399", to: "#059669", glow: "#059669" },
+  amber: { from: "#fbbf24", to: "#ea580c", glow: "#ea580c" },
+  blue: { from: "#60a5fa", to: "#1d4ed8", glow: "#1d4ed8" },
+  sky: { from: "#38bdf8", to: "#0369a1", glow: "#0369a1" },
+  red: { from: "#fb7185", to: "#dc2626", glow: "#dc2626" },
+  slate: { from: "#94a3b8", to: "#475569", glow: "#475569" },
+  violet: { from: "#a78bfa", to: "#6d28d9", glow: "#6d28d9" },
+  teal: { from: "#2dd4bf", to: "#0f766e", glow: "#0f766e" }
+} as const satisfies Record<string, Tone>;
+export type ToneName = keyof typeof tones;
+
 const BRIGHT: Record<string, string> = {
   "#15803d": "#4ade80",
   "#b45309": "#fbbf24",
@@ -107,7 +190,7 @@ export const font = { caption: 12, small: 13, body: 15, title: 17, heading: 24 }
 export const size = { control: 48, controlSm: 44, row: 60, well: 40, chip: 36, icon: 20, tabIcon: 24 } as const;
 
 /** Text styles. Use these instead of writing font sizes on a screen. */
-export const type = {
+export const type = themed(() => ({
   /** The title at the top of a tab. One per screen. */
   largeTitle: { fontSize: 24, lineHeight: 30, fontWeight: "700", letterSpacing: -0.2, color: colors.foreground },
   /** A card or section heading. */
@@ -122,7 +205,7 @@ export const type = {
   label: { fontSize: 12, lineHeight: 16, fontWeight: "600", letterSpacing: 0.7, textTransform: "uppercase", color: colors.mutedForeground },
   /** Big numbers: counts and readings. Digits keep the same width so they don't jump. */
   metric: { fontSize: 22, lineHeight: 26, fontWeight: "700", letterSpacing: -0.2, color: colors.foreground, fontVariant: ["tabular-nums"] }
-} satisfies Record<string, TextStyle>;
+}) satisfies Record<string, TextStyle>);
 
 /** Soft shadows, lightest first. Spread into a style. Cards use a hairline border instead. */
 export const elevation = {

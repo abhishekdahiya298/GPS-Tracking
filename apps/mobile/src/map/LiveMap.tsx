@@ -1,25 +1,28 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Camera, GeoJSONSource, Images, Layer, Map, type CameraRef, type GeoJSONSourceRef, type PressEventWithFeatures } from "@maplibre/maplibre-react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View, type NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAddress } from "@/address/useAddress";
 import { api } from "@/api";
-import { Chip, StatusPill } from "@/components/kit";
+import { Chip, StatusPill, VehicleAvatar } from "@/components/kit";
 import { Dots, FadeIn, PressableScale, PulseDot, SlideUp } from "@/components/motion";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { FILTERS, STATE_META, countByFilter, displayName, fleetState, selectDevices, statusLine, timeAgo, type FleetFilter } from "@/fleet/model";
 import { haptic } from "@/haptics";
-import { colors, elevation, font, isDark, radius, size, space, type } from "@/theme";
+import { colors, elevation, font, isDark, radius, size, space, type, themed } from "@/theme";
 import { FleetSheet } from "./FleetSheet";
-import { DEFAULT_CENTER, DEFAULT_ZOOM, DETAIL_ZOOM, FOCUS_ZOOM, MAP_STYLES, focusZoom, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
+import { GlobeIntro } from "./GlobeIntro";
+import { DEFAULT_CENTER, DEFAULT_ZOOM, DETAIL_ZOOM, FOCUS_ZOOM, MAP_STYLES, WORLD_VIEW, focusZoom, boundsOf, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
 import { VEHICLE_IMAGES } from "./sprites";
+import { saveMapStyle, savedMapStyle } from "./style";
 import { useGlide } from "./useGlide";
 
 const FIT_PADDING = { top: 190, right: 50, bottom: 240, left: 50 };
 const FOLLOW_ZOOM = FOCUS_ZOOM;
-const STYLE_KEY = "rio.map-style";
+// The dive from space is shown once each time the app is opened, not on every visit to the tab.
+let introPlayed = false;
 const NOT_CLUSTER: ["!", ["has", string]] = ["!", ["has", "point_count"]];
 
 /**
@@ -48,6 +51,8 @@ export default function LiveMap() {
   // The selected-vehicle card's height, so the round buttons can sit just above it.
   const [cardHeight, setCardHeight] = useState(0);
   const fitted = useRef(false);
+  const [intro, setIntro] = useState(false);
+  const diveTo = useRef<[number, number, number, number] | null>(null);
   // A tap on a vehicle must not also count as a tap on empty map (which closes the card).
   const vehicleTapAt = useRef(0);
   // How far in the map is right now, and the latest fleet, for use inside tap handlers.
@@ -70,11 +75,9 @@ export default function LiveMap() {
   // The base map the person picked last time, and the organization's zones. Both are optional:
   // without them the map still works.
   useEffect(() => {
-    SecureStore.getItemAsync(STYLE_KEY)
-      .then((saved) => {
-        if (isMapStyleId(saved)) setStyle(saved);
-      })
-      .catch(() => undefined);
+    void savedMapStyle().then((saved) => {
+      if (saved) setStyle(saved);
+    });
     api
       .get<{ geofences?: Zone[] }>("geofences")
       .then((body) => {
@@ -88,7 +91,7 @@ export default function LiveMap() {
     setStyleMenu(false);
     if (id === style) return;
     setStyle(id);
-    SecureStore.setItemAsync(STYLE_KEY, id).catch(() => undefined);
+    saveMapStyle(id);
   }
 
   const fitAll = useCallback(() => {
@@ -102,8 +105,20 @@ export default function LiveMap() {
     const bounds = boundsOf(devices);
     if (!bounds) return;
     fitted.current = true;
-    camera.current?.fitBounds(bounds, { padding: FIT_PADDING, duration: 0 });
+    if (introPlayed) {
+      camera.current?.fitBounds(bounds, { padding: FIT_PADDING, duration: 0 });
+      return;
+    }
+    // First visit since the app opened: start from the whole Earth and dive to the fleet.
+    introPlayed = true;
+    diveTo.current = bounds;
+    setIntro(true);
   }, [mapReady, devices, params.device]);
+
+  const dive = useCallback(() => {
+    if (diveTo.current) camera.current?.fitBounds(diveTo.current, { padding: FIT_PADDING, duration: 2200, easing: "fly" });
+  }, []);
+  const endIntro = useCallback(() => setIntro(false), []);
 
   const focus = useCallback(
     (deviceId: string) => {
@@ -180,6 +195,7 @@ export default function LiveMap() {
   const labelHalo = dark ? "#0b1220" : "#ffffff";
   const selectedState = selected ? fleetState(selected) : null;
   const loc = selected?.location;
+  const address = useAddress(selectedAt?.[1], selectedAt?.[0]);
 
   return (
     <View style={styles.wrap}>
@@ -204,7 +220,7 @@ export default function LiveMap() {
           if (Date.now() - vehicleTapAt.current > 400) setSelectedId(null);
         }}
       >
-        <Camera ref={camera} initialViewState={{ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }} maxZoom={18} />
+        <Camera ref={camera} initialViewState={introPlayed ? { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM } : WORLD_VIEW} maxZoom={18} />
         <Images images={VEHICLE_IMAGES} />
 
         <GeoJSONSource id="zones" data={zoneData}>
@@ -282,7 +298,11 @@ export default function LiveMap() {
 
       {/* Top: search (opens the fleet list) and the status chips. */}
       <View style={[styles.top, { top: insets.top + space.sm }]} pointerEvents="box-none">
-        <PressableScale onPress={() => setListOpen(true)} style={styles.search} scaleTo={0.985} accessibilityRole="button" accessibilityLabel="Find a vehicle">
+        <View style={styles.topRow}>
+        <PressableScale onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} scaleTo={0.9} style={styles.back} accessibilityRole="button" accessibilityLabel="Close the map">
+          <Ionicons name="chevron-back" size={22} color={colors.foreground} />
+        </PressableScale>
+        <PressableScale onPress={() => setListOpen(true)} outerStyle={styles.flex} style={styles.search} scaleTo={0.985} accessibilityRole="button" accessibilityLabel="Find a vehicle">
           <Ionicons name="search" size={size.icon} color={colors.mutedForeground} />
           <Text style={styles.searchText}>Find a vehicle</Text>
           <View style={styles.live}>
@@ -290,6 +310,7 @@ export default function LiveMap() {
             <Text style={[styles.liveText, { color: connection === "live" ? colors.success : colors.warning }]}>{connection === "live" ? "Live" : error ? "Offline" : "Updating"}</Text>
           </View>
         </PressableScale>
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {FILTERS.map((f) => (
             <Chip key={f.key} label={f.label} count={counts[f.key]} selected={f.key === filter} dot={f.key === "all" ? undefined : STATE_META[f.key].color} onPress={() => setFilter(f.key)} />
@@ -312,7 +333,7 @@ export default function LiveMap() {
       ) : null}
 
       {/* Round buttons on the right, just above the card (or the bottom edge when no vehicle is picked). */}
-      <View style={[styles.fabs, { bottom: selected ? cardHeight + space.md * 2 : space.md }]} pointerEvents="box-none">
+      <View style={[styles.fabs, { bottom: (selected ? cardHeight + space.md * 2 : space.md) + insets.bottom }]} pointerEvents="box-none">
         {styleMenu ? (
           <SlideUp style={styles.styleMenu}>
             {MAP_STYLES.map((m) => (
@@ -332,7 +353,7 @@ export default function LiveMap() {
       </View>
 
       {selected && selectedState ? (
-        <SlideUp style={styles.card}>
+        <SlideUp style={[styles.card, { bottom: space.md + insets.bottom }]}>
           <View onLayout={(e) => setCardHeight(e.nativeEvent.layout.height)} style={styles.cardBody}>
             <View style={styles.cardHead}>
               <PressableScale onPress={() => step(-1)} disabled={steps.length < 2} scaleTo={0.9} style={[styles.stepButton, steps.length < 2 && styles.dim]} accessibilityRole="button" accessibilityLabel="Previous vehicle">
@@ -353,6 +374,15 @@ export default function LiveMap() {
                 <Ionicons name="chevron-forward" size={size.icon} color={colors.foreground} />
               </PressableScale>
             </View>
+            <FadeIn key={`at-${selected.deviceId}`} style={styles.place}>
+              <VehicleAvatar type={selected.vehicle?.type} state={selectedState} size={36} />
+              <View style={styles.flex}>
+                <Text style={styles.placeText} numberOfLines={2} selectable>
+                  {address ?? (selectedAt ? `${selectedAt[1].toFixed(5)}, ${selectedAt[0].toFixed(5)}` : "No position yet")}
+                </Text>
+                {selected.vehicle?.licensePlate ? <Text style={styles.placeNote} numberOfLines={1}>Plate {selected.vehicle.licensePlate}</Text> : null}
+              </View>
+            </FadeIn>
             <View style={styles.facts}>
               <Fact label="Speed" value={loc && selectedState === "moving" ? units.fmtSpeed(loc.speedKph) : "0"} />
               <View style={styles.factLine} />
@@ -380,6 +410,8 @@ export default function LiveMap() {
         </SlideUp>
       ) : null}
 
+      {intro ? <GlobeIntro onDive={dive} onDone={endIntro} /> : null}
+
       <FleetSheet
         visible={listOpen}
         devices={devices}
@@ -406,13 +438,15 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   map: { flex: 1 },
   flex: { flex: 1 },
   dim: { opacity: 0.35 },
   top: { position: "absolute", left: 0, right: 0, gap: space.sm },
-  search: { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: space.md, paddingHorizontal: 14, height: size.control, borderRadius: radius.xl, backgroundColor: colors.background, ...elevation.md },
+  topRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.md },
+  back: { width: size.control, height: size.control, borderRadius: radius.xl, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", ...elevation.md },
+  search: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, height: size.control, borderRadius: radius.xl, backgroundColor: colors.background, ...elevation.md },
   searchText: { flex: 1, fontSize: font.body, lineHeight: 20, color: colors.mutedForeground },
   live: { flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: space.md, borderLeftWidth: 1, borderLeftColor: colors.border },
   liveText: { fontSize: font.caption, lineHeight: 16, fontWeight: "600" },
@@ -433,6 +467,9 @@ const styles = StyleSheet.create({
   cardNameLine: { flexDirection: "row", alignItems: "center", gap: space.sm, maxWidth: "100%" },
   cardName: { flexShrink: 1, fontSize: 16, lineHeight: 22, fontWeight: "700", color: colors.foreground },
   cardSub: { ...type.small, fontVariant: ["tabular-nums"] },
+  place: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: 2 },
+  placeText: { fontSize: 14, lineHeight: 19, fontWeight: "600", color: colors.foreground },
+  placeNote: { ...type.caption, marginTop: 1 },
   facts: { flexDirection: "row", alignItems: "center", backgroundColor: colors.canvas, borderRadius: radius.md, paddingVertical: space.sm },
   fact: { flex: 1, alignItems: "center" },
   factLine: { width: 1, height: 24, backgroundColor: colors.border },
@@ -444,4 +481,4 @@ const styles = StyleSheet.create({
   actionPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
   actionOn: { backgroundColor: colors.primaryDark, borderColor: colors.primaryDark },
   actionText: { fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.primary }
-});
+}));

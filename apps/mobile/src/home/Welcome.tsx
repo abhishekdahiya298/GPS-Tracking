@@ -5,14 +5,14 @@ import { Modal, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { FadeInUp } from "@/components/motion";
 import { Button } from "@/components/ui";
-import { colors, font, space } from "@/theme";
+import { colors, font, space, themed } from "@/theme";
 
 /** Bump the number to show the tips again after a big redesign. */
 const SEEN_KEY = "rio.welcome-seen-v1";
 
 const TIPS: Array<{ icon: keyof typeof Ionicons.glyphMap; title: string; note: string }> = [
   { icon: "home", title: "Home shows your fleet at a glance", note: "Tap Moving, Idling, Stopped or Offline to see those vehicles." },
-  { icon: "map", title: "Tap a vehicle on the map", note: "The map zooms to it. Follow keeps it centred as it drives." },
+  { icon: "map", title: "Tap the map on Home", note: "It opens full screen. Tap a vehicle to zoom to it; Follow keeps it centred." },
   { icon: "search", title: "Find any vehicle fast", note: "Use the search bar on the map to look up a name or plate." },
   { icon: "notifications", title: "Get alerts on this phone", note: "Turn on Alert notifications in Account, and set quiet hours for the night." }
 ];
@@ -67,7 +67,7 @@ export function Welcome() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(10,20,45,0.45)" },
   sheet: { backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: space.xl, paddingTop: space.md, gap: space.lg },
   tips: { gap: space.lg },
@@ -79,4 +79,4 @@ const styles = StyleSheet.create({
   tipTitle: { fontSize: 16, fontWeight: "700", color: colors.foreground },
   tipNote: { fontSize: font.small, color: colors.mutedForeground, marginTop: 2, lineHeight: 18 },
   action: { marginTop: space.sm, marginBottom: space.md }
-});
+}));
