@@ -12,7 +12,7 @@ const SEEN_KEY = "rio.welcome-seen-v1";
 
 const TIPS: Array<{ icon: keyof typeof Ionicons.glyphMap; title: string; note: string }> = [
   { icon: "home", title: "Home shows your fleet at a glance", note: "Tap Moving, Idling, Stopped or Offline to see those vehicles." },
-  { icon: "map", title: "Tap a vehicle on the map", note: "The map zooms to it. Follow keeps it centred as it drives." },
+  { icon: "map", title: "Tap the map on Home", note: "It opens full screen. Tap a vehicle to zoom to it; Follow keeps it centred." },
   { icon: "search", title: "Find any vehicle fast", note: "Use the search bar on the map to look up a name or plate." },
   { icon: "notifications", title: "Get alerts on this phone", note: "Turn on Alert notifications in Account, and set quiet hours for the night." }
 ];

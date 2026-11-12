@@ -1,5 +1,5 @@
 /**
- * The bottom tab bar: five tabs of equal width. The active tab turns blue, its icon fills in
+ * The bottom tab bar: four tabs of equal width. The active tab turns blue, its icon fills in
  * and pops slightly, and the alert count sits on the bell.
  */
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -16,7 +16,6 @@ type IconName = keyof typeof Ionicons.glyphMap;
 /** Outline icon when idle, filled when active. Keyed by route name. */
 const TAB_ICONS: Record<string, { idle: IconName; active: IconName }> = {
   index: { idle: "home-outline", active: "home" },
-  map: { idle: "map-outline", active: "map" },
   alerts: { idle: "notifications-outline", active: "notifications" },
   account: { idle: "person-outline", active: "person" }
 };

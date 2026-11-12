@@ -23,7 +23,7 @@ const MAP_LIGHT = require("../../assets/map-preview.png");
 const MAP_DARK = require("../../assets/map-preview-dark.png");
 /* eslint-enable @typescript-eslint/no-require-imports */
 
-// The live map is native code that Expo Go does not contain (see app/(tabs)/map.tsx).
+// The live map is native code that Expo Go does not contain (see app/map.tsx).
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 const MiniMap = inExpoGo ? null : lazy(() => import("@/map/MiniMap"));
 
@@ -54,7 +54,7 @@ export default function HomeScreen() {
     setPulling(false);
   }
 
-  const openMap = useCallback((deviceId?: string) => router.navigate(deviceId ? { pathname: "/(tabs)/map", params: { device: deviceId } } : "/(tabs)/map"), [router]);
+  const openMap = useCallback((deviceId?: string) => router.navigate(deviceId ? { pathname: "/map", params: { device: deviceId } } : "/map"), [router]);
   const openVehicle = useCallback((deviceId: string) => openMap(deviceId), [openMap]);
   const preview = <Image source={isDark ? MAP_DARK : MAP_LIGHT} style={styles.mapImage} resizeMode="cover" />;
 
@@ -242,7 +242,7 @@ const styles = themed(() => StyleSheet.create({
   tileIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.24)", borderWidth: 1, borderColor: "rgba(255,255,255,0.35)", alignItems: "center", justifyContent: "center" },
   tileCount: { fontSize: 30, lineHeight: 34, fontWeight: "800", letterSpacing: -0.5, color: "#ffffff", fontVariant: ["tabular-nums"] },
   tileLabel: { fontSize: font.small, lineHeight: 18, fontWeight: "700", letterSpacing: 0.6, textTransform: "uppercase", color: "rgba(255,255,255,0.92)" },
-  mapCard: { height: 230, borderRadius: 18, borderWidth: 1, borderColor: colors.border, overflow: "hidden", backgroundColor: colors.muted, ...elevation.sm },
+  mapCard: { height: 260, borderRadius: 18, borderWidth: 1, borderColor: colors.border, overflow: "hidden", backgroundColor: colors.muted, ...elevation.sm },
   mapImage: { position: "absolute", left: 0, top: 0, width: "100%", height: "100%" },
   mapChip: { position: "absolute", left: 10, bottom: 10, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, height: 30, borderRadius: 15, backgroundColor: colors.background, ...elevation.md },
   mapChipText: { fontSize: font.caption, lineHeight: 16, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },

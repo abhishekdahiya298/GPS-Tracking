@@ -72,6 +72,8 @@ function Screens({ look }: { look: number }) {
     <Stack key={look} screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}>
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" />
+        {/* The live map: full screen, over the tabs. Opened from Home, a vehicle, or a status tile. */}
+        <Stack.Screen name="map" options={{ animation: "fade" }} />
         <Stack.Screen name="vehicle/[id]" options={{ ...header, title: "Vehicle" }} />
         <Stack.Screen name="trips/[id]" options={{ ...header, title: "Trips" }} />
         <Stack.Screen name="trip" options={{ ...header, title: "Trip" }} />

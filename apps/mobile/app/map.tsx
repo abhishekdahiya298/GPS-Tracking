@@ -10,7 +10,7 @@ import { colors, themed } from "@/theme";
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 const LiveMap = inExpoGo ? null : lazy(() => import("@/map/LiveMap"));
 
-/** The Map tab. The map runs edge to edge, under the status bar; its controls float on top. */
+/** The live map, full screen: edge to edge, under the status bar, with no tab bar. Its controls float on top. */
 export default function MapScreen() {
   if (!LiveMap) return <Placeholder icon="map-outline" title="Live map" note="The map needs the installed RIO GPS app. It can't run inside Expo Go." />;
   return (

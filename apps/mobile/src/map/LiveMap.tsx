@@ -298,7 +298,11 @@ export default function LiveMap() {
 
       {/* Top: search (opens the fleet list) and the status chips. */}
       <View style={[styles.top, { top: insets.top + space.sm }]} pointerEvents="box-none">
-        <PressableScale onPress={() => setListOpen(true)} style={styles.search} scaleTo={0.985} accessibilityRole="button" accessibilityLabel="Find a vehicle">
+        <View style={styles.topRow}>
+        <PressableScale onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} scaleTo={0.9} style={styles.back} accessibilityRole="button" accessibilityLabel="Close the map">
+          <Ionicons name="chevron-back" size={22} color={colors.foreground} />
+        </PressableScale>
+        <PressableScale onPress={() => setListOpen(true)} outerStyle={styles.flex} style={styles.search} scaleTo={0.985} accessibilityRole="button" accessibilityLabel="Find a vehicle">
           <Ionicons name="search" size={size.icon} color={colors.mutedForeground} />
           <Text style={styles.searchText}>Find a vehicle</Text>
           <View style={styles.live}>
@@ -306,6 +310,7 @@ export default function LiveMap() {
             <Text style={[styles.liveText, { color: connection === "live" ? colors.success : colors.warning }]}>{connection === "live" ? "Live" : error ? "Offline" : "Updating"}</Text>
           </View>
         </PressableScale>
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {FILTERS.map((f) => (
             <Chip key={f.key} label={f.label} count={counts[f.key]} selected={f.key === filter} dot={f.key === "all" ? undefined : STATE_META[f.key].color} onPress={() => setFilter(f.key)} />
@@ -328,7 +333,7 @@ export default function LiveMap() {
       ) : null}
 
       {/* Round buttons on the right, just above the card (or the bottom edge when no vehicle is picked). */}
-      <View style={[styles.fabs, { bottom: selected ? cardHeight + space.md * 2 : space.md }]} pointerEvents="box-none">
+      <View style={[styles.fabs, { bottom: (selected ? cardHeight + space.md * 2 : space.md) + insets.bottom }]} pointerEvents="box-none">
         {styleMenu ? (
           <SlideUp style={styles.styleMenu}>
             {MAP_STYLES.map((m) => (
@@ -348,7 +353,7 @@ export default function LiveMap() {
       </View>
 
       {selected && selectedState ? (
-        <SlideUp style={styles.card}>
+        <SlideUp style={[styles.card, { bottom: space.md + insets.bottom }]}>
           <View onLayout={(e) => setCardHeight(e.nativeEvent.layout.height)} style={styles.cardBody}>
             <View style={styles.cardHead}>
               <PressableScale onPress={() => step(-1)} disabled={steps.length < 2} scaleTo={0.9} style={[styles.stepButton, steps.length < 2 && styles.dim]} accessibilityRole="button" accessibilityLabel="Previous vehicle">
@@ -439,7 +444,9 @@ const styles = themed(() => StyleSheet.create({
   flex: { flex: 1 },
   dim: { opacity: 0.35 },
   top: { position: "absolute", left: 0, right: 0, gap: space.sm },
-  search: { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: space.md, paddingHorizontal: 14, height: size.control, borderRadius: radius.xl, backgroundColor: colors.background, ...elevation.md },
+  topRow: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.md },
+  back: { width: size.control, height: size.control, borderRadius: radius.xl, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", ...elevation.md },
+  search: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, height: size.control, borderRadius: radius.xl, backgroundColor: colors.background, ...elevation.md },
   searchText: { flex: 1, fontSize: font.body, lineHeight: 20, color: colors.mutedForeground },
   live: { flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: space.md, borderLeftWidth: 1, borderLeftColor: colors.border },
   liveText: { fontSize: font.caption, lineHeight: 16, fontWeight: "600" },
