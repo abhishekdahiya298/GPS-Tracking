@@ -11,7 +11,8 @@ import { haptic } from "@/haptics";
 import { useBottomInset } from "@/layout";
 import { useFleet } from "@/fleet/FleetProvider";
 import { displayName } from "@/fleet/model";
-import { colors, font, ink, radius, size, space, type } from "@/theme";
+import { colors, font, radius, size, space, type, themed, type ToneName } from "@/theme";
+import { Icon3D } from "@/components/Icon3D";
 import { dayLabel, dayRange, durationText, shiftDay, todayKey, type TripDto, type TripReport } from "@/trips/model";
 
 type Load = { state: "loading" } | { state: "ready"; report: TripReport } | { state: "failed"; message: string };
@@ -61,9 +62,9 @@ export default function TripsScreen() {
         accessibilityLabel={`Trip from ${fmt.time(item.startAt)} to ${fmt.time(item.endAt)}. Opens the route.`}
       >
         <View style={styles.tripHead}>
-          <View style={styles.number}>
+          <Icon3D tone="blue" box={30}>
             <Text style={styles.numberText}>{trips.length - index}</Text>
-          </View>
+          </Icon3D>
           <Text style={styles.times} numberOfLines={1}>
             {fmt.time(item.startAt)} – {fmt.time(item.endAt)}
           </Text>
@@ -71,9 +72,9 @@ export default function TripsScreen() {
           <Ionicons name="chevron-forward" size={18} color={colors.borderStrong} />
         </View>
         <View style={styles.tripFacts}>
-          <TripFact icon="git-commit-outline" text={units.fmtDist(item.distanceKm)} />
-          <TripFact icon="speedometer-outline" text={`Top ${units.fmtSpeed(item.maxSpeedKph)}`} />
-          {item.idleMin >= 1 ? <TripFact icon="pause-circle-outline" text={`Idle ${durationText(item.idleMin)}`} /> : null}
+          <TripFact icon="navigate" tone="green" text={units.fmtDist(item.distanceKm)} />
+          <TripFact icon="speedometer" tone="violet" text={`Top ${units.fmtSpeed(item.maxSpeedKph)}`} />
+          {item.idleMin >= 1 ? <TripFact icon="pause" tone="amber" text={`Idle ${durationText(item.idleMin)}`} /> : null}
         </View>
       </PressableScale>
     </FadeInUp>
@@ -118,10 +119,10 @@ export default function TripsScreen() {
 
         {totals && totals.trips > 0 ? (
           <FadeInUp key={day} distance={6} style={styles.totals}>
-            <Total label="Trips" value={String(totals.trips)} />
-            <Total label="Distance" value={units.fmtDist(totals.distanceKm)} />
-            <Total label="Driving" value={durationText(totals.drivingMin)} />
-            <Total label="Top speed" value={units.fmtSpeed(totals.maxSpeedKph)} />
+            <Total icon="flag" tone="blue" label="Trips" value={String(totals.trips)} />
+            <Total icon="navigate" tone="green" label="Distance" value={units.fmtDist(totals.distanceKm)} />
+            <Total icon="time" tone="amber" label="Driving" value={durationText(totals.drivingMin)} />
+            <Total icon="speedometer" tone="violet" label="Top speed" value={units.fmtSpeed(totals.maxSpeedKph)} />
           </FadeInUp>
         ) : null}
       </View>
@@ -157,25 +158,26 @@ export default function TripsScreen() {
   );
 }
 
-function Total({ label, value }: { label: string; value: string }) {
+function Total({ icon, tone, label, value }: { icon: keyof typeof Ionicons.glyphMap; tone: ToneName; label: string; value: string }) {
   return (
     <View style={styles.total}>
+      <Icon3D icon={icon} tone={tone} box={28} />
       <Text style={styles.totalValue} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
       <Text style={type.caption}>{label}</Text>
     </View>
   );
 }
 
-function TripFact({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
+function TripFact({ icon, tone, text }: { icon: keyof typeof Ionicons.glyphMap; tone: ToneName; text: string }) {
   return (
     <View style={styles.tripFact}>
-      <Ionicons name={icon} size={14} color={colors.mutedForeground} />
+      <Icon3D icon={icon} tone={tone} box={20} />
       <Text style={[type.small, styles.tabular]}>{text}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   tabular: { fontVariant: ["tabular-nums"] },
   dim: { opacity: 0.3 },
@@ -186,15 +188,14 @@ const styles = StyleSheet.create({
   dayLabel: { flex: 1, height: size.controlSm, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space.sm },
   dayText: { fontSize: font.body, lineHeight: 20, fontWeight: "600", color: colors.foreground },
   totals: { flexDirection: "row", backgroundColor: colors.background, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, paddingVertical: space.md, paddingHorizontal: space.sm },
-  total: { flex: 1, alignItems: "center", gap: 2, paddingHorizontal: 2 },
+  total: { flex: 1, alignItems: "center", gap: 4, paddingHorizontal: 2 },
   totalValue: { fontSize: 17, lineHeight: 22, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
   list: { paddingHorizontal: space.lg, gap: space.md },
   emptyList: { flexGrow: 1 },
   trip: { backgroundColor: colors.background, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 10 },
   tripHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  number: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
-  numberText: { color: ink(colors.primary), fontWeight: "700", fontSize: font.caption },
+  numberText: { color: "#ffffff", fontWeight: "800", fontSize: font.small },
   times: { flex: 1, fontSize: font.body, lineHeight: 20, fontWeight: "600", color: colors.foreground, fontVariant: ["tabular-nums"] },
   tripFacts: { flexDirection: "row", flexWrap: "wrap", columnGap: space.lg, rowGap: 4, paddingLeft: 24 + space.sm },
   tripFact: { flexDirection: "row", alignItems: "center", gap: 5 }
-});
+}));

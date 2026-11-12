@@ -6,6 +6,8 @@ so they are drawn once here and shipped as PNG files).
   python3 scripts/make-map-sprites.py      # writes assets/map/veh-<shape>-<state>[@2x|@3x].png
 
 Shapes point up (north); the map turns them to the vehicle's heading.
+
+The vehicles are shaded to look raised (light from the upper left, a soft shadow to the lower right).
 """
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
@@ -13,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFilter
 OUT = Path(__file__).resolve().parent.parent / "assets" / "map"
 W, H, PAD = 26, 52, 6
 SS = 4  # supersampling for smooth edges
-COLORS = {"moving": "#15803d", "idle": "#b45309", "stopped": "#0369a1", "offline": "#6b7280"}
+COLORS = {"moving": "#16a34a", "idle": "#f59e0b", "stopped": "#0284c7", "offline": "#6b7280"}
 GLASS = "#0b1b3f"
 WHITE = (255, 255, 255, 255)
 
@@ -30,7 +32,7 @@ def draw(shape: str, color: str, scale: int) -> Image.Image:
         return [(PAD + x) * k, (PAD + y) * k, (PAD + x + w) * k, (PAD + y + h) * k]
 
     def body(x, y, w, h, r):
-        sh.rounded_rectangle(box(x, y + 1.5, w, h), radius=r * k, fill=(10, 20, 45, 110))
+        sh.rounded_rectangle(box(x + 1.2, y + 3, w, h), radius=r * k, fill=(10, 20, 45, 150))
         g.rounded_rectangle(box(x, y, w, h), radius=r * k, fill=color, outline=WHITE, width=max(1, round(1.6 * k)))
 
     def pane(x, y, w, h, r, fill=GLASS):
@@ -61,7 +63,23 @@ def draw(shape: str, color: str, scale: int) -> Image.Image:
         body(3.5, 9, 19, 41, 2.5)
         ribs([19, 29, 39])
 
-    shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(1.6 * k))
+    # A raised look: light falls from the upper left, so the left side is brighter, the right
+    # side darker, and the roof carries a soft shine. Painted only where the vehicle is.
+    light = Image.new("RGBA", size, (0, 0, 0, 0))
+    lp = light.load()
+    for x in range(size[0]):
+        t = x / max(1, size[0] - 1)
+        for y in range(size[1]):
+            v = y / max(1, size[1] - 1)
+            if t < 0.42:
+                lp[x, y] = (255, 255, 255, int(95 * (1 - t / 0.42) * (1 - 0.5 * v)))
+            elif t > 0.58:
+                lp[x, y] = (0, 0, 0, int(105 * ((t - 0.58) / 0.42)))
+    alpha = body_layer.getchannel("A")
+    light.putalpha(Image.composite(light.getchannel("A"), Image.new("L", size, 0), alpha))
+    body_layer = Image.alpha_composite(body_layer, light)
+
+    shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(2.2 * k))
     out = Image.alpha_composite(shadow_layer, body_layer)
     return out.resize((size[0] // SS, size[1] // SS), Image.LANCZOS)
 

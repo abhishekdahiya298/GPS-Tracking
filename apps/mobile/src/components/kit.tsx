@@ -9,7 +9,8 @@ import { Animated, Pressable, StyleSheet, Text, TextInput, View, type StyleProp,
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { STATE_META, type FleetState } from "../fleet/model";
 import { haptic } from "../haptics";
-import { colors, elevation, font, ink, radius, size, softTint, space, type } from "../theme";
+import { colors, elevation, font, ink, radius, size, softTint, space, type, themed } from "../theme";
+import { Icon3D } from "./Icon3D";
 import { Dots, FadeInUp, PopIn, PressableScale, PulseDot, Skeleton } from "./motion";
 
 export type IconName = keyof typeof Ionicons.glyphMap;
@@ -52,25 +53,18 @@ export const StatusPill = memo(function StatusPill({ state, compact = false }: {
   );
 });
 
-/** The tinted rounded square behind an icon. One size and shape everywhere. */
-export function IconWell({ icon, color = colors.primary, soft = colors.primarySoft, box = size.well }: { icon: IconName; color?: string; soft?: string; box?: number }) {
-  return (
-    <View style={[styles.well, { width: box, height: box, backgroundColor: softTint(color, soft) }]}>
-      <Ionicons name={icon} size={Math.round(box * 0.5)} color={ink(color)} />
-    </View>
-  );
+/** A raised, glossy icon tile in the given colour. One shape everywhere. */
+export function IconWell({ icon, color = colors.primary, box = size.well }: { icon: IconName; color?: string; soft?: string; box?: number }) {
+  return <Icon3D icon={icon} tone={color} box={box} />;
 }
 
-const TYPE_ICON: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = { truck: "truck-outline", semi: "truck-outline", bus: "bus", equipment: "excavator", trailer: "truck-trailer", van: "van-utility", car: "car-outline", pickup: "car-pickup" };
+const TYPE_ICON: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = { truck: "truck", semi: "truck", bus: "bus", equipment: "excavator", trailer: "truck-trailer", van: "van-utility", car: "car", pickup: "car-pickup" };
+/** Brighter than the text colours: these fill a whole tile. */
+const STATE_TONE: Record<FleetState, "green" | "amber" | "sky" | "slate"> = { moving: "green", idle: "amber", stopped: "sky", parked: "sky", offline: "slate", never_seen: "slate" };
 
-/** The rounded square at the start of a vehicle row: an icon for the kind of vehicle, tinted by status. */
+/** The raised tile at the start of a vehicle card: the kind of vehicle, in the colour of its status. */
 export const VehicleAvatar = memo(function VehicleAvatar({ type: kind, state, size: box = size.well }: { type: string | undefined; state: FleetState; size?: number }) {
-  const meta = STATE_META[state];
-  return (
-    <View style={[styles.well, { width: box, height: box, borderRadius: box > 44 ? radius.xl : radius.lg, backgroundColor: softTint(meta.color, meta.soft) }]}>
-      <MaterialCommunityIcons name={TYPE_ICON[kind ?? ""] ?? "car-outline"} size={Math.round(box * 0.55)} color={ink(meta.color)} />
-    </View>
-  );
+  return <Icon3D mc={TYPE_ICON[kind ?? ""] ?? "car"} tone={STATE_TONE[state]} box={box} />;
 });
 
 /** A filter chip: a status dot, the label and how many there are. */
@@ -233,7 +227,7 @@ export function Banner({ text }: { text: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   flex: { flex: 1 },
   header: { paddingHorizontal: space.lg, paddingBottom: space.sm, gap: space.md, backgroundColor: colors.canvas },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: size.controlSm },
@@ -273,4 +267,4 @@ const styles = StyleSheet.create({
   skeletonText: { flex: 1, gap: space.sm },
   banner: { flexDirection: "row", alignItems: "center", gap: space.sm, backgroundColor: colors.warningSoft, paddingHorizontal: space.lg, paddingVertical: space.sm },
   bannerText: { flex: 1, color: colors.warning, fontSize: font.small, lineHeight: 18 }
-});
+}));

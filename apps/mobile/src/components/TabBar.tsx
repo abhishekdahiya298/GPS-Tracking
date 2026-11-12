@@ -8,7 +8,7 @@ import { useEffect, useRef, type ComponentProps } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { haptic } from "../haptics";
-import { colors, size } from "../theme";
+import { colors, ink, size, themed } from "../theme";
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -26,7 +26,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   useEffect(() => {
     Animated.spring(pop, { toValue: focused ? 1 : 0, useNativeDriver: true, speed: 22, bounciness: 12 }).start();
   }, [focused, pop]);
-  const tint = focused ? colors.primary : colors.mutedForeground;
+  const tint = focused ? ink(colors.primary) : colors.mutedForeground;
   const icons = TAB_ICONS[name];
   return (
     <Animated.View style={{ transform: [{ scale: pop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] }) }] }}>
@@ -65,7 +65,7 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
             accessibilityState={{ selected: focused }}
             accessibilityLabel={badge ? `${label}, ${badge} unread` : label}
           >
-            <View>
+            <View style={[styles.iconPill, focused && styles.iconPillOn]}>
               <TabIcon name={route.name} focused={focused} />
               {badge ? (
                 <View style={styles.badge}>
@@ -83,11 +83,13 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   bar: { flexDirection: "row", backgroundColor: colors.background, paddingTop: 6, paddingHorizontal: 8, borderTopWidth: 1, borderTopColor: colors.border },
   tab: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3, minHeight: 48 },
+  iconPill: { minWidth: 52, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  iconPillOn: { backgroundColor: colors.primarySoft },
   label: { fontSize: 11, lineHeight: 14, fontWeight: "500", color: colors.mutedForeground },
-  labelOn: { color: colors.primary, fontWeight: "600" },
-  badge: { position: "absolute", top: -4, right: -10, minWidth: 16, height: 16, paddingHorizontal: 4, borderRadius: 8, backgroundColor: colors.danger, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.background },
+  labelOn: { color: ink(colors.primary), fontWeight: "600" },
+  badge: { position: "absolute", top: -3, right: 4, minWidth: 16, height: 16, paddingHorizontal: 4, borderRadius: 8, backgroundColor: colors.danger, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.background },
   badgeText: { color: "#ffffff", fontSize: 10, lineHeight: 12, fontWeight: "700" }
-});
+}));

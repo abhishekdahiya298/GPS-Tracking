@@ -1,7 +1,7 @@
 import { useState, type Ref } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View, type TextInputProps } from "react-native";
-import { colors, font, radius, size, space } from "../theme";
+import { colors, font, radius, size, space, themed } from "../theme";
 import { PressableScale } from "./motion";
 
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -87,7 +87,7 @@ export function ErrorNote({ text }: { text: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   button: { minHeight: size.control, borderRadius: radius.lg, flexDirection: "row", gap: space.sm, alignItems: "center", justifyContent: "center", paddingHorizontal: space.lg },
   compact: { minHeight: size.controlSm, paddingHorizontal: space.md },
   primary: { backgroundColor: colors.primary },
@@ -103,4 +103,4 @@ const styles = StyleSheet.create({
   eye: { position: "absolute", right: 2, top: 0, bottom: 0, width: 44, alignItems: "center", justifyContent: "center" },
   error: { flexDirection: "row", alignItems: "flex-start", gap: space.sm, backgroundColor: colors.dangerSoft, borderRadius: radius.md, padding: space.md },
   errorText: { flex: 1, color: colors.danger, fontSize: font.small, lineHeight: 18 }
-});
+}));

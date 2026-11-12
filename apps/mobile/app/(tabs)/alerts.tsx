@@ -10,7 +10,7 @@ import { Button } from "@/components/ui";
 import { haptic } from "@/haptics";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { timeAgo } from "@/fleet/model";
-import { colors, font, size, space, type } from "@/theme";
+import { colors, font, size, space, type, themed } from "@/theme";
 
 export default function AlertsScreen() {
   const { events, unread, unreadOnly, loading, loadingMore, hasMore, error, setUnreadOnly, refresh, loadMore, acknowledge } = useAlerts();
@@ -145,7 +145,7 @@ export default function AlertsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1, minWidth: 0 },
   markAll: { minHeight: size.controlSm, justifyContent: "center" },
@@ -162,4 +162,4 @@ const styles = StyleSheet.create({
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
   footer: { padding: space.lg },
   end: { ...type.small, textAlign: "center", padding: space.lg }
-});
+}));

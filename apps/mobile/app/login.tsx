@@ -7,7 +7,7 @@ import { useSession } from "@/auth/SessionProvider";
 import { FadeInUp } from "@/components/motion";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { useBottomInset, useScreen } from "@/layout";
-import { colors, space, type } from "@/theme";
+import { colors, space, type, themed } from "@/theme";
 
 const ROUTE = require("../assets/signin-route.png"); // eslint-disable-line @typescript-eslint/no-require-imports -- React Native loads images with require()
 const LOGO = require("../assets/logo.png"); // eslint-disable-line @typescript-eslint/no-require-imports -- React Native loads images with require()
@@ -187,7 +187,7 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: "center", paddingHorizontal: space.xl, paddingTop: space.lg },
@@ -201,4 +201,4 @@ const styles = StyleSheet.create({
   footnote: { ...type.small, textAlign: "center" },
   route: { position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: 150 },
   version: { ...type.caption, position: "absolute", left: 0, right: 0, textAlign: "center" }
-});
+}));

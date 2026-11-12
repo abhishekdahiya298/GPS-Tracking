@@ -11,7 +11,7 @@ import { Button } from "@/components/ui";
 import { useBottomInset } from "@/layout";
 import { Placeholder } from "@/components/Placeholder";
 import { useFleet } from "@/fleet/FleetProvider";
-import { colors, elevation, font, ink, size, space, type } from "@/theme";
+import { colors, elevation, font, ink, size, space, type, themed } from "@/theme";
 import { SPEEDS, advance, buildTrack, positionAt, progressOf, timeAtProgress, type HistoryPage, type HistoryPoint, type Track } from "@/trips/model";
 
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -163,7 +163,7 @@ export default function TripScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   center: { flex: 1, backgroundColor: colors.canvas },
@@ -181,4 +181,4 @@ const styles = StyleSheet.create({
   controls: { flexDirection: "row", alignItems: "center", gap: space.lg, marginTop: space.md },
   play: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", ...elevation.md },
   speeds: { flex: 1 }
-});
+}));

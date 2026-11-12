@@ -1,7 +1,7 @@
 import { Camera, GeoJSONSource, Layer, Map, type CameraRef } from "@maplibre/maplibre-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet } from "react-native";
-import { colors, isDark } from "@/theme";
+import { colors, isDark, themed } from "@/theme";
 import { styleUrl } from "@/map/model";
 import { trackBounds, type Track } from "./model";
 
@@ -46,4 +46,4 @@ export default function TripMap({ track, at }: { track: Track; at: [number, numb
   );
 }
 
-const styles = StyleSheet.create({ map: { flex: 1 } });
+const styles = themed(() => StyleSheet.create({ map: { flex: 1 } }));

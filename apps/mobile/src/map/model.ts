@@ -30,6 +30,8 @@ export const spriteName = (type: string | null | undefined, state: FleetState): 
 /** Southern Ontario, shown until the first positions arrive. */
 export const DEFAULT_CENTER: [number, number] = [-79.64, 43.59];
 export const DEFAULT_ZOOM = 8;
+/** The whole of North America from far out: where the opening dive starts. */
+export const WORLD_VIEW: { center: [number, number]; zoom: number } = { center: [-96, 42], zoom: 1.2 };
 
 export interface VehicleProps {
   deviceId: string;

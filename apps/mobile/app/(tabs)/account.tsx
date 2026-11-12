@@ -5,16 +5,18 @@ import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text
 import { ApiError, api, type ReadyResponse } from "@/api";
 import { useSession } from "@/auth/SessionProvider";
 import { Ionicons } from "@expo/vector-icons";
-import { reloadAppAsync } from "expo";
+import { Icon3D } from "@/components/Icon3D";
 import { Card, ScreenHeader, SectionLabel, Segmented } from "@/components/kit";
 import { FadeInUp, PressableScale, PulseDot } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { API_BASE_URL } from "@/config";
 import { haptic } from "@/haptics";
+import { requestLook } from "@/look";
+import { forgetMapStyle } from "@/map/style";
 import { useFleet } from "@/fleet/FleetProvider";
 import { DEFAULT_PREFS, PROBLEM_TEXT, PUSH_KINDS, clockText, wrapMinutes, type PushPrefs } from "@/push/model";
 import { disablePush, enablePush, loadPrefs } from "@/push/service";
-import { colors, font, ink, radius, saveThemeChoice, size, space, themeChoice, type, type ThemeChoice } from "@/theme";
+import { colors, font, radius, size, space, themeChoice, type, type ThemeChoice, type ToneName, themed } from "@/theme";
 
 type Check = { state: "checking" } | { state: "ok"; at: string } | { state: "failed"; reason: string };
 
@@ -53,11 +55,11 @@ export default function AccountScreen() {
   const run = useCallback(async () => {
     setCheck({ state: "checking" });
     try {
-      const ready = await api.get<ReadyResponse>("health/ready");
+      const ready = await Promise.race([api.get<ReadyResponse>("health/ready"), new Promise<never>((_, no) => setTimeout(() => no(new Error("slow")), 5000))]);
       if (ready.status === "ready") setCheck({ state: "ok", at: new Date(ready.timestamp).toLocaleTimeString() });
       else setCheck({ state: "failed", reason: "The server is up but not ready." });
     } catch (error) {
-      setCheck({ state: "failed", reason: error instanceof ApiError ? error.message : "Something went wrong." });
+      setCheck({ state: "failed", reason: error instanceof ApiError ? error.message : "The server did not answer. Check your internet connection." });
     }
   }, []);
 
@@ -79,13 +81,12 @@ export default function AccountScreen() {
     ]);
   }
 
-  /** Saves the look and restarts the app, so every screen is drawn in it. Takes well under a second. */
+  /** Changes the look right away, with a short fade. The map goes back to following the look. */
   function changeLook(next: ThemeChoice) {
     if (next === look) return;
     setLook(next);
-    saveThemeChoice(next);
-    // Let the switch finish sliding before the restart.
-    setTimeout(() => void reloadAppAsync("Look changed").catch(() => Alert.alert("Close and reopen the app", "The new look applies the next time RIO GPS opens.")), 250);
+    forgetMapStyle();
+    requestLook(next);
   }
 
   const initials = (user?.name || user?.email || "?")
@@ -101,9 +102,9 @@ export default function AccountScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <FadeInUp index={0}>
           <Card style={styles.profile}>
-            <View style={styles.avatar}>
+            <Icon3D tone="blue" box={48}>
               <Text style={styles.avatarText}>{initials}</Text>
-            </View>
+            </Icon3D>
             <View style={styles.flex}>
               <Text style={type.section} numberOfLines={1}>{user?.name || "Signed in"}</Text>
               {user?.email ? <Text style={type.small} numberOfLines={1}>{user.email}</Text> : null}
@@ -115,7 +116,7 @@ export default function AccountScreen() {
           <SectionLabel text="Notifications" />
           <Card style={styles.group}>
             <View style={styles.setting}>
-              <Ionicons name="notifications-outline" size={size.icon} color={colors.mutedForeground} />
+              <Icon3D icon="notifications" tone="red" box={30} />
               <View style={styles.flex}>
                 <Text style={styles.settingTitle}>Alert notifications</Text>
                 <Text style={type.small}>On this phone, even when the app is closed.</Text>
@@ -136,7 +137,7 @@ export default function AccountScreen() {
               : null}
             {push.enabled ? (
               <View style={[styles.setting, styles.line]}>
-                <Ionicons name="moon-outline" size={size.icon} color={colors.mutedForeground} />
+                <Icon3D icon="moon" tone="violet" box={30} />
                 <View style={styles.flex}>
                   <Text style={styles.settingTitle}>Quiet hours</Text>
                   <Text style={type.small}>{push.quiet ? `${clockText(push.quietStart, timeFormat)} to ${clockText(push.quietEnd, timeFormat)}` : "No notifications at night."}</Text>
@@ -170,9 +171,9 @@ export default function AccountScreen() {
         <FadeInUp index={3}>
           <SectionLabel text="Account" />
           <Card style={styles.group}>
-            <LinkRow icon="lock-closed-outline" label="Change password" onPress={() => router.push("/password")} />
-            <LinkRow icon="help-circle-outline" label="Help" onPress={() => void Linking.openURL("https://www.riogps.com/help")} />
-            <LinkRow icon="shield-checkmark-outline" label="Privacy policy" onPress={() => void Linking.openURL("https://www.riogps.com/privacy")} last />
+            <LinkRow icon="lock-closed" tone="blue" label="Change password" onPress={() => router.push("/password")} />
+            <LinkRow icon="help" tone="teal" label="Help" onPress={() => void Linking.openURL("https://www.riogps.com/help")} />
+            <LinkRow icon="shield-checkmark" tone="green" label="Privacy policy" onPress={() => void Linking.openURL("https://www.riogps.com/privacy")} last />
           </Card>
         </FadeInUp>
 
@@ -219,27 +220,26 @@ function TimeStep({ label, value, disabled, onStep }: { label: string; value: st
   );
 }
 
-function LinkRow({ icon, label, onPress, last }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; last?: boolean }) {
+function LinkRow({ icon, tone, label, onPress, last }: { icon: keyof typeof Ionicons.glyphMap; tone: ToneName; label: string; onPress: () => void; last?: boolean }) {
   return (
     <PressableScale onPress={onPress} scaleTo={0.985} style={[styles.link, !last && styles.linkLine]} accessibilityRole="button" accessibilityLabel={label}>
-      <Ionicons name={icon} size={size.icon} color={colors.mutedForeground} />
+      <Icon3D icon={icon} tone={tone} box={30} />
       <Text style={styles.linkText}>{label}</Text>
       <Ionicons name="chevron-forward" size={18} color={colors.borderStrong} />
     </PressableScale>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1, minWidth: 0 },
   content: { paddingHorizontal: space.lg, paddingTop: space.xs, paddingBottom: space.xl, gap: space.lg },
   profile: { flexDirection: "row", alignItems: "center", gap: space.md, padding: space.md },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 16, lineHeight: 22, fontWeight: "700", color: ink(colors.primary) },
+  avatarText: { fontSize: 17, lineHeight: 22, fontWeight: "800", color: "#ffffff" },
   group: { paddingVertical: 0, paddingHorizontal: space.md },
   setting: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 56, paddingVertical: space.sm },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  sub: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingLeft: size.icon + space.md },
+  sub: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingLeft: 30 + space.md },
   settingTitle: { fontSize: font.body, lineHeight: 20, fontWeight: "500", color: colors.foreground },
   times: { flexDirection: "row", gap: space.lg, paddingVertical: space.md },
   time: { flex: 1, gap: 4 },
@@ -252,4 +252,4 @@ const styles = StyleSheet.create({
   checkIcon: { width: size.icon, alignItems: "center" },
   end: { gap: space.md },
   footer: { ...type.caption, textAlign: "center" }
-});
+}));
