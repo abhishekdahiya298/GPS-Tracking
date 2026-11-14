@@ -5,6 +5,7 @@
  */
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { LinearGradient } from "expo-linear-gradient";
 import { Animated, Image, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { STATE_META, type FleetState } from "../fleet/model";
@@ -92,16 +93,40 @@ export const VehiclePicture = memo(function VehiclePicture({ type: kind, width =
   );
 });
 
-/** One live fact in a row of four: a soft round icon, the value in bold and a small label. */
-export function FactTile({ icon, label, value, color = colors.foreground, soft = colors.muted }: { icon: IconName; label: string; value: string; color?: string; soft?: string }) {
+/**
+ * One live fact in a row of four, on its own soft colour: the icon, a small label and the value in
+ * bold. `valueColor` lets the value say good/bad while the tile keeps its own colour.
+ */
+export function FactTile({ icon, label, value, color = colors.primary, soft = colors.primarySoft, valueColor }: { icon: IconName; label: string; value: string; color?: string; soft?: string; valueColor?: string }) {
   return (
-    <View style={styles.fact} accessible accessibilityLabel={`${label}: ${value}`}>
-      <View style={[styles.factIcon, { backgroundColor: softTint(color, soft) }]}>
-        <Ionicons name={icon} size={17} color={ink(color)} />
-      </View>
-      <Text style={[styles.factValue, { color: ink(color) }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{value}</Text>
+    <View style={[styles.fact, { backgroundColor: softTint(color, soft), borderColor: isDark ? colors.border : `${color}3d` }]} accessible accessibilityLabel={`${label}: ${value}`}>
+      <Ionicons name={icon} size={22} color={ink(color)} />
       <Text style={styles.factLabel} numberOfLines={1}>{label}</Text>
+      <Text style={[styles.factValue, { color: ink(valueColor ?? color) }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{value}</Text>
     </View>
+  );
+}
+
+/** The speed band on a vehicle sheet: deep blue with white figures, speed on the left, what it is doing on the right. */
+export function SpeedBar({ speed, unit, title, detail, headingDeg }: { speed: string; unit: string; title: string; detail: string; headingDeg?: number | null }) {
+  return (
+    <LinearGradient colors={["#1d4ed8", "#0f2e8a"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.speedBar}>
+      <View style={styles.speedSide}>
+        <Ionicons name="speedometer-outline" size={28} color="#ffffff" />
+        <Text style={styles.speedValue} numberOfLines={1}>
+          {speed}
+          <Text style={styles.speedUnit}>{` ${unit}`}</Text>
+        </Text>
+      </View>
+      <View style={styles.speedRule} />
+      <View style={[styles.speedSide, styles.speedRight]}>
+        <Ionicons name="navigate-outline" size={22} color="#ffffff" style={{ transform: [{ rotate: `${(headingDeg ?? 45) - 45}deg` }] }} />
+        <View style={styles.flex}>
+          <Text style={styles.speedTitle} numberOfLines={1}>{title}</Text>
+          <Text style={styles.speedDetail} numberOfLines={1}>{detail}</Text>
+        </View>
+      </View>
+    </LinearGradient>
   );
 }
 
@@ -308,10 +333,17 @@ const styles = StyleSheet.create({
   pill: { flexDirection: "row", alignItems: "center", gap: 5, paddingLeft: 8, paddingRight: 9, paddingVertical: 3, borderRadius: 999 },
   pillText: { fontSize: font.caption, lineHeight: 16, fontWeight: "700" },
   picture: { borderRadius: radius.lg, borderWidth: 1, borderColor: isDark ? colors.border : "#d3ddeb", backgroundColor: isDark ? "#1c2636" : "#e2eaf7", alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  fact: { flex: 1, minWidth: 0, alignItems: "center", gap: 3, paddingTop: 10, paddingBottom: 9, paddingHorizontal: 4, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, ...elevation.sm },
-  factIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  factValue: { fontSize: 14, lineHeight: 18, fontWeight: "700" },
-  factLabel: { ...type.caption },
+  fact: { flex: 1, minWidth: 0, alignItems: "center", gap: 2, paddingTop: 10, paddingBottom: 9, paddingHorizontal: 4, borderRadius: radius.xl, borderWidth: 1 },
+  factValue: { fontSize: 15, lineHeight: 20, fontWeight: "800" },
+  factLabel: { ...type.caption, color: colors.foreground, marginTop: 2 },
+  speedBar: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.xl + 2, ...elevation.md },
+  speedSide: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  speedRight: { flex: 1.3, minWidth: 0 },
+  speedRule: { width: 1, alignSelf: "stretch", backgroundColor: "rgba(255,255,255,0.3)", marginHorizontal: 14 },
+  speedValue: { fontSize: 30, lineHeight: 34, fontWeight: "800", color: "#ffffff", fontVariant: ["tabular-nums"] },
+  speedUnit: { fontSize: 15, fontWeight: "600", color: "rgba(255,255,255,0.85)" },
+  speedTitle: { fontSize: 13, lineHeight: 18, fontStyle: "italic", color: "rgba(255,255,255,0.85)" },
+  speedDetail: { fontSize: 15, lineHeight: 20, fontWeight: "800", color: "#ffffff", fontVariant: ["tabular-nums"] },
   address: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, paddingLeft: space.md, paddingRight: 6, borderRadius: radius.xl, backgroundColor: colors.primarySoft },
   addressTitle: { fontSize: 14, lineHeight: 20, fontWeight: "700", color: colors.foreground },
   addressCopy: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
