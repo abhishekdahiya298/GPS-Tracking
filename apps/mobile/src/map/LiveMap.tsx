@@ -6,10 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View, type NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/api";
-import { Chip, StatusPill } from "@/components/kit";
+import { AddressCard, Chip, FactTile, SpeedBar, StatusPill, VehiclePicture } from "@/components/kit";
 import { Dots, FadeIn, PressableScale, PulseDot, SlideUp } from "@/components/motion";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { FILTERS, STATE_META, countByFilter, displayName, fleetState, selectDevices, statusLine, timeAgo, type FleetFilter } from "@/fleet/model";
+import { FILTERS, STATE_META, coordsText, countByFilter, displayName, fleetState, freshnessLine, selectDevices, sheetFacts, sheetHeadline, type FleetFilter } from "@/fleet/model";
 import { haptic } from "@/haptics";
 import { colors, elevation, font, isDark, radius, size, space, type } from "@/theme";
 import { FleetSheet } from "./FleetSheet";
@@ -183,6 +183,14 @@ export default function LiveMap() {
   const labelHalo = dark ? "#0b1220" : "#ffffff";
   const selectedState = selected ? fleetState(selected) : null;
   const loc = selected?.location;
+  const facts = selected ? sheetFacts(selected, now) : null;
+  const headline = selected ? sheetHeadline(selected, now) : { title: "", detail: "" };
+  const speedText = ((): [string, string] => {
+    if (!selected || selectedState === "offline" || selectedState === "never_seen") return ["—", ""];
+    const t = units.fmtSpeed(selectedState === "moving" ? (loc?.speedKph ?? null) : 0);
+    const i = t.lastIndexOf(" ");
+    return i < 0 ? [t, ""] : [t.slice(0, i), t.slice(i + 1)];
+  })();
 
   return (
     <View style={styles.wrap}>
@@ -315,7 +323,7 @@ export default function LiveMap() {
       ) : null}
 
       {/* Round buttons on the right, just above the card (or the bottom edge when no vehicle is picked). */}
-      <View style={[styles.fabs, { bottom: selected ? cardHeight + space.md * 2 : space.md }]} pointerEvents="box-none">
+      <View style={[styles.fabs, { bottom: selected ? cardHeight + (steps.length > 1 ? 60 : space.md) : space.md }]} pointerEvents="box-none">
         {styleMenu ? (
           <SlideUp style={styles.styleMenu}>
             {MAP_STYLES.map((m) => (
@@ -335,52 +343,59 @@ export default function LiveMap() {
       </View>
 
       {selected && selectedState ? (
-        <SlideUp style={styles.card}>
-          <View onLayout={(e) => setCardHeight(e.nativeEvent.layout.height)} style={styles.cardBody}>
-            <View style={styles.cardHead}>
-              <PressableScale onPress={() => step(-1)} disabled={steps.length < 2} scaleTo={0.9} style={[styles.stepButton, steps.length < 2 && styles.dim]} accessibilityRole="button" accessibilityLabel="Previous vehicle">
-                <Ionicons name="chevron-back" size={size.icon} color={colors.foreground} />
+        <>
+          {/* Prev / Next float just above the sheet, so switching vehicles needs one thumb. */}
+          {steps.length > 1 ? (
+            <View style={[styles.stepRow, { bottom: cardHeight + space.sm }]} pointerEvents="box-none">
+              <PressableScale onPress={() => step(-1)} scaleTo={0.94} style={styles.stepPill} accessibilityRole="button" accessibilityLabel="Previous vehicle">
+                <Ionicons name="chevron-back" size={16} color={colors.primaryForeground} />
+                <Text style={styles.stepText}>Prev</Text>
               </PressableScale>
-              {/* Keyed by vehicle, so stepping to another one fades the new name in. */}
-              <FadeIn key={selected.deviceId} style={styles.cardTitle}>
-                <View style={styles.cardNameLine}>
-                  <Text style={styles.cardName} numberOfLines={1}>{displayName(selected)}</Text>
-                  <StatusPill state={selectedState} compact />
+              <View style={styles.stepCount}>
+                <Text style={styles.stepCountText}>{stepIndex >= 0 ? `${stepIndex + 1} of ${steps.length}` : `${steps.length} vehicles`}</Text>
+              </View>
+              <PressableScale onPress={() => step(1)} scaleTo={0.94} style={styles.stepPill} accessibilityRole="button" accessibilityLabel="Next vehicle">
+                <Text style={styles.stepText}>Next</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.primaryForeground} />
+              </PressableScale>
+            </View>
+          ) : null}
+          <SlideUp style={styles.card}>
+            <View onLayout={(e) => setCardHeight(e.nativeEvent.layout.height)} style={styles.cardBody}>
+              <View style={styles.grab} />
+              {/* Keyed by vehicle, so stepping to another one fades the new one in. */}
+              <FadeIn key={selected.deviceId} style={styles.cardInner}>
+                <View style={styles.cardHead}>
+                  <VehiclePicture type={selected.vehicle?.type} width={80} height={60} />
+                  <View style={styles.cardTitle}>
+                    <Text style={styles.cardName} numberOfLines={1}>{displayName(selected)}</Text>
+                    <View style={styles.cardNameLine}>
+                      <StatusPill state={selectedState} compact />
+                      <Text style={styles.cardSub} numberOfLines={1}>{freshnessLine(selected, now)}</Text>
+                    </View>
+                  </View>
+                  <PressableScale onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: selected.deviceId } })} hitSlop={6} style={styles.more} accessibilityRole="button" accessibilityLabel="Vehicle details">
+                    <Ionicons name="ellipsis-horizontal" size={22} color={colors.foreground} />
+                  </PressableScale>
                 </View>
-                <Text style={styles.cardSub} numberOfLines={1}>
-                  {statusLine(selected, units.fmtSpeed, now)}
-                  {stepIndex >= 0 && steps.length > 1 ? ` · ${stepIndex + 1} of ${steps.length}` : ""}
-                </Text>
+                <SpeedBar speed={speedText[0]} unit={speedText[1]} title={headline.title} detail={headline.detail} headingDeg={loc?.headingDeg ?? null} />
+                <AddressCard title={null} coords={coordsText(selected) ?? "No position yet"} label={selectedState === "offline" || selectedState === "parked" ? "Last known position" : undefined} />
+                <View style={styles.tiles}>
+                  <FactTile icon="key-outline" label="Ignition" value={facts!.ignition} color={facts!.ignition === "Off" ? STATE_META.stopped.color : STATE_META.moving.color} soft={facts!.ignition === "Off" ? STATE_META.stopped.soft : STATE_META.moving.soft} />
+                  <FactTile icon="pulse-outline" label="Motion" value={facts!.motion} color={colors.primary} soft={colors.primarySoft} valueColor={facts!.motion === "Moving" ? STATE_META.moving.color : colors.foreground} />
+                  <FactTile icon="locate-outline" label="GPS" value={facts!.gps.value} color={facts!.gps.fresh ? "#7c3aed" : STATE_META.idle.color} soft={facts!.gps.fresh ? "#f3edff" : STATE_META.idle.soft} />
+                  <FactTile icon="wifi-outline" label="Tracker" value={facts!.tracker.value} color={facts!.tracker.online ? STATE_META.idle.color : STATE_META.offline.color} soft={facts!.tracker.online ? STATE_META.idle.soft : STATE_META.offline.soft} valueColor={facts!.tracker.online ? STATE_META.moving.color : STATE_META.offline.color} />
+                </View>
               </FadeIn>
-              <PressableScale onPress={() => step(1)} disabled={steps.length < 2} scaleTo={0.9} style={[styles.stepButton, steps.length < 2 && styles.dim]} accessibilityRole="button" accessibilityLabel="Next vehicle">
-                <Ionicons name="chevron-forward" size={size.icon} color={colors.foreground} />
-              </PressableScale>
+              <View style={styles.cardActions}>
+                <ActionButton icon={following ? "navigate" : "navigate-outline"} label={following ? "Following" : "Follow"} primary onPress={toggleFollow} selected={following} />
+                <ActionButton icon="git-commit-outline" label="Trips" onPress={() => router.push({ pathname: "/trips/[id]", params: { id: selected.deviceId } })} />
+                <ActionButton icon="map-outline" label="Navigate" onPress={openInMaps} />
+                <ActionButton icon="information-circle-outline" label="Details" onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: selected.deviceId } })} />
+              </View>
             </View>
-            <View style={styles.facts}>
-              <Fact label="Speed" value={loc && selectedState === "moving" ? units.fmtSpeed(loc.speedKph) : "0"} />
-              <View style={styles.factLine} />
-              <Fact label="Engine" value={loc?.ignition === true ? "On" : loc?.ignition === false ? "Off" : "—"} />
-              <View style={styles.factLine} />
-              <Fact label="Updated" value={loc ? timeAgo(loc.recordedAt, now) : "never"} />
-            </View>
-            <View style={styles.cardActions}>
-              <Pressable onPress={toggleFollow} style={[styles.action, styles.actionWide, styles.actionPrimary, following && styles.actionOn]} accessibilityRole="button" accessibilityState={{ selected: following }}>
-                <Ionicons name={following ? "navigate" : "navigate-outline"} size={16} color={colors.primaryForeground} />
-                <Text style={[styles.actionText, { color: colors.primaryForeground }]}>{following ? "Following" : "Follow"}</Text>
-              </Pressable>
-              <Pressable onPress={() => router.push({ pathname: "/trips/[id]", params: { id: selected.deviceId } })} style={[styles.action, styles.actionWide]} accessibilityRole="button">
-                <Ionicons name="git-commit-outline" size={18} color={colors.primary} />
-                <Text style={styles.actionText}>Trips</Text>
-              </Pressable>
-              <Pressable onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: selected.deviceId } })} style={styles.action} accessibilityRole="button" accessibilityLabel="Details">
-                <Ionicons name="information-circle-outline" size={size.icon} color={colors.primary} />
-              </Pressable>
-              <Pressable onPress={openInMaps} style={styles.action} accessibilityRole="button" accessibilityLabel="Open in Maps">
-                <Ionicons name="open-outline" size={18} color={colors.primary} />
-              </Pressable>
-            </View>
-          </View>
-        </SlideUp>
+          </SlideUp>
+        </>
       ) : null}
 
       <FleetSheet
@@ -400,12 +415,13 @@ export default function LiveMap() {
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+/** One of the big buttons under the vehicle sheet: an icon over a word. */
+function ActionButton({ icon, label, onPress, primary = false, selected = false }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; primary?: boolean; selected?: boolean }) {
   return (
-    <View style={styles.fact}>
-      <Text style={styles.factValue} numberOfLines={1}>{value}</Text>
-      <Text style={styles.factLabel}>{label}</Text>
-    </View>
+    <Pressable onPress={onPress} style={[styles.action, primary && styles.actionPrimary, selected && styles.actionOn]} accessibilityRole="button" accessibilityState={primary ? { selected } : undefined}>
+      <Ionicons name={icon} size={19} color={primary ? colors.primaryForeground : colors.primary} />
+      <Text style={[styles.actionText, primary && { color: colors.primaryForeground }]} numberOfLines={1}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -428,23 +444,25 @@ const styles = StyleSheet.create({
   styleTextOn: { color: colors.primary, fontWeight: "600" },
   notice: { position: "absolute", alignSelf: "center", maxWidth: "72%", backgroundColor: colors.background, borderRadius: radius.lg, paddingHorizontal: space.md, paddingVertical: space.sm, ...elevation.md },
   noticeText: { fontSize: font.small, lineHeight: 18, color: colors.foreground, textAlign: "center" },
-  card: { position: "absolute", left: space.md, right: space.md, bottom: space.md, backgroundColor: colors.background, borderRadius: 16, ...elevation.lg },
-  cardBody: { padding: space.md, gap: 10 },
-  cardHead: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  stepButton: { width: size.controlSm, height: size.controlSm, borderRadius: radius.lg, backgroundColor: colors.muted, alignItems: "center", justifyContent: "center" },
-  cardTitle: { flex: 1, minWidth: 0, alignItems: "center", gap: 2 },
-  cardNameLine: { flexDirection: "row", alignItems: "center", gap: space.sm, maxWidth: "100%" },
-  cardName: { flexShrink: 1, fontSize: 16, lineHeight: 22, fontWeight: "700", color: colors.foreground },
-  cardSub: { ...type.small, fontVariant: ["tabular-nums"] },
-  facts: { flexDirection: "row", alignItems: "center", backgroundColor: colors.canvas, borderRadius: radius.md, paddingVertical: space.sm },
-  fact: { flex: 1, alignItems: "center" },
-  factLine: { width: 1, height: 24, backgroundColor: colors.border },
-  factValue: { fontSize: font.body, lineHeight: 20, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
-  factLabel: { ...type.caption },
+  card: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, ...elevation.lg },
+  cardBody: { paddingHorizontal: 14, paddingTop: space.sm, paddingBottom: space.md, gap: 10 },
+  cardInner: { gap: 10 },
+  grab: { alignSelf: "center", width: 40, height: 5, borderRadius: 3, backgroundColor: colors.border },
+  cardHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  cardTitle: { flex: 1, minWidth: 0, gap: 4 },
+  cardNameLine: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  cardName: { fontSize: 20, lineHeight: 25, fontWeight: "700", letterSpacing: -0.2, color: colors.foreground },
+  cardSub: { ...type.caption, flexShrink: 1, fontVariant: ["tabular-nums"] },
+  more: { width: size.controlSm, height: size.controlSm, alignItems: "center", justifyContent: "center" },
+  tiles: { flexDirection: "row", gap: 6 },
+  stepRow: { position: "absolute", left: space.lg, right: space.lg, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  stepPill: { flexDirection: "row", alignItems: "center", gap: 6, height: 40, paddingHorizontal: space.lg, borderRadius: 20, backgroundColor: colors.primary, ...elevation.md },
+  stepText: { fontSize: 14, fontWeight: "700", color: colors.primaryForeground },
+  stepCount: { height: 34, paddingHorizontal: space.md, borderRadius: 17, backgroundColor: colors.background, justifyContent: "center", ...elevation.md },
+  stepCountText: { fontSize: 13, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
   cardActions: { flexDirection: "row", gap: space.sm },
-  action: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: size.controlSm, minWidth: size.controlSm, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.background },
-  actionWide: { flex: 1 },
+  action: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3, height: 56, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
   actionPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
   actionOn: { backgroundColor: colors.primaryDark, borderColor: colors.primaryDark },
-  actionText: { fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.primary }
+  actionText: { fontSize: 12, lineHeight: 16, fontWeight: "700", color: colors.foreground }
 });

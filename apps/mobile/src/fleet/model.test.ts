@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compassPoint, coordsText, countByFilter, displayName, fleetState, freshnessLine, selectDevices, statusLine, timeAgo, vehicleFacts, type FleetDevice } from "./model";
+import { compassPoint, coordsText, countByFilter, displayName, fleetState, freshnessLine, selectDevices, sheetFacts, sheetHeadline, statusLine, timeAgo, vehicleFacts, type FleetDevice } from "./model";
 
 const NOW = Date.parse("2026-10-09T12:00:00Z");
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString();
@@ -121,5 +121,21 @@ describe("vehicle card facts", () => {
     expect(coordsText(d)).toBe("43.5132, -79.8821");
     expect(freshnessLine(d, Date.parse("2026-11-14T10:05:00Z"))).toBe("Updated 5 min ago");
     expect(freshnessLine({ ...d, connectivity: "offline", lastSeenAt: "2026-11-14T04:00:00Z" }, Date.parse("2026-11-14T10:00:00Z"))).toBe("Last seen 6 h ago");
+  });
+});
+
+describe("vehicle sheet", () => {
+  const at = Date.parse("2026-11-14T10:00:30Z");
+  const d: FleetDevice = { deviceId: "d", model: null, name: null, deviceStatus: "active", connectivity: "online", lastSeenAt: "2026-11-14T10:00:00Z", vehicle: { id: "v", name: "Truck 101", licensePlate: null, type: "truck" }, location: { latitude: 43.5, longitude: -79.9, speedKph: 72, headingDeg: 62, altitudeM: null, ignition: true, motion: true, recordedAt: "2026-11-14T10:00:00Z", receivedAt: "2026-11-14T10:00:00Z" } };
+
+  it("fills the four tiles from real readings", () => {
+    expect(sheetFacts(d, at)).toEqual({ ignition: "On", motion: "Moving", gps: { value: "Live", fresh: true }, tracker: { value: "Online", online: true } });
+    const old = sheetFacts({ ...d, connectivity: "offline", location: { ...d.location!, speedKph: 0, ignition: null, motion: null } }, Date.parse("2026-11-14T16:00:00Z"));
+    expect(old).toEqual({ ignition: "—", motion: "—", gps: { value: "6 h old", fresh: false }, tracker: { value: "Offline", online: false } });
+  });
+
+  it("says what the vehicle is doing", () => {
+    expect(sheetHeadline(d, at)).toEqual({ title: "Driving north-east", detail: "Heading 62°" });
+    expect(sheetHeadline({ ...d, location: { ...d.location!, speedKph: 0 } }, at).title).toBe("Engine on, standing");
   });
 });

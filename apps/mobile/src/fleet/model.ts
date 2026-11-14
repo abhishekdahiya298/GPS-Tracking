@@ -152,3 +152,33 @@ export function vehicleFacts(d: FleetDevice): VehicleFact[] {
   if (d.vehicle?.licensePlate) out.push({ key: "plate", label: d.vehicle.licensePlate, tone: "neutral" });
   return out;
 }
+
+/** "north-east" for 45°. Used in sentences such as "Driving north-east". */
+const WORDS: Record<string, string> = { N: "north", NE: "north-east", E: "east", SE: "south-east", S: "south", SW: "south-west", W: "west", NW: "north-west" };
+
+/**
+ * The four tiles on a vehicle sheet, each from a real reading: ignition and motion as the tracker
+ * reported them ("—" when it sent none), how old the GPS fix is, and whether the tracker is reporting.
+ */
+export function sheetFacts(d: FleetDevice, now: number = Date.now()): { ignition: string; motion: string; gps: { value: string; fresh: boolean }; tracker: { value: string; online: boolean } } {
+  const l = d.location;
+  const fixAge = l ? (now - new Date(l.recordedAt).getTime()) / 1000 : Infinity;
+  const fresh = Number.isFinite(fixAge) && fixAge < 120;
+  return {
+    ignition: l?.ignition === true ? "On" : l?.ignition === false ? "Off" : "—",
+    motion: fleetState(d) === "moving" ? "Moving" : l?.motion === true ? "Moving" : l?.motion === false ? "Still" : "—",
+    gps: { value: !l ? "No fix" : fresh ? "Live" : timeAgo(l.recordedAt, now).replace(" ago", " old"), fresh },
+    tracker: { value: d.connectivity === "online" ? "Online" : d.connectivity === "offline" ? "Offline" : "Never seen", online: d.connectivity === "online" }
+  };
+}
+
+/** The right side of the speed band: what the vehicle is doing, and the detail under it. */
+export function sheetHeadline(d: FleetDevice, now: number = Date.now()): { title: string; detail: string } {
+  const state = fleetState(d);
+  const point = compassPoint(d.location?.headingDeg ?? null);
+  if (state === "moving") return { title: point ? `Driving ${WORDS[point]}` : "Driving", detail: d.location?.headingDeg != null ? `Heading ${Math.round(((d.location.headingDeg % 360) + 360) % 360)}°` : freshnessLine(d, now) };
+  if (state === "idle") return { title: "Engine on, standing", detail: freshnessLine(d, now) };
+  if (state === "stopped") return { title: "Stopped", detail: freshnessLine(d, now) };
+  if (state === "parked") return { title: "Parked, unhooked", detail: freshnessLine(d, now) };
+  return { title: STATE_META[state].label, detail: freshnessLine(d, now) };
+}
