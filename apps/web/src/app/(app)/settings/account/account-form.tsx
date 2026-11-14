@@ -15,12 +15,14 @@ import { MIN_PASSWORD_LENGTH, PasswordInput } from "@/components/ui/password-inp
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { authClient } from "@/lib/client/auth-client";
+import { AppearanceCard } from "./appearance-card";
 import { MenuStyleCard } from "./menu-style-card";
+import type { ThemeChoice } from "@/lib/theme";
 import { TwoStepCard } from "./two-step-card";
 
 type Prefs = { timeZone: string | null; timeFormat: TimeFormat | null; navTheme?: string | null };
 
-export function AccountForm({ name, email, prefs, orgDefaults, twoStep }: { name: string; email: string; prefs: Prefs; twoStep: boolean; orgDefaults: { timeZone: string; timeFormat: TimeFormat } }) {
+export function AccountForm({ name, email, prefs, orgDefaults, twoStep, theme }: { name: string; email: string; prefs: Prefs; twoStep: boolean; theme: ThemeChoice; orgDefaults: { timeZone: string; timeFormat: TimeFormat } }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -64,6 +66,7 @@ export function AccountForm({ name, email, prefs, orgDefaults, twoStep }: { name
           </dl>
         </Card>
         <TimePreferences initial={prefs} orgDefaults={orgDefaults} />
+        <AppearanceCard initial={theme} />
         <MenuStyleCard initial={prefs.navTheme ?? null} />
         <Card>
           <CardHeader>

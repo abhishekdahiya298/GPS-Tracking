@@ -58,6 +58,67 @@
   --animate-grow-x: rio-grow-x 520ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
 }
 
+
+/* ---------- Dark look ----------
+   Every surface reads the colour tokens above, so swapping them is enough. The choice is on
+   <html data-theme> (set by the server from the rio-theme cookie); without it the browser decides. */
+:root[data-theme="dark"] {
+  --color-background: #161b24;
+  --color-canvas: #0d1117;
+  --color-foreground: #eef1f6;
+  --color-muted: #222a36;
+  --color-muted-foreground: #a3adbd;
+  --color-border: #2c3543;
+  --color-input: #3a4556;
+  --color-ring: #6d93f5;
+  --color-primary: #4f7df3;
+  --color-primary-hover: #6d93f5;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #1b2a4e;
+  --color-success: #4ade80;
+  --color-success-soft: #12301f;
+  --color-warning: #fbbf24;
+  --color-warning-soft: #3a2a0a;
+  --color-danger: #f87171;
+  --color-danger-hover: #fca5a5;
+  --color-danger-soft: #3b1414;
+  --color-info: #38bdf8;
+  --color-info-soft: #0c2a3d;
+  --color-offline: #9ca3af;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+  --color-background: #161b24;
+  --color-canvas: #0d1117;
+  --color-foreground: #eef1f6;
+  --color-muted: #222a36;
+  --color-muted-foreground: #a3adbd;
+  --color-border: #2c3543;
+  --color-input: #3a4556;
+  --color-ring: #6d93f5;
+  --color-primary: #4f7df3;
+  --color-primary-hover: #6d93f5;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #1b2a4e;
+  --color-success: #4ade80;
+  --color-success-soft: #12301f;
+  --color-warning: #fbbf24;
+  --color-warning-soft: #3a2a0a;
+  --color-danger: #f87171;
+  --color-danger-hover: #fca5a5;
+  --color-danger-soft: #3b1414;
+  --color-info: #38bdf8;
+  --color-info-soft: #0c2a3d;
+  --color-offline: #9ca3af;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);
+  color-scheme: dark;
+  }
+}
+
 @keyframes rio-in { from { opacity: 0; transform: translateY(4px) scale(0.99); } to { opacity: 1; transform: none; } }
 @keyframes rio-slide-left { from { transform: translateX(-100%); } to { transform: none; } }
 @keyframes rio-slide-bottom { from { transform: translateY(100%); } to { transform: none; } }
