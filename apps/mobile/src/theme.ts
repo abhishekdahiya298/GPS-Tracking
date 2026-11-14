@@ -7,11 +7,11 @@ import { Appearance, type TextStyle } from "react-native";
 
 const light = {
   background: "#ffffff",
-  canvas: "#f5f7fb",
+  canvas: "#eef2f8",
   foreground: "#0f172a",
   muted: "#eef2f7",
-  mutedForeground: "#55607a",
-  border: "#e3e8f0",
+  mutedForeground: "#475569",
+  border: "#d8e0ea",
   /** Outlines of inputs and outline buttons: strong enough to be seen on white. */
   borderStrong: "#8a94a8",
   primary: "#1d4ed8",
@@ -84,6 +84,9 @@ export const colors = isDark ? dark : light;
 /** Brighter twins of the fixed status and alert colours, for dark surfaces. */
 const BRIGHT: Record<string, string> = {
   "#15803d": "#4ade80",
+  "#c2570c": "#fb923c",
+  "#c62828": "#f87171",
+  "#7c3aed": "#a78bfa",
   "#b45309": "#fbbf24",
   "#0369a1": "#38bdf8",
   "#6b7280": "#9ca3af",

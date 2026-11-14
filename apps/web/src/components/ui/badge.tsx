@@ -10,7 +10,8 @@ export const badgeVariants = cva("inline-flex items-center gap-1.5 whitespace-no
       success: "bg-success-soft text-success",
       warning: "bg-warning-soft text-warning",
       danger: "bg-danger-soft text-danger",
-      info: "bg-info-soft text-info"
+      info: "bg-info-soft text-info",
+      parked: "bg-[#f1eafe] text-[#7c3aed]"
     }
   },
   defaultVariants: { tone: "neutral" }

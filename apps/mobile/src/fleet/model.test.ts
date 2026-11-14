@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compassPoint, countByFilter, displayName, fleetState, selectDevices, statusLine, timeAgo, type FleetDevice } from "./model";
+import { compassPoint, coordsText, countByFilter, displayName, fleetState, freshnessLine, selectDevices, statusLine, timeAgo, vehicleFacts, type FleetDevice } from "./model";
 
 const NOW = Date.parse("2026-10-09T12:00:00Z");
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString();
@@ -97,5 +97,29 @@ describe("wording", () => {
     expect(statusLine(device({ speed: 0, ignition: false }), fmt, NOW)).toBe("Parked · just now");
     expect(statusLine(device({ connectivity: "offline", lastSeenAt: ago(7200) }), fmt, NOW)).toBe("Last seen 2 h ago");
     expect(statusLine(device({ connectivity: "never_seen", location: null, lastSeenAt: null }), fmt, NOW)).toBe("Waiting for the first report");
+  });
+});
+
+describe("vehicle card facts", () => {
+  const base = { deviceId: "d1", model: "FMC920", name: null, deviceStatus: "active", connectivity: "online" as const, lastSeenAt: "2026-11-14T10:00:00Z" };
+  const loc = (o: Partial<NonNullable<FleetDevice["location"]>>) => ({ latitude: 43.51321, longitude: -79.88214, speedKph: 0, headingDeg: null, altitudeM: null, ignition: null, motion: null, recordedAt: "2026-11-14T10:00:00Z", receivedAt: "2026-11-14T10:00:00Z", ...o });
+
+  it("shows only what the tracker sent", () => {
+    const d: FleetDevice = { ...base, vehicle: { id: "v", name: "Truck 101", licensePlate: "ABC 123", type: "truck" }, location: loc({ speedKph: 72, headingDeg: 62, ignition: true }) };
+    expect(vehicleFacts(d).map((f) => f.label)).toEqual(["Ignition on", "NE 62°", "ABC 123"]);
+    const silent: FleetDevice = { ...base, vehicle: { id: "v", name: "Truck 9", licensePlate: null, type: "truck" }, location: loc({}) };
+    expect(vehicleFacts(silent)).toEqual([]);
+  });
+
+  it("labels trailers and never shows a heading when standing", () => {
+    const t: FleetDevice = { ...base, vehicle: { id: "t", name: "Trailer 201", licensePlate: null, type: "trailer" }, location: loc({ speedKph: 0, headingDeg: 90, ignition: true }) };
+    expect(vehicleFacts(t).map((f) => f.key)).toEqual(["trailer"]);
+  });
+
+  it("writes coordinates and freshness", () => {
+    const d: FleetDevice = { ...base, vehicle: null, location: loc({}) };
+    expect(coordsText(d)).toBe("43.5132, -79.8821");
+    expect(freshnessLine(d, Date.parse("2026-11-14T10:05:00Z"))).toBe("Updated 5 min ago");
+    expect(freshnessLine({ ...d, connectivity: "offline", lastSeenAt: "2026-11-14T04:00:00Z" }, Date.parse("2026-11-14T10:00:00Z"))).toBe("Last seen 6 h ago");
   });
 });

@@ -50,7 +50,7 @@ export function Hero({ greeting, orgName, dateLabel, summary, action }: { greeti
 export const TILE_LOOK = {
   moving: "bg-[linear-gradient(135deg,#15803d,#166534)]",
   idle: "bg-[linear-gradient(135deg,#b45309,#92400e)]",
-  stopped: "bg-[linear-gradient(135deg,#0369a1,#075985)]",
+  stopped: "bg-[linear-gradient(135deg,#c62828,#991b1b)]",
   offline: "bg-[linear-gradient(135deg,#526079,#3b4558)]",
   alert: "bg-[linear-gradient(135deg,#c81e2b,#991b1b)]",
   calm: "bg-[linear-gradient(135deg,#0a2463,#12357f)]",

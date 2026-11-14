@@ -28,11 +28,11 @@ export function fleetState(d: {
   return d.location.ignition === true ? "idle" : "stopped";
 }
 
-export const FLEET_STATE_META: Record<FleetState, { label: string; tone: "success" | "warning" | "info" | "neutral"; color: string }> = {
+export const FLEET_STATE_META: Record<FleetState, { label: string; tone: "success" | "warning" | "danger" | "info" | "neutral" | "parked"; color: string }> = {
   moving: { label: "Moving", tone: "success", color: "#15803d" },
-  idle: { label: "Idling", tone: "warning", color: "#d97706" },
-  stopped: { label: "Stopped", tone: "info", color: "#0369a1" },
-  parked: { label: "Parked (unhooked)", tone: "info", color: "#0369a1" },
+  idle: { label: "Idling", tone: "warning", color: "#c2570c" },
+  stopped: { label: "Stopped", tone: "danger", color: "#c62828" },
+  parked: { label: "Parked (unhooked)", tone: "parked", color: "#7c3aed" },
   offline: { label: "Offline", tone: "neutral", color: "#6b7280" },
   never_seen: { label: "No data yet", tone: "neutral", color: "#9ca3af" }
 };

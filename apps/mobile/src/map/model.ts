@@ -16,7 +16,7 @@ export const styleUrl = (id: MapStyleId): string => MAP_STYLES.find((m) => m.id 
 export const MAP_STYLE_URL = styleUrl("streets");
 
 /** From this zoom vehicles are drawn as pictures with a name; below it as status dots (as on the website). */
-export const DETAIL_ZOOM = 11;
+export const DETAIL_ZOOM = 8;
 
 /** Top-down picture per kind of vehicle. Matches the website's SHAPE_OF. */
 export type VehicleShape = "car" | "van" | "truck" | "trailer";
@@ -27,6 +27,19 @@ export const shapeOf = (type: string | null | undefined): VehicleShape => SHAPES
 const spriteState = (s: FleetState): "moving" | "idle" | "stopped" | "offline" => (s === "parked" ? "stopped" : s === "never_seen" ? "offline" : s);
 /** Name of the map image for a vehicle, e.g. "veh-truck-moving". The files are in assets/map. */
 export const spriteName = (type: string | null | undefined, state: FleetState): string => `veh-${shapeOf(type)}-${spriteState(state)}`;
+/**
+ * Name of the 3D map pin for a vehicle, e.g. "pin-truck-idle" or "pin-truck-moving-2".
+ * Trailers get a trailer pin, every other kind a truck pin. A moving pin carries its heading
+ * as one of eight arrows (0 = north, 2 = east …), so no picture ever turns on the map.
+ */
+export function pinName(type: string | null | undefined, state: FleetState, headingDeg: number | null): string {
+  const kind = shapeOf(type) === "trailer" ? "trailer" : "truck";
+  if (state === "parked") return `pin-${kind}-parked`;
+  const s = spriteState(state);
+  if (s !== "moving") return `pin-${kind}-${s}`;
+  const h = headingDeg !== null && Number.isFinite(headingDeg) ? (((headingDeg % 360) + 360) % 360) : 0;
+  return `pin-${kind}-moving-${Math.round(h / 45) % 8}`;
+}
 /** Southern Ontario, shown until the first positions arrive. */
 export const DEFAULT_CENTER: [number, number] = [-79.64, 43.59];
 export const DEFAULT_ZOOM = 8;
@@ -39,6 +52,8 @@ export interface VehicleProps {
   heading: number;
   /** Map image to draw at close zoom. */
   icon: string;
+  /** The 3D pin drawn for the vehicle (see pinName). */
+  pin: string;
   /** Second line under the name: "62 mph", "Idling", "Parked" … */
   sub: string;
 }
@@ -75,6 +90,7 @@ export function toFeatures(
           color: STATE_META[state].color,
           heading: d.location.headingDeg ?? headings?.get(d.deviceId) ?? 0,
           icon: spriteName(d.vehicle?.type, state),
+          pin: pinName(d.vehicle?.type, state, d.location.headingDeg ?? headings?.get(d.deviceId) ?? null),
           sub: state === "moving" && fmtSpeed ? fmtSpeed(d.location.speedKph) : SUB[state]
         }
       };

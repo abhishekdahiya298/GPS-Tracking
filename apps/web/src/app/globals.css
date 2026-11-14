@@ -18,12 +18,12 @@
 
   /* Neutral surfaces */
   --color-background: #ffffff;
-  --color-canvas: #f6f7f9;
-  --color-foreground: #111827;
+  --color-canvas: #eef2f8;
+  --color-foreground: #0f172a;
   --color-muted: #f3f4f6;
-  --color-muted-foreground: #5b6472;
-  --color-border: #e3e6eb;
-  --color-input: #d4d8df;
+  --color-muted-foreground: #475569;
+  --color-border: #d8e0ea;
+  --color-input: #c5cfdd;
   --color-ring: #1d4fb8;
 
   /* Brand + semantic (contrast-checked against white for text use) */
@@ -48,7 +48,7 @@
   --radius-lg: 10px;
   --radius-xl: 12px;
 
-  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.05);
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.06), 0 2px 8px rgb(16 24 40 / 0.05);
   --shadow-pop: 0 8px 24px rgb(16 24 40 / 0.12), 0 2px 6px rgb(16 24 40 / 0.06);
 
   --animate-in: rio-in 140ms ease-out;

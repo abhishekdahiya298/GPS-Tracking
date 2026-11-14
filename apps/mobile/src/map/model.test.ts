@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FleetDevice } from "../fleet/model";
-import { FOCUS_ZOOM, MAP_STYLES, focusZoom, TRAIL_POINTS, bearing, boundsOf, distanceKm, isMapStyleId, lerpLngLat, nextTrails, positionOf, readTap, shapeOf, shouldAnimate, spriteName, styleUrl, toFeatures, trailFeatures, zoneFeatures, type Zone } from "./model";
+import { FOCUS_ZOOM, MAP_STYLES, focusZoom, TRAIL_POINTS, bearing, boundsOf, distanceKm, isMapStyleId, lerpLngLat, nextTrails, pinName, positionOf, readTap, shapeOf, shouldAnimate, spriteName, styleUrl, toFeatures, trailFeatures, zoneFeatures, type Zone } from "./model";
 
 const dev = (id: string, lat: number | null, lng: number | null, over: Partial<FleetDevice> = {}): FleetDevice => ({
   deviceId: id, model: "FTM880", name: null, deviceStatus: "active", vehicle: { id, name: `Truck ${id}`, licensePlate: null, type: "truck" }, connectivity: "online", lastSeenAt: "2026-10-09T12:00:00Z",
@@ -57,6 +57,17 @@ describe("vehicle pictures and labels", () => {
     expect(shapeOf(undefined)).toBe("car");
     expect(spriteName("trailer", "parked")).toBe("veh-trailer-stopped");
     expect(spriteName("van", "never_seen")).toBe("veh-van-offline");
+  });
+
+  it("picks a 3D pin by kind, state and heading", () => {
+    expect(pinName("trailer", "parked", null)).toBe("pin-trailer-parked");
+    expect(pinName("van", "never_seen", null)).toBe("pin-truck-offline");
+    expect(pinName("truck", "idle", 90)).toBe("pin-truck-idle");
+    expect(pinName("truck", "moving", 0)).toBe("pin-truck-moving-0");
+    expect(pinName("truck", "moving", 92)).toBe("pin-truck-moving-2");
+    expect(pinName("truck", "moving", 350)).toBe("pin-truck-moving-0");
+    expect(pinName("truck", "moving", -90)).toBe("pin-truck-moving-6");
+    expect(pinName("trailer", "moving", null)).toBe("pin-trailer-moving-0");
     const f = toFeatures([dev("1", 43.5, -79.6)], (k) => `${Math.round(k ?? 0)} km/h`).features[0]!;
     expect(f.properties.icon).toBe("veh-truck-moving");
     expect(f.properties.sub).toBe("60 km/h");

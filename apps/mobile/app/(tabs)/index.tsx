@@ -121,7 +121,7 @@ export default function HomeScreen() {
 
         <FadeInUp index={3}>
           <SectionHead title="On the move" action={moving.length > 0 ? "See all" : undefined} onAction={() => router.navigate({ pathname: "/(tabs)/vehicles", params: { filter: "moving" } })} />
-          <Card style={styles.listCard}>
+          <View style={styles.cardList}>
             {loading ? (
               [0, 1].map((i) => (
                 <View key={i} style={styles.skeletonRow}>
@@ -135,14 +135,11 @@ export default function HomeScreen() {
             ) : moving.length === 0 ? (
               <Text style={styles.quiet}>No vehicle is moving right now.</Text>
             ) : (
-              moving.map((d, i) => (
-                <View key={d.deviceId}>
-                  {i > 0 ? <View style={styles.line} /> : null}
-                  <VehicleRow device={d} fmtSpeed={units.fmtSpeed} now={now} onPress={openVehicle} />
-                </View>
+              moving.map((d) => (
+                <VehicleRow key={d.deviceId} device={d} fmtSpeed={units.fmtSpeed} now={now} onPress={openVehicle} />
               ))
             )}
-          </Card>
+          </View>
         </FadeInUp>
 
         <FadeInUp index={4}>
@@ -190,6 +187,8 @@ function SectionHead({ title, action, onAction }: { title: string; action?: stri
 }
 
 const styles = StyleSheet.create({
+  // Vehicle cards bring their own side margins, so this list runs edge to edge.
+  cardList: { marginHorizontal: -space.lg },
   wrap: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1, minWidth: 0 },
   header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space.lg, paddingBottom: space.sm },

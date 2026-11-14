@@ -14,7 +14,10 @@ import { haptic } from "@/haptics";
 import { colors, elevation, font, isDark, radius, size, space, type } from "@/theme";
 import { FleetSheet } from "./FleetSheet";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, DETAIL_ZOOM, FOCUS_ZOOM, MAP_STYLES, focusZoom, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
-import { VEHICLE_IMAGES } from "./sprites";
+import { PIN_IMAGES } from "./sprites";
+
+/** Movement trails only once the map is close enough for them to read as roads. */
+const TRAIL_ZOOM = 11;
 import { useGlide } from "./useGlide";
 
 const FIT_PADDING = { top: 190, right: 50, bottom: 240, left: 50 };
@@ -205,7 +208,7 @@ export default function LiveMap() {
         }}
       >
         <Camera ref={camera} initialViewState={{ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }} maxZoom={18} />
-        <Images images={VEHICLE_IMAGES} />
+        <Images images={PIN_IMAGES} />
 
         <GeoJSONSource id="zones" data={zoneData}>
           <Layer id="zone-fill" type="fill" paint={{ "fill-color": ["get", "color"], "fill-opacity": 0.12 }} />
@@ -220,7 +223,7 @@ export default function LiveMap() {
         </GeoJSONSource>
 
         <GeoJSONSource id="trails" data={trails}>
-          <Layer id="trail-lines" type="line" minzoom={DETAIL_ZOOM} layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": STATE_META.moving.color, "line-width": 3, "line-opacity": 0.35 }} />
+          <Layer id="trail-lines" type="line" minzoom={TRAIL_ZOOM} layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": STATE_META.moving.color, "line-width": 3, "line-opacity": 0.35 }} />
         </GeoJSONSource>
 
         <GeoJSONSource id="vehicles" ref={source} data={vehicles} cluster clusterRadius={42} clusterMaxZoom={9} onPress={onVehiclesPress} hitbox={{ top: 22, right: 22, bottom: 22, left: 22 }}>
@@ -236,7 +239,8 @@ export default function LiveMap() {
             id="vehicle-selected"
             type="circle"
             filter={["all", NOT_CLUSTER, ["==", ["get", "deviceId"], selectedId ?? ""]]}
-            paint={{ "circle-radius": 15, "circle-color": colors.primary, "circle-opacity": 0.16, "circle-stroke-color": colors.primary, "circle-stroke-width": 2 }}
+            // A soft blue glow behind the pin's head (the pin stands on the point, so its head is ~28 px up).
+            paint={{ "circle-radius": 28, "circle-color": colors.primary, "circle-opacity": 0.2, "circle-blur": 0.4, "circle-translate": [0, -28] }}
           />
           {/* Zoomed out: a small status dot each, so a large fleet stays readable. */}
           <Layer
@@ -246,17 +250,16 @@ export default function LiveMap() {
             filter={NOT_CLUSTER}
             paint={{ "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 4, 10, 6.5], "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 }}
           />
-          {/* Zoomed in: a top-down vehicle that turns with the road. Kept small on purpose. */}
+          {/* Zoomed in: a 3D pin in the status colour; a moving pin's badge points the way it drives. */}
           <Layer
             id="vehicle-pictures"
             type="symbol"
             minzoom={DETAIL_ZOOM}
             filter={NOT_CLUSTER}
             layout={{
-              "icon-image": ["get", "icon"],
-              "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.5, 14, 0.62, 18, 0.8],
-              "icon-rotate": ["get", "heading"],
-              "icon-rotation-alignment": "map",
+              "icon-image": ["get", "pin"],
+              "icon-size": ["interpolate", ["linear"], ["zoom"], 8, 0.27, 12, 0.33, 16, 0.38],
+              "icon-anchor": "bottom",
               "icon-allow-overlap": true,
               "icon-ignore-placement": true
             }}
@@ -271,7 +274,7 @@ export default function LiveMap() {
               "text-font": ["Noto Sans Regular"],
               "text-size": 11,
               "text-line-height": 1.2,
-              "text-offset": [0, 1.9],
+              "text-offset": [0, 0.6],
               "text-anchor": "top",
               "text-optional": true
             }}
@@ -292,7 +295,7 @@ export default function LiveMap() {
         </PressableScale>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {FILTERS.map((f) => (
-            <Chip key={f.key} label={f.label} count={counts[f.key]} selected={f.key === filter} dot={f.key === "all" ? undefined : STATE_META[f.key].color} onPress={() => setFilter(f.key)} />
+            <Chip key={f.key} label={f.label} count={counts[f.key]} selected={f.key === filter} dot={f.key === "all" ? undefined : STATE_META[f.key].color} glyph={f.key} onPress={() => setFilter(f.key)} />
           ))}
         </ScrollView>
       </View>

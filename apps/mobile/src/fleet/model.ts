@@ -47,11 +47,11 @@ export function fleetState(d: Pick<FleetDevice, "connectivity" | "location"> & {
 
 export const STATE_META: Record<FleetState, { label: string; color: string; soft: string }> = {
   moving: { label: "Moving", color: "#15803d", soft: "#e9f7ee" },
-  idle: { label: "Idling", color: "#b45309", soft: "#fff5e1" },
-  stopped: { label: "Stopped", color: "#0369a1", soft: "#e8f4fb" },
-  parked: { label: "Parked (unhooked)", color: "#0369a1", soft: "#e8f4fb" },
-  offline: { label: "Offline", color: "#6b7280", soft: "#f3f4f6" },
-  never_seen: { label: "No data yet", color: "#6b7280", soft: "#f3f4f6" }
+  idle: { label: "Idling", color: "#c2570c", soft: "#fff1e0" },
+  stopped: { label: "Stopped", color: "#c62828", soft: "#fdecec" },
+  parked: { label: "Parked (unhooked)", color: "#7c3aed", soft: "#f1eafe" },
+  offline: { label: "Offline", color: "#6b7280", soft: "#eef0f3" },
+  never_seen: { label: "No data yet", color: "#6b7280", soft: "#eef0f3" }
 };
 
 /** The four filters on the list. Trackers that never reported are counted with Offline; parked trailers with Stopped. */
@@ -119,4 +119,36 @@ export function statusLine(d: FleetDevice, fmtSpeed: (kph: number | null) => str
     return `${fmtSpeed(d.location?.speedKph ?? null)}${point ? ` ${point}` : ""} · ${fresh}`;
   }
   return `${state === "idle" ? "Engine on" : "Parked"} · ${fresh}`;
+}
+
+/** "43.5132, -79.8821": where a vehicle is when no street address is known. Never a guessed address. */
+export function coordsText(d: FleetDevice): string | null {
+  const l = d.location;
+  if (!l || !Number.isFinite(l.latitude) || !Number.isFinite(l.longitude)) return null;
+  return `${l.latitude.toFixed(4)}, ${l.longitude.toFixed(4)}`;
+}
+
+/** How long the vehicle has been in its state, or how fresh the last report is: "Updated 30 sec ago", "Last seen 6 h ago". */
+export function freshnessLine(d: FleetDevice, now: number = Date.now()): string {
+  const state = fleetState(d);
+  if (state === "never_seen") return "Waiting for the first report";
+  if (state === "offline" || state === "parked") return `Last seen ${timeAgo(d.lastSeenAt, now)}`;
+  return `Updated ${timeAgo(d.location?.recordedAt ?? d.lastSeenAt, now)}`;
+}
+
+/**
+ * The small facts under a vehicle card, only from data the tracker really sent:
+ * ignition on/off, the way it is heading while moving, and Trailer for trailers.
+ * Battery voltage and GPS signal appear here once the server stores them.
+ */
+export type VehicleFact = { key: "ignition" | "heading" | "trailer" | "plate"; label: string; tone: "good" | "bad" | "neutral"; headingDeg?: number };
+export function vehicleFacts(d: FleetDevice): VehicleFact[] {
+  const out: VehicleFact[] = [];
+  const state = fleetState(d);
+  if (d.vehicle?.type === "trailer") out.push({ key: "trailer", label: "Trailer", tone: "neutral" });
+  else if (d.location?.ignition === true || d.location?.ignition === false) out.push({ key: "ignition", label: d.location.ignition ? "Ignition on" : "Ignition off", tone: d.location.ignition ? "good" : "bad" });
+  const point = compassPoint(d.location?.headingDeg ?? null);
+  if (state === "moving" && point && d.location?.headingDeg !== null && d.location?.headingDeg !== undefined) out.push({ key: "heading", label: `${point} ${Math.round(((d.location.headingDeg % 360) + 360) % 360)}°`, tone: "neutral", headingDeg: d.location.headingDeg });
+  if (d.vehicle?.licensePlate) out.push({ key: "plate", label: d.vehicle.licensePlate, tone: "neutral" });
+  return out;
 }

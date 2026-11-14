@@ -7,7 +7,7 @@ const LOOKS: { match: RegExp; icon: LucideIcon; tint: string }[] = [
   { match: /distance|mileage/i, icon: Route, tint: "bg-[#e9eefb] text-[#133a8f]" },
   { match: /speed/i, icon: Gauge, tint: "bg-[#fdecec] text-[#c42b2b]" },
   { match: /idling/i, icon: Activity, tint: "bg-[#fff5e1] text-[#b45309]" },
-  { match: /stop|parked/i, icon: CircleParking, tint: "bg-[#e8f4fb] text-[#0369a1]" },
+  { match: /stop|parked/i, icon: CircleParking, tint: "bg-[#fdecec] text-[#c62828]" },
   { match: /longest|over limit/i, icon: Timer, tint: "bg-[#f1edff] text-[#5b3fd6]" },
   { match: /time/i, icon: Clock, tint: "bg-[#e9f7ee] text-[#15803d]" },
   { match: /vehicle/i, icon: Truck, tint: "bg-[#e8f8f5] text-[#0f766e]" },

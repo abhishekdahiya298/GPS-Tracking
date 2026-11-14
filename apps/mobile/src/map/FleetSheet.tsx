@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Chip, EmptyState, SearchBox } from "@/components/kit";
 import { Button } from "@/components/ui";
 import { FILTERS, STATE_META, countByFilter, selectDevices, type FleetDevice, type FleetFilter } from "@/fleet/model";
-import { ROW_HEIGHT, ROW_INSET, VehicleRow } from "@/fleet/VehicleRow";
+import { ROW_HEIGHT, VehicleRow } from "@/fleet/VehicleRow";
 import { colors, space, type } from "@/theme";
 
 /**
@@ -52,7 +52,7 @@ export function FleetSheet({
         <View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
             {FILTERS.map((f) => (
-              <Chip key={f.key} label={f.label} count={counts[f.key]} selected={f.key === filter} dot={f.key === "all" ? undefined : STATE_META[f.key].color} onPress={() => onFilter(f.key)} />
+              <Chip key={f.key} label={f.label} count={counts[f.key]} selected={f.key === filter} dot={f.key === "all" ? undefined : STATE_META[f.key].color} glyph={f.key} onPress={() => onFilter(f.key)} />
             ))}
           </ScrollView>
         </View>
@@ -70,10 +70,9 @@ export function FleetSheet({
               }}
             />
           )}
-          ItemSeparatorComponent={() => <View style={styles.line} />}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          getItemLayout={(_, index) => ({ length: ROW_HEIGHT + StyleSheet.hairlineWidth, offset: (ROW_HEIGHT + StyleSheet.hairlineWidth) * index, index })}
+          getItemLayout={(_, index) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index })}
           initialNumToRender={12}
           windowSize={9}
           contentContainerStyle={rows.length === 0 ? styles.emptyList : undefined}
@@ -85,11 +84,10 @@ export function FleetSheet({
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: colors.background },
+  wrap: { flex: 1, backgroundColor: colors.canvas },
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingLeft: space.lg, paddingRight: space.sm, paddingTop: space.md },
   title: { ...type.title },
   search: { paddingHorizontal: space.lg, paddingTop: space.sm },
   chips: { paddingHorizontal: space.lg, paddingVertical: space.md, gap: 6 },
   emptyList: { flexGrow: 1 },
-  line: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: ROW_INSET }
 });
