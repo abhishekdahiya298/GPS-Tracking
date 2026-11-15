@@ -2,11 +2,11 @@ import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
 import Constants from "expo-constants";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { AppState, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AppState, Image, Linking, Modal, Platform, ScrollView, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { API_BASE_URL } from "../config";
 import { Button } from "../components/ui";
-import { colors, font, radius, space } from "../theme";
+import { colors, font, radius, space, themed } from "../theme";
 import { APP_PLATFORM, APP_VERSION, onUpdateRequired } from "./events";
 import { fetchUpdatePolicy, isSnoozed, type UpdateCheck } from "./policy";
 
@@ -153,7 +153,7 @@ function UpdateRequired({ check, onRetry }: { check: UpdateCheck | null; onRetry
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   full: { flex: 1, backgroundColor: colors.primaryDark },
   fullInner: { flexGrow: 1, justifyContent: "center", padding: space.xl, gap: space.lg },
   logoPlate: { alignSelf: "center", backgroundColor: colors.background, borderRadius: 24, padding: space.md },
@@ -173,4 +173,4 @@ const styles = StyleSheet.create({
   body: { fontSize: font.body, color: colors.foreground, lineHeight: 22 },
   notes: { fontSize: font.small, color: colors.mutedForeground, lineHeight: 19 },
   actions: { gap: space.sm }
-});
+}));

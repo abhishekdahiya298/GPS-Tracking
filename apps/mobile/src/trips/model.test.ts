@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advance, buildTrack, dayLabel, dayRange, durationText, stillSince, trackSummary, positionAt, progressOf, shiftDay, timeAtProgress, todayKey, trackBounds, type HistoryPoint } from "./model";
+import { advance, buildTrack, dayLabel, dayRange, durationText, stillSince, trackSummary, positionAt, progressOf, shiftDay, timeAtProgress, todayKey, trackBounds, trackStops, type HistoryPoint } from "./model";
 
 const TZ = "America/Toronto";
 const pt = (iso: string, lat: number, lng: number, speedKph: number | null = 50): HistoryPoint => ({ recordedAt: iso, latitude: lat, longitude: lng, speedKph, headingDeg: null });
@@ -93,5 +93,24 @@ describe("stillSince", () => {
     expect(stillSince([pt("2026-11-15T08:00:00Z", 0), pt("2026-11-15T08:10:00Z", 40)])).toBeNull();
     expect(stillSince([])).toBeNull();
     expect(stillSince([pt("2026-11-15T08:00:00Z", 0), pt("2026-11-15T09:00:00Z", null)])).toEqual({ since: Date.parse("2026-11-15T08:00:00Z"), whole: true });
+  });
+});
+
+describe("trackStops", () => {
+  const m = 60_000;
+  const track = (pts: [number, number, number][]) => ({ t: pts.map((p) => p[0]), at: pts.map((p) => [p[1], p[2]] as [number, number]), speedKph: pts.map(() => null), startT: pts[0]![0], endT: pts[pts.length - 1]![0] });
+  it("finds a long stop in the middle and ignores the ends and short pauses", () => {
+    const tr = track([
+      [0, -79.0, 43.0],
+      [1 * m, -79.01, 43.0],
+      [2 * m, -79.02, 43.0],
+      [9 * m, -79.0201, 43.0001],
+      [10 * m, -79.03, 43.0],
+      [11 * m, -79.0301, 43.0],
+      [12 * m, -79.04, 43.0]
+    ]);
+    const stops = trackStops(tr);
+    expect(stops).toHaveLength(1);
+    expect(stops[0]!.to - stops[0]!.from).toBe(7 * m);
   });
 });

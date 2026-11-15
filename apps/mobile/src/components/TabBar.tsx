@@ -5,10 +5,10 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import type { Tabs } from "expo-router";
 import { useEffect, useRef, type ComponentProps } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { haptic } from "../haptics";
-import { colors, size } from "../theme";
+import { colors, size, themed } from "../theme";
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -83,11 +83,11 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   bar: { flexDirection: "row", backgroundColor: colors.background, paddingTop: 6, paddingHorizontal: 8, borderTopWidth: 1, borderTopColor: colors.border },
   tab: { flex: 1, alignItems: "center", justifyContent: "center", gap: 3, minHeight: 48 },
   label: { fontSize: 11, lineHeight: 14, fontWeight: "500", color: colors.mutedForeground },
   labelOn: { color: colors.primary, fontWeight: "600" },
   badge: { position: "absolute", top: -4, right: -10, minWidth: 16, height: 16, paddingHorizontal: 4, borderRadius: 8, backgroundColor: colors.danger, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: colors.background },
   badgeText: { color: "#ffffff", fontSize: 10, lineHeight: 12, fontWeight: "700" }
-});
+}));

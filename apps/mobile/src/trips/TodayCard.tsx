@@ -8,7 +8,7 @@ import { Card } from "@/components/kit";
 import { PressableScale } from "@/components/motion";
 import { useFleet } from "@/fleet/FleetProvider";
 import { STATE_META } from "@/fleet/model";
-import { colors, space, type } from "@/theme";
+import { colors, space, themed, type } from "@/theme";
 import { dayRange, durationText, todayKey, type TripReport } from "./model";
 
 /**
@@ -75,7 +75,7 @@ export function TodayCard({ deviceId, name }: { deviceId: string; name: string }
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   card: { gap: 2 },
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space.sm },
   total: { ...type.small, fontVariant: ["tabular-nums"] },
@@ -90,4 +90,4 @@ const styles = StyleSheet.create({
   title: { fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground },
   more: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 40, marginTop: space.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   moreText: { fontSize: 14, fontWeight: "700", color: colors.primary }
-});
+}));

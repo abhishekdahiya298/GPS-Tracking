@@ -2,7 +2,8 @@
 import { SegmentedFilter } from "@/components/app/filter-bar";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { iconName, type IconStyle } from "@/app/(app)/map/fleet-model";
-import { saveMapIcons, useMapIcons } from "@/lib/map-icons";
+import { useEffect, useState } from "react";
+import { hasOwnMapIcons, resetMapIcons, saveMapIcons, useMapIcons } from "@/lib/map-icons";
 
 const STYLES: ReadonlyArray<{ value: IconStyle; label: string }> = [
   { value: "pin", label: "3D pin" },
@@ -14,6 +15,8 @@ const STYLES: ReadonlyArray<{ value: IconStyle; label: string }> = [
 /** How vehicles look on the maps: the same icon library as the phone app. Saved in this browser. */
 export function MapIconsCard() {
   const prefs = useMapIcons();
+  const [own, setOwn] = useState(false);
+  useEffect(() => setOwn(hasOwnMapIcons()), [prefs]);
   return (
     <Card>
       <CardHeader>
@@ -50,7 +53,18 @@ export function MapIconsCard() {
             ]}
           />
         ) : null}
-        <p className="text-sm text-muted-foreground">Zoomed out, vehicles show as status dots. The small badge always shows the status. The phone app has its own setting.</p>
+        <p className="text-sm text-muted-foreground">
+          {own ? "Your own choice in this browser. " : "Using the default set by RIO GPS. "}
+          Zoomed out, vehicles show as status dots. The phone app has its own setting.
+          {own && (
+            <>
+              {" "}
+              <button type="button" className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-primary underline-offset-2 hover:underline" onClick={() => resetMapIcons()}>
+                Use the default
+              </button>
+            </>
+          )}
+        </p>
       </div>
     </Card>
   );

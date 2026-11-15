@@ -25,7 +25,7 @@ import { cn } from "@/lib/cn";
 import { MAP_STYLES, type MapStyleId, saveStyle, savedStyle, setBuildings3d, styleUrl } from "@/lib/map-style";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { FleetLayer, STATE_COLORS, type FleetPoint } from "./fleet-layer";
-import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, mapState, MAP_STATES, STATE_ORDER, stateBucket, type MapState } from "./fleet-model";
+import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, iconName, mapState, MAP_STATES, STATE_ORDER, stateBucket, type MapState } from "./fleet-model";
 import { useFleetStream } from "./use-fleet-stream";
 
 // Loaded on first use: most sessions never open history.
@@ -738,25 +738,71 @@ export function LiveMap({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selected]);
-  const edgeChip = (r: (typeof rows)[number] | undefined, side: "left" | "right") =>
-    r && (
+  // Redraw the edge hints while the map moves (one update per frame at most).
+  const [, setViewTick] = useState(0);
+  useEffect(() => {
+    const m = mapRef.current;
+    if (!m || !selected) return;
+    let raf = 0;
+    const onMove = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        setViewTick((t) => t + 1);
+      });
+    };
+    m.on("move", onMove);
+    return () => {
+      m.off("move", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [selected]);
+  /**
+   * Life360-style hint for the previous / next vehicle when it is off screen: a small round icon on
+   * the left edge (previous) or right edge (next), with an arrow pointing to where it really is. A vehicle
+   * already on screen needs no hint: its own icon is there to click.
+   */
+  const edgeChip = (r: (typeof rows)[number] | undefined, by: -1 | 1) => {
+    const m = mapRef.current;
+    const loc = r?.d.location;
+    if (!r || !m || !loc) return null;
+    const box = m.getContainer();
+    const w = box.clientWidth;
+    const h = box.clientHeight;
+    const p = m.project([loc.longitude, loc.latitude]);
+    const card = w >= 768 ? { right: 416, top: h - 470 } : null;
+    const pad = { left: 30, right: 96, top: 92, bottom: 40 };
+    const inside = p.x > pad.left && p.x < w - pad.right && p.y > pad.top && p.y < h - pad.bottom && !(card && p.x < card.right && p.y > card.top);
+    if (inside) return null;
+    // Previous on the left edge, next on the right; up or down that edge by where it really is.
+    const cx = w / 2;
+    const cy = h / 2;
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    const reach = Math.max(Math.abs(dx), Math.abs(dy)) || 1;
+    const x = by === -1 ? (card && cy + (dy / reach) * (h / 2 - 60) > card.top ? card.right + 30 : pad.left + 6) : w - pad.right + 18;
+    let y = Math.min(Math.max(cy + (dy / reach) * (h / 2 - 60), pad.top + 10), h - pad.bottom - 24);
+    if (card && x < card.right && y > card.top) y = card.top - 30;
+    const deg = (Math.atan2(dx, -dy) * 180) / Math.PI;
+    return (
       <button
-        key={`${side}-${r.d.deviceId}`}
+        key={`${by}-${r.d.deviceId}`}
         type="button"
         onClick={() => focus(r.d.deviceId)}
-        aria-label={`${side === "left" ? "Previous" : "Next"} vehicle: ${r.name}`}
-        className={cn(
-          "absolute top-[26%] z-[1] flex h-10 max-w-[200px] cursor-pointer items-center gap-1.5 border-0 bg-background px-2 text-xs font-bold text-foreground shadow-pop hover:bg-muted",
-          side === "left" ? "left-0 animate-slide-in-left rounded-r-full pl-1" : "right-0 animate-in rounded-l-full pr-1",
-          sel && !historyFor && side === "left" && "md:left-[416px]"
-        )}
+        title={`${by === -1 ? "Previous" : "Next"} vehicle: ${r.name} (${by === -1 ? "←" : "→"})`}
+        aria-label={`${by === -1 ? "Previous" : "Next"} vehicle: ${r.name}`}
+        className="group absolute z-[1] grid size-9 -translate-x-1/2 -translate-y-1/2 animate-in cursor-pointer place-items-center rounded-full border-0 bg-transparent p-0"
+        style={{ left: x, top: y }}
       >
-        {side === "left" && <ChevronLeft className="size-4 shrink-0 text-primary" aria-hidden="true" />}
-        <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: STATE_COLORS[r.state] }} />
-        <span className="truncate">{splitName(r.name).main}</span>
-        {side === "right" && <ChevronRight className="size-4 shrink-0 text-primary" aria-hidden="true" />}
+        <span aria-hidden="true" className="absolute inset-[-7px] flex justify-center" style={{ transform: `rotate(${deg}deg)` }}>
+          <span className="h-0 w-0 border-x-[5px] border-b-[7px] border-x-transparent" style={{ borderBottomColor: STATE_COLORS[r.state] }} />
+        </span>
+        {/* eslint-disable-next-line @next/next/no-img-element -- small static icon from /public */}
+        <img src={`/fleet-art/map/icons/${iconName(r.d.vehicle?.type, r.state, { style: "circle", color: icons.color })}.png`} alt="" className="size-9 rounded-full bg-background shadow-pop ring-2 transition-transform group-hover:scale-110" style={{ ["--tw-ring-color" as string]: STATE_COLORS[r.state] }} />
+        <span className="pointer-events-none absolute top-full mt-1 max-w-[110px] truncate rounded bg-background/90 px-1.5 text-[11px] font-bold leading-4 text-foreground shadow-card">{splitName(r.name).main}</span>
       </button>
     );
+  };
 
   const address = useAddress(addresses && sel?.location ? sel.location.latitude : null, addresses && sel?.location ? sel.location.longitude : null, selState === "moving");
 
@@ -841,21 +887,13 @@ export function LiveMap({
             <MapPin className="size-4 shrink-0" style={{ color: ink(PRIMARY) }} aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <span className="sr-only">Last location: </span>
-              {address ? (
-                <>
-                  <p className="m-0 truncate text-sm font-semibold" title={address.label}>{address.line1}</p>
-                  <p className="m-0 truncate text-xs text-muted-foreground">
-                    {address.line2 ? `${address.line2} · ` : ""}
-                    <span className="tabular-nums">{sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)}</span>
-                  </p>
-                </>
-              ) : (
-                <p className="m-0 truncate text-sm font-semibold tabular-nums">
-                  {sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)}
-                </p>
-              )}
-              <p className="m-0 text-xs text-muted-foreground">
-                Updated <span className="font-medium text-foreground">{ago(sel.location.recordedAt, now)}</span> · {time.dateTimeSec(sel.location.recordedAt)} {time.abbr(sel.location.recordedAt)}
+              <p className="m-0 truncate text-sm font-semibold" title={address?.label}>
+                {address ? address.line1 : `${sel.location.latitude.toFixed(5)}, ${sel.location.longitude.toFixed(5)}`}
+              </p>
+              {address?.line2 && <p className="m-0 truncate text-xs text-foreground/80">{address.line2}</p>}
+              <p className="m-0 truncate text-xs text-muted-foreground" title={`${time.dateTimeSec(sel.location.recordedAt)} ${time.abbr(sel.location.recordedAt)}`}>
+                {address && <span className="tabular-nums">{sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)} · </span>}
+                Updated <span className="font-medium text-foreground">{ago(sel.location.recordedAt, now)}</span>
               </p>
             </div>
             <button
@@ -1051,8 +1089,8 @@ export function LiveMap({
         </div>
 
         {vehicleCard}
-        {sel && !historyFor && edgeChip(prevRow, "left")}
-        {sel && !historyFor && edgeChip(nextRow, "right")}
+        {sel && !historyFor && edgeChip(prevRow, -1)}
+        {sel && !historyFor && edgeChip(nextRow, 1)}
 
         {follow && sel && (
           <div className="pointer-events-none absolute inset-x-0 top-16 z-[1] flex justify-center">

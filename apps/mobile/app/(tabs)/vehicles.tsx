@@ -1,13 +1,13 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Platform, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { FlatList, Platform, RefreshControl, ScrollView, View } from "react-native";
 import { Banner, Chip, EmptyState, ListSkeleton, ScreenHeader, SearchBox, Segmented } from "@/components/kit";
 import { FadeInUp, LoadingBar } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { FILTERS, STATE_META, countByFilter, selectDevices, type FleetDevice, type FleetFilter } from "@/fleet/model";
 import { ROW_HEIGHT, VehicleRow } from "@/fleet/VehicleRow";
-import { colors, space } from "@/theme";
+import { colors, space, themed } from "@/theme";
 
 type Kind = "all" | "truck" | "trailer" | "asset";
 /** Anything with an engine (truck, semi, van, pickup, car, bus) is a vehicle; trailers on their own; equipment and other are assets. */
@@ -139,7 +139,7 @@ export default function VehiclesScreen() {
 
 const keyOf = (d: FleetDevice) => d.deviceId;
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   loading: { paddingTop: space.xs },
@@ -148,4 +148,4 @@ const styles = StyleSheet.create({
   // The chips run to the screen edge, so a chip half in view shows there are more to the side.
   chipScroll: { marginHorizontal: -space.lg },
   chips: { paddingHorizontal: space.lg, gap: 6 }
-});
+}));

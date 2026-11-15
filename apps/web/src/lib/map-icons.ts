@@ -10,18 +10,48 @@ const EVENT = "rio:map-icons";
 
 let cached: IconPrefs | null = null;
 
+/** The platform default (Platform console → Maps & addresses), put on <body data-map-icons="pin-status"> by the server. */
+export function platformDefaultIcons(): IconPrefs {
+  const [style, color] = (typeof document === "undefined" ? "" : (document.body.dataset.mapIcons ?? "")).split("-");
+  return {
+    style: STYLES.includes(style as IconStyle) ? (style as IconStyle) : DEFAULT_ICON_PREFS.style,
+    color: COLORS.includes(color as IconColor) ? (color as IconColor) : DEFAULT_ICON_PREFS.color
+  };
+}
+
+/** Whether this person picked their own icons in this browser (else the platform default applies). */
+export function hasOwnMapIcons(): boolean {
+  try {
+    return window.localStorage.getItem(KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function readMapIcons(): IconPrefs {
   if (cached) return cached;
+  const base = platformDefaultIcons();
   try {
     const v = JSON.parse(window.localStorage.getItem(KEY) ?? "{}") as Partial<IconPrefs>;
     cached = {
-      style: STYLES.includes(v.style as IconStyle) ? (v.style as IconStyle) : DEFAULT_ICON_PREFS.style,
-      color: COLORS.includes(v.color as IconColor) ? (v.color as IconColor) : DEFAULT_ICON_PREFS.color
+      style: STYLES.includes(v.style as IconStyle) ? (v.style as IconStyle) : base.style,
+      color: COLORS.includes(v.color as IconColor) ? (v.color as IconColor) : base.color
     };
   } catch {
-    cached = DEFAULT_ICON_PREFS;
+    cached = base;
   }
   return cached;
+}
+
+/** Back to the platform default. */
+export function resetMapIcons(): void {
+  try {
+    window.localStorage.removeItem(KEY);
+  } catch {
+    // ignore
+  }
+  cached = null;
+  window.dispatchEvent(new Event(EVENT));
 }
 
 export function saveMapIcons(next: Partial<IconPrefs>): void {

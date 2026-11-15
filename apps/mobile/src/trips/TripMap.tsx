@@ -1,10 +1,9 @@
 import { Camera, GeoJSONSource, Images, Layer, Map, type CameraRef } from "@maplibre/maplibre-react-native";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet } from "react-native";
-import { colors, isDark } from "@/theme";
+import { colors, isDark, themed } from "@/theme";
 import { bearing, styleUrl } from "@/map/model";
 import { iconImages } from "@/map/sprites";
-import { trackBounds, type Track } from "./model";
+import { trackBounds, trackStops, type Track } from "./model";
 
 /** Top-down vehicle pictures only: the replay vehicle turns with the road. */
 const TOP_IMAGES = iconImages("top-");
@@ -24,6 +23,7 @@ export default function TripMap({ track, at, index = 0, kind = "truck" }: { trac
     () => ({
       type: "FeatureCollection",
       features: [
+        ...trackStops(track).map((s) => ({ type: "Feature" as const, properties: { color: "#a3470a", label: "P", stop: 1 }, geometry: { type: "Point" as const, coordinates: s.at } })),
         { type: "Feature", properties: { color: "#136c35", label: "A" }, geometry: { type: "Point", coordinates: track.at[0]! } },
         { type: "Feature", properties: { color: "#ad1f1f", label: "B" }, geometry: { type: "Point", coordinates: track.at[track.at.length - 1]! } }
       ]
@@ -61,8 +61,8 @@ export default function TripMap({ track, at, index = 0, kind = "truck" }: { trac
         <Layer id="trip-driven-line" type="line" layout={{ "line-cap": "round", "line-join": "round" }} paint={{ "line-color": colors.primary, "line-width": 5 }} />
       </GeoJSONSource>
       <GeoJSONSource id="trip-ends" data={ends}>
-        <Layer id="trip-ends-dots" type="circle" paint={{ "circle-radius": 12, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 }} />
-        <Layer id="trip-ends-labels" type="symbol" layout={{ "text-field": ["get", "label"], "text-size": 13, "text-allow-overlap": true, "text-ignore-placement": true }} paint={{ "text-color": "#ffffff" }} />
+        <Layer id="trip-ends-dots" type="circle" paint={{ "circle-radius": ["case", ["has", "stop"], 10, 12], "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 }} />
+        <Layer id="trip-ends-labels" type="symbol" layout={{ "text-field": ["get", "label"], "text-size": ["case", ["has", "stop"], 11, 13], "text-font": ["Noto Sans Bold"], "text-allow-overlap": true, "text-ignore-placement": true }} paint={{ "text-color": "#ffffff" }} />
       </GeoJSONSource>
       <GeoJSONSource id="trip-marker" data={marker}>
         <Layer id="trip-marker-halo" type="circle" paint={{ "circle-radius": 22, "circle-color": colors.primary, "circle-opacity": 0.18 }} />
@@ -76,4 +76,4 @@ export default function TripMap({ track, at, index = 0, kind = "truck" }: { trac
   );
 }
 
-const styles = StyleSheet.create({ map: { flex: 1 } });
+const styles = themed(() => ({ map: { flex: 1 } }));

@@ -1,9 +1,9 @@
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, Text, View } from "react-native";
 import { Card, Segmented } from "@/components/kit";
 import { PressableScale } from "@/components/motion";
 import { haptic } from "@/haptics";
-import { colors, radius, space, type } from "@/theme";
-import { setIconPrefs, useIconPrefs } from "./iconPrefs";
+import { colors, radius, space, themed, type } from "@/theme";
+import { hasOwnIconPrefs, resetIconPrefs, setIconPrefs, useIconPrefs } from "./iconPrefs";
 import { iconName, type IconStyle } from "./model";
 import { MAP_ICONS } from "./sprites";
 
@@ -54,12 +54,20 @@ export function MapIconPicker() {
           ]}
         />
       ) : null}
-      <Text style={type.caption}>Zoomed out, vehicles show as status dots. The small badge always shows the status.</Text>
+      <Text style={type.caption}>
+        {hasOwnIconPrefs() ? "Your own choice on this phone. " : "Using the default set by RIO GPS. "}
+        Vehicles show as dots only when the whole continent is in view.
+      </Text>
+      {hasOwnIconPrefs() ? (
+        <PressableScale onPress={() => resetIconPrefs()} style={styles.reset} accessibilityRole="button">
+          <Text style={styles.resetText}>Use the default</Text>
+        </PressableScale>
+      ) : null}
     </Card>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   card: { gap: space.md },
   row: { flexDirection: "row", gap: space.sm },
   slot: { flex: 1 },
@@ -70,5 +78,7 @@ const styles = StyleSheet.create({
   round: { width: 42, height: 46 },
   top: { width: 30, height: 48 },
   label: { fontSize: 12, lineHeight: 16, fontWeight: "600", color: colors.mutedForeground },
-  labelOn: { color: colors.primary, fontWeight: "700" }
-});
+  labelOn: { color: colors.primary, fontWeight: "700" },
+  reset: { alignSelf: "flex-start", minHeight: 32, justifyContent: "center" },
+  resetText: { fontSize: 14, fontWeight: "700", color: colors.primary }
+}));

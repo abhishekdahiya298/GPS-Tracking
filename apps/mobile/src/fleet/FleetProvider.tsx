@@ -1,4 +1,7 @@
 import { units, type Units, type UnitSystem } from "@rio-gps/core/units";
+import { applyPlatformIconDefault } from "@/map/iconPrefs";
+import { applyMapEngine } from "@/map/mapEngine";
+import type { IconPrefs } from "@/map/model";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
 import { ApiError, api, buildUrl, tokenStore } from "../api";
@@ -114,6 +117,14 @@ export function FleetProvider({ children }: { children: ReactNode }) {
         if (org.unitSystem === "metric" || org.unitSystem === "imperial") setSystem(org.unitSystem);
         if (typeof org.timeZone === "string" && org.timeZone) setTimeZone(org.timeZone);
         if (org.timeFormat === "12h" || org.timeFormat === "24h") setTimeFormat(org.timeFormat);
+      })
+      .catch(() => undefined);
+    // Default map icons chosen by the platform admin (an older server without this simply 404s).
+    api
+      .get<{ iconStyle?: string; iconColor?: string; mobileMap?: string }>("maps/config")
+      .then((c) => {
+        applyPlatformIconDefault({ style: c.iconStyle as IconPrefs["style"], color: c.iconColor as IconPrefs["color"] });
+        applyMapEngine(c.mobileMap);
       })
       .catch(() => undefined);
   }, []);

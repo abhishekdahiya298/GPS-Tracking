@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { Animated, Image, PanResponder, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, PanResponder, Text, View } from "react-native";
 import { PressableScale } from "@/components/motion";
 import { displayName, fleetState, STATE_META, type FleetDevice } from "@/fleet/model";
 import { haptic } from "@/haptics";
-import { colors, elevation } from "@/theme";
+import { colors, elevation, themed } from "@/theme";
 import { bearing, iconName, type IconPrefs } from "./model";
 import { MAP_ICONS } from "./sprites";
 
@@ -12,9 +12,8 @@ const SIZE = 40;
 const EDGE = 10;
 
 /**
- * Life360-style hints while a vehicle is open: the previous and next vehicle as small round icons
- * on the edge of the map, placed in the real direction of that vehicle from the open one, with an
- * arrow pointing to it. Tap one to glide there. They fade in again each time the vehicle changes.
+ * Life360-style hints while a vehicle is open: the previous vehicle as a small round icon on the
+ * left edge and the next one on the right, each with an arrow pointing to where it really is. Tap one to glide there. They fade in again each time the vehicle changes.
  */
 export function NeighbourHints({
   from,
@@ -41,24 +40,23 @@ export function NeighbourHints({
   }, [keyId, show]);
   if (!from || area.width <= 0 || area.bottom - area.top < SIZE * 3) return null;
 
-  const place = (d: FleetDevice) => {
+  // Previous on the left edge, next on the right edge; up or down that edge by where the vehicle
+  // really is (north = higher), and the arrow on the ring points straight at it.
+  const place = (d: FleetDevice, by: -1 | 1) => {
     const loc = d.location;
     if (!loc) return null;
-    const b = (bearing(from, [loc.longitude, loc.latitude]) * Math.PI) / 180;
-    const dx = Math.sin(b);
-    const dy = -Math.cos(b);
-    // Push the point out from the centre until it meets the edge of the visible map.
-    const cx = area.width / 2;
+    const deg = bearing(from, [loc.longitude, loc.latitude]);
+    const north = Math.cos((deg * Math.PI) / 180);
     const cy = (area.top + area.bottom) / 2;
-    const hx = cx - EDGE - SIZE / 2;
-    const hy = (area.bottom - area.top) / 2 - EDGE - SIZE / 2 - 14;
-    const k = Math.min(Math.abs(dx) > 1e-6 ? hx / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-6 ? hy / Math.abs(dy) : Infinity);
-    return { x: cx + dx * k - SIZE / 2, y: cy + dy * k - SIZE / 2, deg: (b * 180) / Math.PI };
+    const half = (area.bottom - area.top) / 2 - SIZE - 14;
+    const y = cy - north * half - SIZE / 2;
+    const x = by === -1 ? EDGE : area.width - EDGE - SIZE;
+    return { x, y, deg };
   };
 
   const chip = (d: FleetDevice | undefined, by: -1 | 1) => {
     if (!d) return null;
-    const at = place(d);
+    const at = place(d, by);
     if (!at) return null;
     const state = fleetState(d);
     const meta = STATE_META[state === "never_seen" ? "offline" : state];
@@ -140,11 +138,11 @@ export function SwipeToStep({ children, onStep, enabled, keyId }: { children: Re
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   slot: { position: "absolute", width: SIZE, alignItems: "center" },
   ring: { position: "absolute", left: -6, top: -6, width: SIZE + 12, height: SIZE + 12, alignItems: "center" },
   arrow: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 8, borderLeftColor: "transparent", borderRightColor: "transparent" },
   badge: { width: SIZE, height: SIZE, borderRadius: SIZE / 2, borderWidth: 2.5, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", ...elevation.md },
   icon: { width: 30, height: 32 },
   name: { position: "absolute", top: SIZE + 3, width: 84, left: (SIZE - 84) / 2, textAlign: "center", fontSize: 11, lineHeight: 14, fontWeight: "700", color: colors.foreground, textShadowColor: colors.background, textShadowRadius: 3 }
-});
+}));

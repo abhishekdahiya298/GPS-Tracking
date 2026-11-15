@@ -20,7 +20,7 @@ import { useSession } from "@/auth/SessionProvider";
 import { FadeInUp } from "@/components/motion";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { useBottomInset, useScreen } from "@/layout";
-import { colors, elevation, ink, isDark, radius, softTint, space, type } from "@/theme";
+import { colors, elevation, ink, isDark, radius, softTint, space, themed, type } from "@/theme";
 import { STATE_META } from "@/fleet/model";
 
 /* eslint-disable @typescript-eslint/no-require-imports -- React Native loads images with require() */
@@ -334,7 +334,7 @@ function Feature({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   screen: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   hero: {
@@ -446,4 +446,4 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: isDark ? colors.mutedForeground : "#3d4a63",
   },
-});
+}));

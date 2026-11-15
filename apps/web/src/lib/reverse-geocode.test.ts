@@ -24,7 +24,9 @@ describe("reverse geocode", () => {
     expect(spotKey(43.513249, -79.882149)).toBe("43.5132,-79.8821");
   });
   it("falls back to addresses off for a bad setting, and needs keys for paid services", () => {
-    expect(parseMapsSettings({ addressProvider: "bing" })).toEqual({ addressProvider: "off", mapStyle: "streets" });
+    expect(parseMapsSettings({ addressProvider: "bing" })).toEqual({ addressProvider: "off", mapStyle: "streets", iconStyle: "pin", iconColor: "status", mobileMap: "osm" });
+    // Saved before icon defaults existed: keeps the address choice.
+    expect(parseMapsSettings({ addressProvider: "osm", mapStyle: "dark" })).toEqual({ addressProvider: "osm", mapStyle: "dark", iconStyle: "pin", iconColor: "status", mobileMap: "osm" });
     expect(providerKeys({} as NodeJS.ProcessEnv)).toEqual({ off: true, osm: true, geoapify: false, google: false });
   });
 });

@@ -4,7 +4,7 @@ import { memo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { StatusPill, VehiclePicture } from "../components/kit";
 import { PressableScale } from "../components/motion";
-import { colors, elevation, ink, isDark, radius, softTint, space, type } from "../theme";
+import { colors, elevation, ink, isDark, radius, softTint, space, type, themed } from "../theme";
 import { STATE_META, coordsText, displayName, fleetState, freshnessLine, vehicleFacts, type FleetDevice } from "./model";
 
 /** Gap under each card. */
@@ -60,7 +60,7 @@ function splitSpeed(text: string): [string, string] {
   return i < 0 ? [text, ""] : [text.slice(0, i), text.slice(i + 1)];
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   flex: { flex: 1, minWidth: 0, gap: 3 },
   card: { height: ROW_HEIGHT - GAP, marginBottom: GAP, marginHorizontal: space.lg, flexDirection: "row", alignItems: "center", gap: 10, paddingLeft: space.md + 2, paddingRight: space.sm, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, overflow: "hidden", ...elevation.sm },
   edge: { position: "absolute", left: 0, top: 0, bottom: 0, width: 4 },
@@ -70,4 +70,4 @@ const styles = StyleSheet.create({
   speed: { width: 54, paddingVertical: 5, borderRadius: radius.lg, alignItems: "center" },
   speedValue: { fontSize: 20, lineHeight: 24, fontWeight: "800", fontVariant: ["tabular-nums"] },
   speedUnit: { fontSize: 11, lineHeight: 14, color: colors.mutedForeground }
-});
+}));

@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { FlatList, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Chip, EmptyState, SearchBox } from "@/components/kit";
 import { FILTERS, STATE_META, countByFilter, selectDevices, type FleetDevice, type FleetFilter } from "@/fleet/model";
 import { ROW_HEIGHT, VehicleRow } from "@/fleet/VehicleRow";
-import { colors, radius, space, type } from "@/theme";
+import { colors, radius, space, themed, type } from "@/theme";
 
 /**
  * The fleet list that slides up over the map: search, status chips, and every vehicle.
@@ -91,7 +91,7 @@ export function FleetSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingLeft: space.lg, paddingRight: space.sm, paddingTop: space.md },
   title: { ...type.title },
@@ -101,4 +101,4 @@ const styles = StyleSheet.create({
   search: { paddingHorizontal: space.lg, paddingTop: space.sm },
   chips: { paddingHorizontal: space.lg, paddingVertical: space.md, gap: 6 },
   emptyList: { flexGrow: 1 },
-});
+}));

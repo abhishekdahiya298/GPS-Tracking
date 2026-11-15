@@ -4,15 +4,15 @@ import { dateFormatter } from "@rio-gps/core/timezones";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View, type NativeSyntheticEvent } from "react-native";
+import { FlatList, Linking, Platform, Pressable, ScrollView, Text, View, type NativeSyntheticEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api } from "@/api";
-import { AddressCard, Chip, FactRow, SpeedBar, StatusPill, VehiclePicture } from "@/components/kit";
+import { AddressCard, Chip, FactRow } from "@/components/kit";
 import { Dots, FadeIn, PressableScale, PulseDot, SlideUp } from "@/components/motion";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { FILTERS, STATE_META, coordsText, countByFilter, displayName, fleetState, selectDevices, sheetFacts, sheetHeadline, timeAgo, type FleetFilter } from "@/fleet/model";
+import { FILTERS, STATE_META, compassPoint, coordsText, countByFilter, displayName, fleetState, selectDevices, sheetFacts, sheetHeadline, timeAgo, type FleetFilter } from "@/fleet/model";
 import { haptic } from "@/haptics";
-import { colors, elevation, font, ink, isDark, radius, size, softTint, space, type } from "@/theme";
+import { colors, elevation, font, isDark, radius, size, space, themed, type } from "@/theme";
 import { FleetSheet } from "./FleetSheet";
 import { MapSheet, type SheetSnap } from "./MapSheet";
 import { useStillSince } from "./useStillSince";
@@ -21,10 +21,13 @@ import { durationText } from "@/trips/model";
 import { GlobeIntro } from "./GlobeIntro";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, WORLD_VIEW, FOCUS_ZOOM, MAP_STYLES, focusZoom, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
 import { iconImages } from "./sprites";
+import { useMapEngine } from "./mapEngine";
+import { NativeLiveMap, type CameraLike } from "./NativeLiveMap";
 import { useIconPrefs } from "./iconPrefs";
 import { useAddress } from "./useAddress";
 import { iconPrefix } from "./model";
-import { NeighbourHints, SwipeToStep } from "./NeighbourHints";
+import { SwipeToStep } from "./NeighbourHints";
+import { ActionRow, VehicleCarousel, type FactCell } from "./VehicleCard";
 
 /** Movement trails only once the map is close enough for them to read as roads. */
 const TRAIL_ZOOM = 11;
@@ -66,7 +69,6 @@ export default function LiveMap() {
   // The selected-vehicle card's height, so the round buttons can sit just above it.
   const [cardHeight, setCardHeight] = useState(0);
   const [areaHeight, setAreaHeight] = useState(0);
-  const [areaWidth, setAreaWidth] = useState(0);
   const [snap, setSnap] = useState<SheetSnap>("peek");
   // Choosing a vehicle (or going back to the fleet) starts the sheet low again, so the map stays big.
   useEffect(() => setSnap("peek"), [selectedId]);
@@ -85,6 +87,7 @@ export default function LiveMap() {
   // The status filter narrows the map exactly as it narrows the list.
   const visible = useMemo(() => (filter === "all" ? devices : selectDevices(devices, filter, "")), [devices, filter]);
   const prefs = useIconPrefs();
+  const engine = useMapEngine();
   const images = useMemo(() => iconImages(iconPrefix(prefs)), [prefs]);
   const isPin = prefs.style === "pin";
   const { vehicles, trails } = useGlide(visible, units.fmtSpeed, prefs);
@@ -149,6 +152,23 @@ export default function LiveMap() {
     introPlayed = true;
     setIntro(false);
   }, []);
+
+  // On iPhone with Apple Maps the opening is the real 3D Earth: the map starts as the globe and
+  // flies down to the fleet once it is known, like Life360. Other maps use the drawn GlobeIntro.
+  const appleGlobe = engine === "native" && Platform.OS === "ios";
+  useEffect(() => {
+    if (!appleGlobe || !intro) return;
+    if (!diveReady) {
+      const giveUp = setTimeout(endIntro, 9000);
+      return () => clearTimeout(giveUp);
+    }
+    const start = setTimeout(dive, 700);
+    const done = setTimeout(endIntro, 700 + 3000);
+    return () => {
+      clearTimeout(start);
+      clearTimeout(done);
+    };
+  }, [appleGlobe, intro, diveReady, dive, endIntro]);
 
   // Where the camera centres a chosen vehicle: in the open map above the sheet, not under it.
   const cardH = useRef(0);
@@ -243,22 +263,74 @@ export default function LiveMap() {
   const address = useAddress(selected?.location?.latitude, selected?.location?.longitude, selectedState === "moving");
   // Short, so it fits next to the status pill: "just now", "Since 7:42 AM", "Seen 6 h ago".
   const placeLine = !selected ? "" : selectedState === "moving" ? timeAgo(selected.location?.recordedAt ?? selected.lastSeenAt, now) : still ? `Since ${fmt.time(still.since)}` : selectedState === "offline" || selectedState === "parked" ? `Seen ${timeAgo(selected.lastSeenAt, now)}` : timeAgo(selected.location?.recordedAt ?? selected.lastSeenAt, now);
+  const silent =
+    selected && (selectedState === "offline" || selectedState === "parked" || selectedState === "never_seen")
+      ? {
+          title: selected.lastSeenAt ? `Not reporting for ${durationText((now - Date.parse(selected.lastSeenAt)) / 60000)}` : "No report yet",
+          note: selectedState === "parked" ? "Unhooked trailer: reports on its own battery" : "Usually no power or no mobile signal"
+        }
+      : null;
   const sheetHeights = useMemo(() => {
     const full = Math.max(360, areaHeight - insets.top - 72);
-    return selected ? { peek: 206, half: Math.min(full, 430), full } : { peek: 196, half: Math.min(full, Math.round(areaHeight * 0.5)), full };
-  }, [areaHeight, insets.top, selected]);
+    return selected ? { peek: silent ? 290 : 240, half: Math.min(full, silent ? 470 : 440), full } : { peek: 196, half: Math.min(full, Math.round(areaHeight * 0.5)), full };
+  }, [areaHeight, insets.top, selected, silent]);
   const speedText = ((): [string, string] => {
     if (!selected || selectedState === "offline" || selectedState === "never_seen") return ["—", ""];
     const t = units.fmtSpeed(selectedState === "moving" ? (loc?.speedKph ?? null) : 0);
     const i = t.lastIndexOf(" ");
     return i < 0 ? [t, ""] : [t.slice(0, i), t.slice(i + 1)];
   })();
+  // The four facts on the card: what it is doing now, or, when it is silent, why we can't say.
+  const factCells: FactCell[] = !selected || !facts || !selectedState
+    ? []
+    : silent
+      ? [
+          { icon: "key-outline", value: facts.ignition, label: "Ignition", color: facts.ignition === "Off" ? STATE_META.stopped.color : STATE_META.moving.color },
+          { icon: "pulse-outline", value: facts.motion, label: "Motion", color: colors.primary },
+          { icon: "locate-outline", value: facts.gps.value.replace(" old", ""), label: "GPS age", color: STATE_META.idle.color },
+          { icon: "wifi-outline", value: facts.tracker.online ? "On" : "Off", label: "Tracker", color: facts.tracker.online ? STATE_META.moving.color : STATE_META.offline.color }
+        ]
+      : [
+          { icon: "speedometer-outline", value: speedText[0], label: speedText[1] || "Speed", color: STATE_META[selectedState].color },
+          { icon: "navigate-outline", value: compassPoint(loc?.headingDeg ?? null) ?? "—", label: loc?.headingDeg != null ? `${Math.round(((loc.headingDeg % 360) + 360) % 360)}°` : "Heading", color: colors.primary },
+          { icon: "key-outline", value: facts.ignition, label: "Ignition", color: facts.ignition === "Off" ? STATE_META.stopped.color : STATE_META.moving.color },
+          { icon: "locate-outline", value: facts.gps.fresh ? "Live" : facts.gps.value.replace(" old", ""), label: "GPS", color: facts.gps.fresh ? STATE_META.parked.color : STATE_META.idle.color }
+        ];
 
   return (
     <View style={styles.wrap} onLayout={(e) => {
         setAreaHeight(e.nativeEvent.layout.height);
-        setAreaWidth(e.nativeEvent.layout.width);
       }}>
+      {engine === "native" ? (
+        <NativeLiveMap
+          ref={camera as unknown as React.Ref<CameraLike>}
+          vehicles={vehicles}
+          trails={trails}
+          selectedId={selectedId}
+          prefs={prefs}
+          topInset={insets.top + 70}
+          bottomInset={cardHeight}
+          initial={{ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }}
+          globe={appleGlobe && intro}
+          onReady={() => setMapReady(true)}
+          onZoom={(z) => {
+            zoomNow.current = z;
+          }}
+          onUserMove={() => setFollowing(false)}
+          onMapPress={() => {
+            setStyleMenu(false);
+            if (Date.now() - vehicleTapAt.current > 400) setSelectedId(null);
+          }}
+          onSelect={(id) => {
+            vehicleTapAt.current = Date.now();
+            haptic.tap();
+            setSelectedId(id);
+            setFollowing(false);
+            const at = positionOf(devicesNow.current.find((d) => d.deviceId === id));
+            if (at) camera.current?.flyTo({ center: at, zoom: focusZoom(zoomNow.current), duration: 700, padding: focusPad() });
+          }}
+        />
+      ) : (
       <Map
         style={styles.map}
         mapStyle={styleUrl(style)}
@@ -368,6 +440,7 @@ export default function LiveMap() {
           </ViewAnnotation>
         ) : null}
       </Map>
+      )}
 
       {/* Top: search (opens the fleet list) and the status chips. */}
       <View style={[styles.top, { top: insets.top + space.sm }]} pointerEvents="box-none">
@@ -410,23 +483,13 @@ export default function LiveMap() {
         <PressableScale onPress={fitAll} scaleTo={0.9} style={styles.fab} accessibilityRole="button" accessibilityLabel="Show all vehicles">
           <Ionicons name="scan-outline" size={size.icon} color={colors.foreground} />
         </PressableScale>
+{engine === "osm" ? (
         <PressableScale onPress={() => setStyleMenu((open) => !open)} scaleTo={0.9} style={styles.fab} accessibilityRole="button" accessibilityLabel="Change the map style">
           <Ionicons name="layers-outline" size={size.icon} color={colors.foreground} />
         </PressableScale>
+        ) : null}
       </View>
 
-      {/* The vehicles either side of the open one, at the map's edges: tap (or swipe the card) to move. */}
-      {selected && steps.length > 1 && stepIndex >= 0 && areaHeight > 0 ? (
-        <NeighbourHints
-          keyId={selected.deviceId}
-          prefs={prefs}
-          from={selectedAt ?? null}
-          prev={steps.length > 2 || stepIndex === 1 ? steps[(stepIndex - 1 + steps.length) % steps.length] : undefined}
-          next={steps.length > 2 || stepIndex === 0 ? steps[(stepIndex + 1) % steps.length] : undefined}
-          area={{ top: insets.top + 84, bottom: areaHeight - cardHeight - 8, width: areaWidth }}
-          onStep={step}
-        />
-      ) : null}
 
       {/* Life360-style sheet: the fleet when nothing is chosen, the vehicle when one is.
           It rests low so the map stays big; drag the handle up for more. */}
@@ -438,32 +501,31 @@ export default function LiveMap() {
           onHeight={setCardHeight}
           header={
             selected && selectedState ? (
-              <FadeIn key={selected.deviceId} style={styles.sheetHead}>
+              <FadeIn key={selected.deviceId} style={styles.vehicleHead}>
                 <SwipeToStep enabled={steps.length > 1} onStep={step} keyId={selected.deviceId}>
-                <View style={styles.cardHead}>
-                  <VehiclePicture type={selected.vehicle?.type} width={60} height={44} />
-                  <View style={styles.cardTitle}>
-                    <Text style={styles.cardName} numberOfLines={1}>{displayName(selected)}</Text>
-                    <View style={styles.cardNameLine}>
-                      <StatusPill state={selectedState} compact />
-                      <Text style={styles.cardSub} numberOfLines={1}>{steps.length > 1 && stepIndex >= 0 ? `${placeLine} · ${stepIndex + 1} of ${steps.length}` : placeLine}</Text>
-                    </View>
-                  </View>
-                  {steps.length > 1 ? (
-                    <View style={styles.stepper}>
-                      <PressableScale onPress={() => step(-1)} scaleTo={0.88} hitSlop={4} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Previous vehicle">
-                        <Ionicons name="chevron-back" size={18} color={colors.foreground} />
-                      </PressableScale>
-                      <PressableScale onPress={() => step(1)} scaleTo={0.88} hitSlop={4} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel={`Next vehicle (${stepIndex + 1} of ${steps.length})`}>
-                        <Ionicons name="chevron-forward" size={18} color={colors.foreground} />
-                      </PressableScale>
-                    </View>
-                  ) : null}
-                  <PressableScale onPress={() => setSelectedId(null)} hitSlop={6} style={styles.close} accessibilityRole="button" accessibilityLabel="Back to all vehicles">
-                    <Ionicons name="close" size={20} color={colors.mutedForeground} />
-                  </PressableScale>
-                </View>
+                  <VehicleCarousel
+                    device={selected}
+                    state={selectedState}
+                    sub={placeLine}
+                    index={steps.length > 1 && stepIndex >= 0 ? `${stepIndex + 1} of ${steps.length}` : null}
+                    prev={steps.length > 1 && stepIndex >= 0 && (steps.length > 2 || stepIndex === 1) ? steps[(stepIndex - 1 + steps.length) % steps.length] : undefined}
+                    next={steps.length > 1 && stepIndex >= 0 && (steps.length > 2 || stepIndex === 0) ? steps[(stepIndex + 1) % steps.length] : undefined}
+                    facts={factCells}
+                    silent={silent}
+                    address={address?.label ?? address?.line1 ?? coordsText(selected) ?? "No position yet"}
+                    addressLabel={silent ? "Last known" : undefined}
+                    onStep={step}
+                    onClose={() => setSelectedId(null)}
+                  />
                 </SwipeToStep>
+                <ActionRow
+                  following={following}
+                  canFollow={!silent && !!selectedAt}
+                  onFollow={toggleFollow}
+                  onTrips={() => router.push({ pathname: "/trips/[id]", params: { id: selected.deviceId } })}
+                  onNavigate={openInMaps}
+                  onDetails={() => router.push({ pathname: "/vehicle/[id]", params: { id: selected.deviceId } })}
+                />
               </FadeIn>
             ) : (
               <View style={styles.sheetHead}>
@@ -482,24 +544,6 @@ export default function LiveMap() {
         >
           {selected && selectedState ? (
             <ScrollView contentContainerStyle={styles.sheetBody} scrollEnabled={snap === "full"} showsVerticalScrollIndicator={false}>
-              {selectedState === "offline" || selectedState === "parked" || selectedState === "never_seen" ? (
-                // Not reporting: say so plainly instead of showing a speed that is no longer true.
-                <View style={[styles.silent, { backgroundColor: softTint(STATE_META.idle.color, STATE_META.idle.soft) }]}>
-                  <Ionicons name={selectedState === "parked" ? "unlink-outline" : "cloud-offline-outline"} size={22} color={ink(STATE_META.idle.color)} />
-                  <View style={styles.flexFill}>
-                    <Text style={styles.silentTitle}>{selected.lastSeenAt ? `Not reporting for ${durationText((now - Date.parse(selected.lastSeenAt)) / 60000)}` : "No report yet"}</Text>
-                    <Text style={styles.silentNote}>{selectedState === "parked" ? "Unhooked trailer: it reports only on its own battery." : "Usually no power or no mobile signal."}</Text>
-                  </View>
-                </View>
-              ) : (
-                <SpeedBar speed={speedText[0]} unit={speedText[1]} title={headline.title} detail={headline.detail} headingDeg={loc?.headingDeg ?? null} state={selectedState} />
-              )}
-              <View style={styles.cardActions}>
-                <ActionButton icon={following ? "navigate" : "navigate-outline"} label={following ? "Following" : "Follow"} primary onPress={toggleFollow} selected={following} />
-                <ActionButton icon="git-commit-outline" label="Trips" onPress={() => router.push({ pathname: "/trips/[id]", params: { id: selected.deviceId } })} />
-                <ActionButton icon="map-outline" label="Navigate" onPress={openInMaps} />
-                <ActionButton icon="information-circle-outline" label="Details" onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: selected.deviceId } })} />
-              </View>
               <AddressCard title={address?.line1 ?? null} line={address?.line2} coords={coordsText(selected) ?? "No position yet"} label={selectedState === "offline" || selectedState === "parked" ? "Last known position" : undefined} />
               <FactRow facts={facts!} />
               <PressableScale onPress={() => router.push({ pathname: "/trips/[id]", params: { id: selected.deviceId } })} scaleTo={0.985} style={styles.todayCard} accessibilityRole="button">
@@ -528,7 +572,7 @@ export default function LiveMap() {
       ) : null}
 
 
-      {intro ? <GlobeIntro ready={diveReady} count={devices.length} onDive={dive} onDone={endIntro} /> : null}
+      {intro && !appleGlobe ? <GlobeIntro ready={diveReady} count={devices.length} onDive={dive} onDone={endIntro} /> : null}
 
       <FleetSheet
         visible={listOpen}
@@ -547,20 +591,7 @@ export default function LiveMap() {
   );
 }
 
-/** One of the big buttons under the vehicle sheet: an icon over a word. */
-function ActionButton({ icon, label, onPress, primary = false, selected = false }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; primary?: boolean; selected?: boolean }) {
-  return (
-    <Pressable onPress={onPress} style={[styles.action, primary && styles.actionPrimary, selected && styles.actionOn]} accessibilityRole="button" accessibilityState={primary ? { selected } : undefined}>
-      <Ionicons name={icon} size={19} color={primary ? colors.primaryForeground : colors.primary} />
-      <Text style={[styles.actionText, primary && { color: colors.primaryForeground }]} numberOfLines={1}>{label}</Text>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  silent: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: 10, paddingHorizontal: space.md, borderRadius: radius.lg + 2 },
-  silentTitle: { fontSize: 15, lineHeight: 20, fontWeight: "700", color: colors.foreground },
-  silentNote: { ...type.small },
+const styles = themed(() => ({
   flexFill: { flex: 1, minWidth: 0 },
   wrap: { flex: 1, backgroundColor: colors.canvas },
   map: { flex: 1 },
@@ -585,6 +616,7 @@ const styles = StyleSheet.create({
   cardInner: { gap: space.sm },
   grabZone: { alignSelf: "stretch", alignItems: "center", paddingTop: space.sm, paddingBottom: 2 },
   grab: { width: 40, height: 5, borderRadius: 3, backgroundColor: colors.borderStrong },
+  vehicleHead: { paddingBottom: space.sm, gap: space.sm },
   sheetHead: { paddingHorizontal: 14, paddingBottom: space.sm, gap: space.sm },
   sheetBody: { paddingHorizontal: 14, paddingBottom: space.xl, gap: space.sm },
   fleetHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", paddingHorizontal: 2 },
@@ -598,24 +630,11 @@ const styles = StyleSheet.create({
   todayTitle: { fontSize: 15, lineHeight: 20, fontWeight: "700", color: colors.foreground },
   bubble: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: colors.background, ...elevation.md },
   bubbleText: { fontSize: 13, lineHeight: 17, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
-  stepper: { flexDirection: "row", alignItems: "center", gap: 6 },
-  stepBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: colors.muted, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  close: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  cardHead: { flexDirection: "row", alignItems: "center", gap: space.md },
-  cardTitle: { flex: 1, minWidth: 0, gap: 4 },
-  cardNameLine: { flexDirection: "row", alignItems: "center", gap: space.sm },
-  cardName: { fontSize: 18, lineHeight: 23, fontWeight: "700", letterSpacing: -0.2, color: colors.foreground },
-  cardSub: { ...type.caption, flexShrink: 1, fontVariant: ["tabular-nums"] },
   more: { width: size.controlSm, height: size.controlSm, alignItems: "center", justifyContent: "center" },
   tiles: { flexDirection: "row", gap: 6 },
   stepRow: { position: "absolute", left: space.lg, right: space.lg, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   stepPill: { flexDirection: "row", alignItems: "center", gap: 6, height: 40, paddingHorizontal: space.lg, borderRadius: 20, backgroundColor: colors.primary, ...elevation.md },
   stepText: { fontSize: 14, fontWeight: "700", color: colors.primaryForeground },
   stepCount: { height: 34, paddingHorizontal: space.md, borderRadius: 17, backgroundColor: colors.background, justifyContent: "center", ...elevation.md },
-  stepCountText: { fontSize: 13, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
-  cardActions: { flexDirection: "row", gap: space.sm },
-  action: { flex: 1, alignItems: "center", justifyContent: "center", gap: 2, height: 50, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
-  actionPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
-  actionOn: { backgroundColor: colors.primaryDark, borderColor: colors.primaryDark },
-  actionText: { fontSize: 12, lineHeight: 16, fontWeight: "700", color: colors.foreground }
-});
+  stepCountText: { fontSize: 13, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] }
+}));

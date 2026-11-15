@@ -3,7 +3,7 @@
  * Every screen reads from here, so a change made here shows everywhere.
  */
 import * as SecureStore from "expo-secure-store";
-import { Appearance, type TextStyle } from "react-native";
+import { Appearance, StyleSheet, type TextStyle } from "react-native";
 
 const light = {
   background: "#ffffff",
@@ -64,7 +64,7 @@ function readChoice(): ThemeChoice {
   }
 }
 
-/** Saves the look for the next start. The caller restarts the app so every screen picks it up. */
+/** Saves the look so the next start opens with it too. */
 export function saveThemeChoice(choice: ThemeChoice): void {
   try {
     SecureStore.setItem(THEME_KEY, choice);
@@ -73,13 +73,16 @@ export function saveThemeChoice(choice: ThemeChoice): void {
   }
 }
 
+const resolve = (choice: ThemeChoice, scheme = Appearance.getColorScheme()): boolean => (choice === "system" ? scheme === "dark" : choice === "dark");
+
 /**
- * The look is decided once, when the app starts: every screen builds its styles from `colors`
- * at that moment. Changing it in Account restarts the app, which takes well under a second.
+ * The look in use. These are live: switching the look (Account, or the phone going dark) swaps the
+ * palette in place, rebuilds every screen's styles (see `themed`) and redraws the app at once, with
+ * no restart. Read them during render or inside `themed`, never copy them into module constants.
  */
-export const themeChoice: ThemeChoice = readChoice();
-export const isDark = themeChoice === "system" ? Appearance.getColorScheme() === "dark" : themeChoice === "dark";
-export const colors = isDark ? dark : light;
+export let themeChoice: ThemeChoice = readChoice();
+export let isDark = resolve(themeChoice);
+export const colors: typeof light = { ...(isDark ? dark : light) };
 
 /** Brighter twins of the fixed status and alert colours, for dark surfaces. */
 const BRIGHT: Record<string, string> = {
@@ -110,7 +113,8 @@ export const font = { caption: 12, small: 13, body: 15, title: 17, heading: 24 }
 export const size = { control: 48, controlSm: 44, row: 60, well: 40, chip: 36, icon: 20, tabIcon: 24 } as const;
 
 /** Text styles. Use these instead of writing font sizes on a screen. */
-export const type = {
+const buildType = () =>
+  ({
   /** The title at the top of a tab. One per screen. */
   largeTitle: { fontSize: 24, lineHeight: 30, fontWeight: "700", letterSpacing: -0.2, color: colors.foreground },
   /** A card or section heading. */
@@ -125,7 +129,8 @@ export const type = {
   label: { fontSize: 12, lineHeight: 16, fontWeight: "600", letterSpacing: 0.7, textTransform: "uppercase", color: colors.mutedForeground },
   /** Big numbers: counts and readings. Digits keep the same width so they don't jump. */
   metric: { fontSize: 22, lineHeight: 26, fontWeight: "700", letterSpacing: -0.2, color: colors.foreground, fontVariant: ["tabular-nums"] }
-} satisfies Record<string, TextStyle>;
+}) satisfies Record<string, TextStyle>;
+export const type = buildType();
 
 /** Soft shadows, lightest first. Spread into a style. Cards use a hairline border instead. */
 export const elevation = {
@@ -136,3 +141,40 @@ export const elevation = {
 
 /** Animation timings in ms. Keep motion short: it should explain, never delay. */
 export const motion = { fast: 140, base: 240, slow: 380, stagger: 45, maxStagger: 8 } as const;
+
+/* ---------- Switching the look without a restart ---------- */
+
+type Sheet = Record<string, unknown>;
+const sheets: { make: () => Sheet; sheet: Sheet }[] = [];
+const listeners = new Set<() => void>();
+let version = 0;
+
+/**
+ * A screen's styles, built from the current look and rebuilt when it changes. Use in place of
+ * StyleSheet.create: `const styles = themed(() => ({ card: { backgroundColor: colors.background } }))`.
+ */
+export function themed<T extends StyleSheet.NamedStyles<T> | StyleSheet.NamedStyles<unknown>>(make: () => T & StyleSheet.NamedStyles<unknown>): T {
+  const sheet = StyleSheet.create(make()) as unknown as Sheet;
+  sheets.push({ make: make as () => Sheet, sheet });
+  return sheet as unknown as T;
+}
+
+/** Changes the look now: palette, text styles and every screen's styles, then redraws the app. */
+export function applyLook(choice: ThemeChoice, scheme = Appearance.getColorScheme()): void {
+  themeChoice = choice;
+  const dark_ = resolve(choice, scheme);
+  if (dark_ === isDark) return;
+  isDark = dark_;
+  Object.assign(colors, dark_ ? dark : light);
+  Object.assign(type, buildType());
+  for (const { make, sheet } of sheets) Object.assign(sheet, StyleSheet.create(make() as StyleSheet.NamedStyles<unknown>));
+  version += 1;
+  listeners.forEach((l) => l());
+}
+
+/** Subscribe to look changes (the root uses this to redraw everything). */
+export function onLookChange(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+export const lookVersion = (): number => version;
