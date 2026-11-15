@@ -11,7 +11,8 @@ import { Button } from "@/components/ui";
 import { useBottomInset } from "@/layout";
 import { Placeholder } from "@/components/Placeholder";
 import { useFleet } from "@/fleet/FleetProvider";
-import { colors, elevation, ink, size, space, type } from "@/theme";
+import { colors, elevation, ink, radius, size, softTint, space, type } from "@/theme";
+import { STATE_META } from "@/fleet/model";
 import { SPEEDS, advance, buildTrack, durationText, positionAt, progressOf, timeAtProgress, trackSummary, type HistoryPage, type HistoryPoint, type Track } from "@/trips/model";
 
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -137,7 +138,11 @@ export default function TripScreen() {
               <Text style={styles.summaryText} numberOfLines={1}>{`${fmt.time(track.startT)} – ${fmt.time(track.endT)} (${durationText(summary.durationMs / 60000)})`}</Text>
             </View>
           </View>
-          <Text style={styles.distance}>{units.fmtDist(summary.distanceKm)}</Text>
+        </View>
+        <View style={styles.cells}>
+          <SumCell value={units.fmtDist(summary.distanceKm)} label="Distance" color={colors.primary} soft={colors.primarySoft} />
+          <SumCell value={durationText(summary.durationMs / 60000)} label="Duration" color={STATE_META.moving.color} soft={STATE_META.moving.soft} />
+          <SumCell value={summary.maxSpeedKph !== null ? units.fmtSpeed(summary.maxSpeedKph) : "—"} label="Top speed" color={STATE_META.idle.color} soft={STATE_META.idle.soft} />
         </View>
         <View style={styles.readout}>
           <Text style={styles.clock}>{fmt.timeSec(t)}</Text>
@@ -210,17 +215,29 @@ function Stop({ color, title, time, detail, last = false }: { color: string; tit
   );
 }
 
+function SumCell({ value, label, color, soft }: { value: string; label: string; color: string; soft: string }) {
+  return (
+    <View style={[styles.cell, { backgroundColor: softTint(color, soft) }]} accessible accessibilityLabel={`${label}: ${value}`}>
+      <Text style={[styles.cellValue, { color: ink(color) }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{value}</Text>
+      <Text style={styles.cellLabel}>{label}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   center: { flex: 1, backgroundColor: colors.canvas },
   panel: { backgroundColor: colors.background, paddingHorizontal: space.lg, paddingTop: 10, paddingBottom: space.xl, borderTopLeftRadius: 20, borderTopRightRadius: 20, marginTop: -16, ...elevation.lg },
   grabber: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: space.md },
-  summary: { flexDirection: "row", alignItems: "center", gap: space.md, marginBottom: space.md },
+  summary: { flexDirection: "row", alignItems: "center", gap: space.md, marginBottom: space.sm },
+  cells: { flexDirection: "row", gap: 6, marginBottom: space.md },
+  cell: { flex: 1, minWidth: 0, alignItems: "center", paddingVertical: 8, paddingHorizontal: 4, borderRadius: radius.lg },
+  cellValue: { fontSize: 15, lineHeight: 20, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  cellLabel: { fontSize: 12, lineHeight: 16, fontWeight: "600", color: colors.foreground },
   tripName: { fontSize: 18, lineHeight: 24, fontWeight: "700", color: colors.foreground },
   summaryLine: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
   summaryText: { ...type.small, flexShrink: 1, fontVariant: ["tabular-nums"] },
-  distance: { fontSize: 20, lineHeight: 26, fontWeight: "800", color: colors.foreground, fontVariant: ["tabular-nums"] },
   readout: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   speedPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, height: 30, borderRadius: 15, backgroundColor: colors.primarySoft },
   timeline: { marginTop: space.lg, gap: 0 },

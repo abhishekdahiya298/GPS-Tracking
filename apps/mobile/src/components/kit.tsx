@@ -7,7 +7,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Image, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { STATE_META, type FleetState } from "../fleet/model";
+import { STATE_META, type FleetState, type sheetFacts } from "../fleet/model";
 import { haptic } from "../haptics";
 import { colors, elevation, font, ink, isDark, radius, size, softTint, space, type } from "../theme";
 import { Dots, FadeInUp, PopIn, PressableScale, Skeleton } from "./motion";
@@ -122,6 +122,19 @@ export function FactTile({ icon, label, value, color = colors.primary, soft = co
 }
 
 /** A compact fact for a row of four: icon, a tiny label and the value, on its own soft colour. */
+/** The four live facts in one row, coloured the same way on every screen: ignition, motion, GPS age, tracker. */
+export function FactRow({ facts }: { facts: ReturnType<typeof sheetFacts> }) {
+  const off = facts.ignition === "Off";
+  return (
+    <View style={styles.factRow}>
+      <MiniFact icon="key-outline" label="Ignition" value={facts.ignition} color={off ? STATE_META.stopped.color : STATE_META.moving.color} soft={off ? STATE_META.stopped.soft : STATE_META.moving.soft} />
+      <MiniFact icon="pulse-outline" label="Motion" value={facts.motion} color={colors.primary} soft={colors.primarySoft} />
+      <MiniFact icon="locate-outline" label="GPS" value={facts.gps.value} color={facts.gps.fresh ? STATE_META.parked.color : STATE_META.idle.color} soft={facts.gps.fresh ? STATE_META.parked.soft : STATE_META.idle.soft} />
+      <MiniFact icon="wifi-outline" label="Tracker" value={facts.tracker.value} color={facts.tracker.online ? STATE_META.moving.color : STATE_META.offline.color} soft={facts.tracker.online ? STATE_META.moving.soft : STATE_META.offline.soft} />
+    </View>
+  );
+}
+
 export function MiniFact({ icon, label, value, color = colors.primary, soft = colors.primarySoft }: { icon: IconName; label: string; value: string; color?: string; soft?: string }) {
   return (
     <View style={[styles.mini, { backgroundColor: softTint(color, soft), borderColor: isDark ? colors.border : `${color}3d` }]} accessible accessibilityLabel={`${label}: ${value}`}>
@@ -379,6 +392,7 @@ const styles = StyleSheet.create({
   mini: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5, height: 40, paddingHorizontal: 6, borderRadius: radius.lg, borderWidth: 1 },
   miniLabel: { fontSize: 10, lineHeight: 12, color: colors.mutedForeground },
   miniValue: { fontSize: 12, lineHeight: 16, fontWeight: "800" },
+  factRow: { flexDirection: "row", gap: 6 },
   speedRow: { flexDirection: "row", gap: space.sm },
   speedCard: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: radius.lg + 2, backgroundColor: colors.background, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: "hidden", ...elevation.sm },
   speedEdge: { position: "absolute", left: 0, top: 10, bottom: 10, width: 4, borderTopRightRadius: 4, borderBottomRightRadius: 4 },

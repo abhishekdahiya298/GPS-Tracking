@@ -2,11 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { AddressCard, Card, EmptyState, FactTile, IconWell, StatusPill, VehiclePicture, type IconName } from "@/components/kit";
+import { AddressCard, Card, EmptyState, FactRow, IconWell, SpeedBar, StatusPill, VehiclePicture, type IconName } from "@/components/kit";
 import { FadeInUp, PressableScale } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { STATE_META, compassPoint, coordsText, displayName, fleetState, freshnessLine, sheetFacts, statusLine, timeAgo } from "@/fleet/model";
+import { STATE_META, coordsText, displayName, fleetState, freshnessLine, sheetFacts, sheetHeadline, statusLine, timeAgo } from "@/fleet/model";
 import { useBottomInset } from "@/layout";
 import { colors, radius, size, space, type } from "@/theme";
 
@@ -43,7 +43,6 @@ export default function VehicleScreen() {
   const state = fleetState(device);
   const loc = device.location;
   const name = displayName(device);
-  const point = compassPoint(loc?.headingDeg ?? null);
 
   function openInMaps() {
     if (!loc) return;
@@ -56,6 +55,13 @@ export default function VehicleScreen() {
   const kind = device.vehicle?.type;
   const facts = sheetFacts(device, now);
   const silent = state === "offline" || state === "parked" || state === "never_seen";
+  const headline = sheetHeadline(device, now);
+  const speedParts = ((): [string, string] => {
+    if (!loc || state === "offline" || state === "never_seen") return ["—", ""];
+    const t = units.fmtSpeed(state === "moving" ? loc.speedKph : 0);
+    const i = t.lastIndexOf(" ");
+    return i < 0 ? [t, ""] : [t.slice(0, i), t.slice(i + 1)];
+  })();
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={[styles.content, { paddingBottom: space.xl + bottom }]}>
       <Stack.Screen options={{ title: name }} />
@@ -74,12 +80,8 @@ export default function VehicleScreen() {
               </View>
             </View>
           </View>
-          <View style={styles.stats}>
-            <FactTile icon="speedometer-outline" label="Speed" value={loc && !silent ? units.fmtSpeed(state === "moving" ? loc.speedKph : 0) : "—"} color={colors.primary} soft={colors.primarySoft} />
-            <FactTile icon="navigate-outline" label="Heading" value={loc?.headingDeg != null && point && state === "moving" ? `${point} ${Math.round(((loc.headingDeg % 360) + 360) % 360)}°` : "—"} color="#6526d1" soft="#dccdfa" />
-            <FactTile icon="key-outline" label="Ignition" value={facts.ignition} color={facts.ignition === "Off" ? STATE_META.stopped.color : STATE_META.moving.color} soft={facts.ignition === "Off" ? STATE_META.stopped.soft : STATE_META.moving.soft} />
-            <FactTile icon="wifi-outline" label="Tracker" value={facts.tracker.value} color={facts.tracker.online ? STATE_META.idle.color : STATE_META.offline.color} soft={facts.tracker.online ? STATE_META.idle.soft : STATE_META.offline.soft} valueColor={facts.tracker.online ? STATE_META.moving.color : STATE_META.offline.color} />
-          </View>
+          <SpeedBar speed={speedParts[0]} unit={speedParts[1]} title={headline.title} detail={headline.detail} headingDeg={loc?.headingDeg ?? null} state={state === "never_seen" ? "offline" : state} />
+          <FactRow facts={facts} />
         </Card>
       </FadeInUp>
 
