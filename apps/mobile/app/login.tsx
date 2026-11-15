@@ -20,7 +20,8 @@ import { useSession } from "@/auth/SessionProvider";
 import { FadeInUp } from "@/components/motion";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { useBottomInset, useScreen } from "@/layout";
-import { colors, elevation, isDark, radius, space, type } from "@/theme";
+import { colors, elevation, ink, isDark, radius, softTint, space, type } from "@/theme";
+import { STATE_META } from "@/fleet/model";
 
 /* eslint-disable @typescript-eslint/no-require-imports -- React Native loads images with require() */
 const LOGO = require("../assets/logo.png");
@@ -290,11 +291,15 @@ export default function LoginScreen() {
               accessibilityElementsHidden
               importantForAccessibility="no-hide-descendants"
             >
-              <Feature icon="location-outline" text="Live map" />
-              <View style={styles.featureRule} />
-              <Feature icon="git-commit-outline" text="Trips" />
-              <View style={styles.featureRule} />
-              <Feature icon="notifications-outline" text="Alerts" />
+              <Text style={styles.featureHead}>EVERYTHING FOR YOUR FLEET</Text>
+              <View style={styles.featureGrid}>
+                <Feature icon="location-outline" text="Live map" color={STATE_META.moving.color} soft={STATE_META.moving.soft} />
+                <Feature icon="git-commit-outline" text="Trips" color={colors.primary} soft={colors.primarySoft} />
+                <Feature icon="notifications-outline" text="Alerts" color={STATE_META.stopped.color} soft={STATE_META.stopped.soft} />
+                <Feature icon="cube-outline" text="Loads" color={STATE_META.idle.color} soft={STATE_META.idle.soft} />
+                <Feature icon="bus-outline" text="Trailers" color={STATE_META.parked.color} soft={STATE_META.parked.soft} />
+                <Feature icon="shapes-outline" text="Zones" color={STATE_META.offline.color} soft={STATE_META.offline.soft} />
+              </View>
             </View>
           )}
         </ScrollView>
@@ -311,13 +316,19 @@ export default function LoginScreen() {
 function Feature({
   icon,
   text,
+  color,
+  soft,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   text: string;
+  color: string;
+  soft: string;
 }) {
   return (
     <View style={styles.feature}>
-      <Ionicons name={icon} size={18} color={colors.primary} />
+      <View style={[styles.featureIcon, { backgroundColor: softTint(color, soft) }]}>
+        <Ionicons name={icon} size={16} color={ink(color)} />
+      </View>
       <Text style={styles.featureText}>{text}</Text>
     </View>
   );
@@ -403,25 +414,30 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: -space.sm,
   },
-  features: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: space.lg,
-  },
+  features: { marginTop: space.lg, gap: space.sm },
+  featureHead: { fontSize: 12, lineHeight: 16, fontWeight: "700", letterSpacing: 0.6, textAlign: "center", color: colors.mutedForeground },
+  featureGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   feature: {
+    flexGrow: 1,
+    flexBasis: "31%",
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
+    gap: 7,
+    height: 42,
+    paddingHorizontal: 8,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    ...elevation.sm,
   },
+  featureIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   featureText: {
     fontSize: 13,
-    lineHeight: 18,
-    fontWeight: "600",
+    lineHeight: 16,
+    fontWeight: "700",
     color: colors.foreground,
   },
-  featureRule: { width: 1, height: 18, backgroundColor: colors.border },
   version: {
     ...type.caption,
     position: "absolute",
