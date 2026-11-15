@@ -33,6 +33,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage } from "@/lib/client/api";
+import { ThemeToggle } from "./theme-toggle";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "./brand-mark";
 import { Button } from "../ui/button";
@@ -163,6 +164,7 @@ export function AppShell({
           </div>
           <div className="ml-auto flex items-center gap-1">
             <CommandPalette nav={nav} />
+            <ThemeToggle />
             {canSeeAlerts && (
               <Button asChild variant="ghost" size="icon" className="relative">
                 <Link href="/alerts" aria-label={unackAlerts > 0 ? `Alerts, ${unackAlerts} unacknowledged` : "Alerts"}>
