@@ -154,7 +154,7 @@ export function SpeedBar({ speed, unit, title, detail, headingDeg, state = "movi
     <View style={styles.speedRow}>
       <View style={styles.speedCard}>
         <View style={[styles.speedEdge, { backgroundColor: meta.color }]} />
-        <IconWell icon="speedometer-outline" color={meta.color} soft={meta.soft} box={38} />
+        <IconWell icon="speedometer-outline" color={meta.color} soft={meta.soft} box={34} />
         <View style={styles.flex}>
           <Text style={styles.speedLabel}>Speed</Text>
           <Text style={styles.speedValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
@@ -394,11 +394,11 @@ const styles = StyleSheet.create({
   miniValue: { fontSize: 12, lineHeight: 16, fontWeight: "800" },
   factRow: { flexDirection: "row", gap: 6 },
   speedRow: { flexDirection: "row", gap: space.sm },
-  speedCard: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: radius.lg + 2, backgroundColor: colors.background, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: "hidden", ...elevation.sm },
+  speedCard: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7, paddingHorizontal: 12, borderRadius: radius.lg + 2, backgroundColor: colors.background, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: "hidden", ...elevation.sm },
   speedEdge: { position: "absolute", left: 0, top: 10, bottom: 10, width: 4, borderTopRightRadius: 4, borderBottomRightRadius: 4 },
-  speedWell: { width: 38, height: 38, borderRadius: radius.md + 1, alignItems: "center", justifyContent: "center" },
+  speedWell: { width: 34, height: 34, borderRadius: radius.md + 1, alignItems: "center", justifyContent: "center" },
   speedLabel: { fontSize: 12, lineHeight: 16, fontWeight: "600", color: colors.mutedForeground },
-  speedValue: { fontSize: 22, lineHeight: 26, fontWeight: "800", color: colors.foreground, fontVariant: ["tabular-nums"] },
+  speedValue: { fontSize: 20, lineHeight: 24, fontWeight: "800", color: colors.foreground, fontVariant: ["tabular-nums"] },
   speedUnit: { fontSize: 13, fontWeight: "600", color: colors.mutedForeground },
   speedTitle: { fontSize: 15, lineHeight: 20, fontWeight: "700", color: colors.foreground },
   address: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, paddingLeft: space.md, paddingRight: 6, borderRadius: radius.xl, backgroundColor: colors.primarySoft },
