@@ -136,7 +136,7 @@ export default function AccountScreen() {
               : null}
             {push.enabled ? (
               <View style={[styles.setting, styles.line]}>
-                <IconWell icon="moon-outline" color="#4f46e5" soft="#eef0ff" box={34} />
+                <IconWell icon="moon-outline" color="#4f46e5" soft="#dfe1fb" box={34} />
                 <View style={styles.flex}>
                   <Text style={styles.settingTitle}>Quiet hours</Text>
                   <Text style={type.small}>{push.quiet ? `${clockText(push.quietStart, timeFormat)} to ${clockText(push.quietEnd, timeFormat)}` : "No notifications at night."}</Text>
@@ -170,9 +170,9 @@ export default function AccountScreen() {
         <FadeInUp index={3}>
           <SectionLabel text="Account" />
           <Card style={styles.group}>
-            <LinkRow icon="lock-closed-outline" label="Change password" onPress={() => router.push("/password")} color="#6526d1" soft="#f3edff" />
-            <LinkRow icon="help-circle-outline" label="Help" onPress={() => void Linking.openURL("https://www.riogps.com/help")} color="#136c35" soft="#e7f6ec" />
-            <LinkRow icon="shield-checkmark-outline" label="Privacy policy" onPress={() => void Linking.openURL("https://www.riogps.com/privacy")} color="#a3470a" soft="#fff1e0" last />
+            <LinkRow icon="lock-closed-outline" label="Change password" onPress={() => router.push("/password")} color="#6526d1" soft="#dccdfa" />
+            <LinkRow icon="help-circle-outline" label="Help" onPress={() => void Linking.openURL("https://www.riogps.com/help")} color="#136c35" soft="#c8e8d2" />
+            <LinkRow icon="shield-checkmark-outline" label="Privacy policy" onPress={() => void Linking.openURL("https://www.riogps.com/privacy")} color="#a3470a" soft="#fcd9b2" last />
           </Card>
         </FadeInUp>
 

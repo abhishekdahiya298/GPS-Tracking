@@ -4,13 +4,14 @@ import { useRouter } from "expo-router";
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useAlerts } from "@/alerts/AlertsProvider";
 import { SEVERITY_META, alertDetail, alertMeta, alertSeverity, alertTitle, type AlertEvent } from "@/alerts/model";
-import { Banner, EmptyState, IconWell, ListSkeleton, RowLine, ScreenHeader, Segmented, groupedRow } from "@/components/kit";
+import { Banner, EmptyState, IconWell, ListSkeleton, ScreenHeader, Segmented } from "@/components/kit";
 import { FadeInUp, LoadingBar, PressableScale } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { haptic } from "@/haptics";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { timeAgo } from "@/fleet/model";
-import { colors, font, ink, size, softTint, space, type } from "@/theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { colors, elevation, font, ink, isDark, radius, size, softTint, space, type } from "@/theme";
 
 export default function AlertsScreen() {
   const { events, unread, unreadOnly, loading, loadingMore, hasMore, error, setUnreadOnly, refresh, loadMore, acknowledge } = useAlerts();
@@ -41,14 +42,16 @@ export default function AlertsScreen() {
     ]);
   }
 
-  const last = events.length - 1;
   const row = ({ item, index }: { item: AlertEvent; index: number }) => {
     const meta = alertMeta(item.type);
     const detail = alertDetail(item, units.fmtSpeed);
     const isUnread = !item.acknowledgedAt;
 
+    const sev = SEVERITY_META[alertSeverity(item.type)];
     const body = (
       <>
+        <LinearGradient colors={[colors.background, isDark ? colors.background : sev.soft]} locations={[0.4, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <View style={[styles.edge, { backgroundColor: ink(sev.color) }]} />
         <IconWell icon={meta.icon} color={meta.color} soft={meta.soft} />
         <View style={styles.flex}>
           <Text style={[styles.title, isUnread && styles.titleUnread]} numberOfLines={2}>{alertTitle(item)}</Text>
@@ -76,7 +79,7 @@ export default function AlertsScreen() {
       </>
     );
     return (
-      <FadeInUp index={index < 10 ? index : 0} distance={index < 10 ? 10 : 0} style={groupedRow(index === 0, index === last)}>
+      <FadeInUp index={index < 10 ? index : 0} distance={index < 10 ? 10 : 0} style={styles.card}>
         {/* Every alert opens its own page; from there, "View vehicle" goes to the truck. */}
         <PressableScale onPress={() => router.push({ pathname: "/alert/[id]", params: { id: String(item.id) } })} scaleTo={0.985} style={styles.row} accessibilityRole="button" accessibilityHint="Opens the alert">
           {body}
@@ -127,7 +130,6 @@ export default function AlertsScreen() {
           data={events}
           keyExtractor={(e) => String(e.id)}
           renderItem={row}
-          ItemSeparatorComponent={RowLine}
           refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} tintColor={colors.primary} colors={[colors.primary]} />}
           onEndReached={() => void loadMore()}
           onEndReachedThreshold={0.4}
@@ -153,9 +155,11 @@ const styles = StyleSheet.create({
   flex: { flex: 1, minWidth: 0 },
   markAll: { minHeight: size.controlSm, justifyContent: "center" },
   link: { color: colors.primary, fontSize: 14, lineHeight: 20, fontWeight: "600" },
-  list: { paddingTop: space.xs, paddingBottom: space.lg },
+  list: { paddingTop: space.sm, paddingBottom: space.lg },
   emptyList: { flexGrow: 1 },
-  row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, paddingVertical: space.md, minHeight: size.row + 4 },
+  card: { marginHorizontal: space.lg, marginBottom: space.sm, borderRadius: radius.xl + 2, backgroundColor: colors.background, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, ...elevation.sm },
+  row: { flexDirection: "row", alignItems: "center", gap: space.md, paddingLeft: space.lg, paddingRight: space.md, paddingVertical: space.md, minHeight: 80, borderRadius: radius.xl + 2, overflow: "hidden" },
+  edge: { position: "absolute", left: 0, top: 0, bottom: 0, width: 5 },
   title: { fontSize: font.body, lineHeight: 20, fontWeight: "500", color: colors.foreground },
   titleUnread: { fontWeight: "700" },
   sub: { ...type.small, marginTop: 1 },

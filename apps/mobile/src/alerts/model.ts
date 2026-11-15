@@ -35,17 +35,17 @@ export type AlertIcon =
   | "checkmark-done-outline";
 
 const META: Record<string, { label: string; verb: string; color: string; soft: string; icon: AlertIcon }> = {
-  speeding: { label: "Speeding", verb: "is speeding", color: "#c42b2b", soft: "#fdecec", icon: "speedometer-outline" },
-  device_offline: { label: "Device offline", verb: "went offline", color: "#b45309", soft: "#fff5e1", icon: "cloud-offline-outline" },
-  geofence_enter: { label: "Entered zone", verb: "entered a zone", color: "#0369a1", soft: "#e8f4fb", icon: "enter-outline" },
-  geofence_exit: { label: "Left zone", verb: "left a zone", color: "#0369a1", soft: "#e8f4fb", icon: "exit-outline" },
+  speeding: { label: "Speeding", verb: "is speeding", color: "#ad1f1f", soft: "#f6cdcd", icon: "speedometer-outline" },
+  device_offline: { label: "Device offline", verb: "went offline", color: "#a3470a", soft: "#fcd9b2", icon: "cloud-offline-outline" },
+  geofence_enter: { label: "Entered zone", verb: "entered a zone", color: "#0369a1", soft: "#d6eaf7", icon: "enter-outline" },
+  geofence_exit: { label: "Left zone", verb: "left a zone", color: "#0369a1", soft: "#d6eaf7", icon: "exit-outline" },
   ignition_on: { label: "Ignition on", verb: "engine started", color: "#5b6472", soft: "#f3f4f6", icon: "key-outline" },
   ignition_off: { label: "Ignition off", verb: "engine stopped", color: "#5b6472", soft: "#f3f4f6", icon: "key-outline" },
   // Broker loads. Wording matches the web app's alerts page.
-  load_late: { label: "Load late", verb: "is running late", color: "#c42b2b", soft: "#fdecec", icon: "time-outline" },
-  load_no_signal: { label: "Load: no location", verb: "has no recent location", color: "#b45309", soft: "#fff5e1", icon: "location-outline" },
-  load_paused: { label: "Load: driver paused", verb: "driver paused sharing", color: "#b45309", soft: "#fff5e1", icon: "pause-circle-outline" },
-  load_arrived: { label: "Load arrived", verb: "arrived", color: "#0369a1", soft: "#e8f4fb", icon: "flag-outline" },
+  load_late: { label: "Load late", verb: "is running late", color: "#ad1f1f", soft: "#f6cdcd", icon: "time-outline" },
+  load_no_signal: { label: "Load: no location", verb: "has no recent location", color: "#a3470a", soft: "#fcd9b2", icon: "location-outline" },
+  load_paused: { label: "Load: driver paused", verb: "driver paused sharing", color: "#a3470a", soft: "#fcd9b2", icon: "pause-circle-outline" },
+  load_arrived: { label: "Load arrived", verb: "arrived", color: "#0369a1", soft: "#d6eaf7", icon: "flag-outline" },
   load_delivered: { label: "Load delivered", verb: "was delivered", color: "#136c35", soft: "#e9f7ee", icon: "checkmark-done-outline" }
 };
 
@@ -129,7 +129,7 @@ export function alertSeverity(type: string): AlertSeverity {
   return SEVERITY[type] ?? "info";
 }
 export const SEVERITY_META: Record<AlertSeverity, { label: string; color: string; soft: string }> = {
-  high: { label: "High", color: "#ad1f1f", soft: "#fdecec" },
-  medium: { label: "Medium", color: "#a3470a", soft: "#fff1e0" },
-  info: { label: "Info", color: "#1d4ed8", soft: "#eaf1ff" }
+  high: { label: "High", color: "#ad1f1f", soft: "#f6cdcd" },
+  medium: { label: "Medium", color: "#a3470a", soft: "#fcd9b2" },
+  info: { label: "Info", color: "#1d4ed8", soft: "#dbe4f8" }
 };

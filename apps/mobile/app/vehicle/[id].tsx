@@ -76,7 +76,7 @@ export default function VehicleScreen() {
           </View>
           <View style={styles.stats}>
             <FactTile icon="speedometer-outline" label="Speed" value={loc && !silent ? units.fmtSpeed(state === "moving" ? loc.speedKph : 0) : "—"} color={colors.primary} soft={colors.primarySoft} />
-            <FactTile icon="navigate-outline" label="Heading" value={loc?.headingDeg != null && point && state === "moving" ? `${point} ${Math.round(((loc.headingDeg % 360) + 360) % 360)}°` : "—"} color="#6526d1" soft="#f3edff" />
+            <FactTile icon="navigate-outline" label="Heading" value={loc?.headingDeg != null && point && state === "moving" ? `${point} ${Math.round(((loc.headingDeg % 360) + 360) % 360)}°` : "—"} color="#6526d1" soft="#dccdfa" />
             <FactTile icon="key-outline" label="Ignition" value={facts.ignition} color={facts.ignition === "Off" ? STATE_META.stopped.color : STATE_META.moving.color} soft={facts.ignition === "Off" ? STATE_META.stopped.soft : STATE_META.moving.soft} />
             <FactTile icon="wifi-outline" label="Tracker" value={facts.tracker.value} color={facts.tracker.online ? STATE_META.idle.color : STATE_META.offline.color} soft={facts.tracker.online ? STATE_META.idle.soft : STATE_META.offline.soft} valueColor={facts.tracker.online ? STATE_META.moving.color : STATE_META.offline.color} />
           </View>
