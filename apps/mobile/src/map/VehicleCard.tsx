@@ -74,7 +74,7 @@ export function VehicleCarousel({
       <View style={styles.card}>
         <View style={[styles.edge, { backgroundColor: meta.color }]} />
         <View style={styles.head}>
-          <VehiclePicture type={device.vehicle?.type} width={52} height={38} />
+          <VehiclePicture type={device.vehicle?.type} state={state} width={52} height={38} />
           <View style={styles.title}>
             <Text style={styles.name} numberOfLines={1}>{displayName(device)}</Text>
             <View style={styles.subLine}>
