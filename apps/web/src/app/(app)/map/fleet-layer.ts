@@ -6,7 +6,7 @@
 import type { GeoJSONSource, Map as MlMap, MapLayerMouseEvent } from "maplibre-gl";
 import { VEHICLE_TYPES, type VehicleType } from "@/lib/schemas/vehicle";
 import { VEHICLE_GLYPHS, WHEEL_Y } from "@/lib/vehicle-glyphs";
-import { bearing, lerpLngLat, shouldAnimate, type MapState } from "./fleet-model";
+import { DEFAULT_ICON_PREFS, bearing, iconName, iconNames, lerpLngLat, shouldAnimate, type IconPrefs, type MapState } from "./fleet-model";
 
 export interface FleetPoint {
   id: string;
@@ -29,13 +29,13 @@ const ANIM_MS = 900;
 const MAX_ANIMATING = 400;
 const MIN_FRAME_MS = 33; // ~30 fps is plenty for smooth marker glides
 
-export const STATE_COLORS: Record<MapState, string> = { moving: "#15803d", idle: "#b45309", stopped: "#0369a1", parked: "#0369a1", offline: "#6b7280" };
+export const STATE_COLORS: Record<MapState, string> = { moving: "#136c35", idle: "#a3470a", stopped: "#ad1f1f", parked: "#6526d1", offline: "#6b7280" };
 /** Below this zoom nearby vehicles merge into one counted bubble, so a large fleet stays readable. */
 const CLUSTER_MAX_ZOOM = 8;
 const NOT_CLUSTER = ["!", ["has", "point_count"]];
 const HALO_R = 18;
 /** Below this zoom every vehicle is a small status dot: with 50+ vehicles, detailed icons would pile up. */
-const DETAIL_ZOOM = 11;
+const DETAIL_ZOOM = 9;
 
 interface Anim {
   from: [number, number];
@@ -271,11 +271,41 @@ export class FleetLayer {
   private labels = true;
   private clustering = true;
   private handlers: Array<() => void> = [];
+  private prefs: IconPrefs = DEFAULT_ICON_PREFS;
 
   constructor(
     private map: MlMap,
     private opts: { onSelect: (id: string) => void; onHover?: (id: string | null, lngLat?: [number, number]) => void }
   ) {}
+
+  /** How vehicles are drawn (Settings → Account → Map icons). Redraws at once. */
+  setIconPrefs(prefs: IconPrefs) {
+    if (prefs.style === this.prefs.style && prefs.color === this.prefs.color) return;
+    this.prefs = prefs;
+    const m = this.map;
+    // Before install() there is no style yet; install() loads the icons then.
+    if (!m.getSource(SRC)) return;
+    this.loadIcons();
+    if (m.getLayer("fleet-icons")) {
+      m.setLayoutProperty("fleet-icons", "icon-anchor", prefs.style === "pin" ? "bottom" : "center");
+      m.setLayoutProperty("fleet-icons", "icon-rotate", prefs.style === "top" ? ["to-number", ["get", "rot"]] : 0);
+      m.setLayoutProperty("fleet-icons", "icon-rotation-alignment", prefs.style === "top" ? "map" : "viewport");
+    }
+    this.structural = true;
+    this.schedule();
+  }
+
+  private loadIcons() {
+    const m = this.map;
+    for (const name of iconNames(this.prefs)) {
+      if (m.hasImage(name)) continue;
+      m.loadImage(`/fleet-art/map/icons/${name}.png`)
+        .then((res) => {
+          if (!m.hasImage(name)) m.addImage(name, res.data, { pixelRatio: 3 });
+        })
+        .catch((err) => console.error("map icon failed to load", name, err));
+    }
+  }
 
   /** Call after the style has loaded. Safe to call again after a style change. */
   install() {
@@ -301,6 +331,9 @@ export class FleetLayer {
       // Stretch only the flat middle so the rounded corners keep their shape.
       m.addImage("veh-chip", img, { pixelRatio: ratio, stretchX: [[9 * ratio, (w - 9) * ratio]], stretchY: [[9 * ratio, (h - 9) * ratio]], content: [7 * ratio, 6 * ratio, (w - 7) * ratio, (h - 6) * ratio] });
     }
+    // The 3D icons shared with the phone app (only the chosen style). They load in the background;
+    // until one has arrived the layer falls back to the drawn pin above, so nothing is ever missing.
+    this.loadIcons();
     // History playback marker.
     if (!m.hasImage("veh-moving")) {
       const { img, ratio } = arrowIcon(STATE_COLORS.moving, true);
@@ -383,7 +416,8 @@ export class FleetLayer {
           "circle-stroke-width": 2
         }
       });
-      // Moving: a top-down vehicle that turns with the road.
+      // Moving: a top-down vehicle that turns with the road. Hidden now that moving vehicles use the
+      // 3D pins (with a heading arrow) like the phone app; kept so the layer order and handlers stay as they were.
       m.addLayer({
         id: "fleet-moving",
         type: "symbol",
@@ -391,6 +425,7 @@ export class FleetLayer {
         minzoom: DETAIL_ZOOM,
         filter: ["all", NOT_CLUSTER, ["==", ["get", "state"], "moving"]] as never,
         layout: {
+          visibility: "none",
           "icon-image": ["concat", "spr-", ["get", "shape"]],
           // Kept small on purpose: big vehicles hide the road and each other. Grows only a little when zoomed right in.
           "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.55, 13, 0.7, 16, 0.85, 18, 1],
@@ -401,20 +436,22 @@ export class FleetLayer {
           "icon-ignore-placement": true
         }
       });
-      // Everything else: a pin in the status colour, anchored at its tip.
+      // Every vehicle: the 3D pin in its status colour, anchored at its tip (drawn pin until the image loads).
       m.addLayer({
         id: "fleet-icons",
         type: "symbol",
         source: SRC,
         minzoom: DETAIL_ZOOM,
-        filter: ["all", NOT_CLUSTER, ["!=", ["get", "state"], "moving"]] as never,
+        filter: NOT_CLUSTER as never,
         layout: {
-          "icon-image": ["concat", "pin-", ["get", "type"], "-", ["get", "state"]],
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.7, 14, 0.8, 18, 0.95],
-          "icon-anchor": "bottom",
+          "icon-image": ["coalesce", ["image", ["get", "pin"]], ["image", ["concat", "pin-", ["get", "type"], "-", ["get", "state"]]]] as never,
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.8, 14, 0.9, 18, 1],
+          "icon-anchor": this.prefs.style === "pin" ? "bottom" : "center",
+          "icon-rotate": this.prefs.style === "top" ? ["to-number", ["get", "rot"]] : 0,
+          "icon-rotation-alignment": this.prefs.style === "top" ? "map" : "viewport",
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
-          "symbol-sort-key": ["match", ["get", "state"], "idle", 3, "stopped", 2, 1]
+          "symbol-sort-key": ["match", ["get", "state"], "moving", 4, "idle", 3, "stopped", 2, 1]
         }
       });
       // Names need glyphs; the production style has them, a bare style may not.
@@ -432,7 +469,7 @@ export class FleetLayer {
             "text-size": 11,
             "text-line-height": 1.25,
             "text-anchor": "top",
-            "text-offset": ["case", ["==", ["get", "state"], "moving"], ["literal", [0, 1.5]], ["literal", [0, 0.5]]],
+            "text-offset": [0, 0.5],
             "text-optional": true,
             "icon-image": "veh-chip",
             "icon-text-fit": "both",
@@ -660,6 +697,8 @@ export class FleetLayer {
                   { key: "state", value: p.state },
                   { key: "type", value: p.type },
                   { key: "heading", value: p.heading ?? 0 },
+                  { key: "pin", value: iconName(p.type, p.state, this.prefs) },
+                  { key: "rot", value: p.state === "moving" ? (p.heading ?? 0) : 0 },
                   { key: "name", value: p.name },
                   { key: "shape", value: SHAPE_OF[p.type] },
                   { key: "sub", value: p.sub ?? "" }
@@ -701,7 +740,7 @@ export class FleetLayer {
       features.push({
         type: "Feature",
         geometry: { type: "Point", coordinates: this.display.get(p.id) ?? p.lngLat },
-        properties: { id: p.id, name: p.name, state: p.state, type: p.type, shape: SHAPE_OF[p.type], sub: p.sub ?? "", heading: p.heading ?? 0 }
+        properties: { id: p.id, name: p.name, state: p.state, type: p.type, shape: SHAPE_OF[p.type], sub: p.sub ?? "", heading: p.heading ?? 0, pin: iconName(p.type, p.state, this.prefs), rot: p.state === "moving" ? (p.heading ?? 0) : 0 }
       });
     }
     return { type: "FeatureCollection", features };

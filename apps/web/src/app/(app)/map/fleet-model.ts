@@ -132,3 +132,46 @@ export function csvSafe(v: string | number | null | undefined): string {
 
 /** North America fallback when there's nothing to fit. */
 export const FALLBACK_VIEW = { center: [-98.6, 39.8] as [number, number], zoom: 3.2 };
+
+/**
+ * The 3D pin for a vehicle, the same artwork as the phone app (public/map/pin-*.png):
+ * a trailer pin for trailers, a truck pin for everything else, and for a moving vehicle one of
+ * eight heading arrows (0 = north, 2 = east …), so the map and the app always look alike.
+ */
+/** How vehicles are drawn: 3D pin, round or square badge, or top-down (turns with the heading). */
+export type IconStyle = "pin" | "circle" | "square" | "top";
+export type IconColor = "status" | "type";
+export interface IconPrefs { style: IconStyle; color: IconColor }
+export const DEFAULT_ICON_PREFS: IconPrefs = { style: "pin", color: "status" };
+
+/** Backend vehicle type → the picture on the icon (same rule as the phone app). */
+export function iconKind(type: string | null | undefined): string {
+  switch (type) {
+    case "truck":
+    case "semi":
+      return "truck";
+    case "trailer":
+    case "van":
+    case "pickup":
+    case "car":
+    case "bus":
+    case "equipment":
+      return type;
+    default:
+      return "asset";
+  }
+}
+
+/** Map icon name, e.g. "pin-status-truck-idle" or "top-trailer-moving" (files in /fleet-art/map/icons). */
+export function iconName(type: string | null | undefined, state: MapState, prefs: IconPrefs = DEFAULT_ICON_PREFS): string {
+  if (prefs.style === "top") return `top-${iconKind(type) === "trailer" ? "trailer" : "truck"}-${state}`;
+  return `${prefs.style}-${prefs.color}-${iconKind(type)}-${state}`;
+}
+
+const KINDS = ["truck", "trailer", "van", "pickup", "car", "bus", "equipment", "asset"];
+const STATES: MapState[] = ["moving", "idle", "stopped", "parked", "offline"];
+/** Every icon one style draws, for loading onto the map. */
+export function iconNames(prefs: IconPrefs): string[] {
+  if (prefs.style === "top") return ["truck", "trailer"].flatMap((k) => STATES.map((s) => `top-${k}-${s}`));
+  return KINDS.flatMap((k) => STATES.map((s) => `${prefs.style}-${prefs.color}-${k}-${s}`));
+}

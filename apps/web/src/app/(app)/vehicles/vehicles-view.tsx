@@ -23,7 +23,7 @@ import { relativeTime } from "@/lib/format";
 import { RelativeTime } from "@/components/app/local-time";
 import { useTime } from "@/components/app/time-context";
 import dynamic from "next/dynamic";
-import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
+import { VehiclePicture } from "@/components/app/vehicle-picture";
 import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 import type { EditableVehicle } from "../_fleet/vehicle-form-dialog";
 
@@ -34,6 +34,9 @@ const ShareDialog = dynamic(() => import("./share-dialog").then((m) => m.ShareDi
 const GroupsDialog = dynamic(() => import("./groups-dialog").then((m) => m.GroupsDialog));
 const VehicleFormDialog = dynamic(() => import("../_fleet/vehicle-form-dialog").then((m) => m.VehicleFormDialog));
 import { VehicleStateBadge } from "../_fleet/vehicle-state";
+
+/** States whose last reading is old: no live speed is shown for them. */
+const SILENT = new Set<string>(["offline", "never_seen", "inactive", "parked"]);
 
 type Can = { create: boolean; update: boolean; remove: boolean; assign: boolean; unassign: boolean; map: boolean };
 
@@ -115,9 +118,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         meta: { sortKey: "name" } satisfies ColumnMeta,
         cell: ({ row: { original: v } }) => (
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground [--vehicle-icon-gap:var(--color-muted)]" title={VEHICLE_TYPE_LABEL[asVehicleType(v.type)]}>
-              <VehicleTypeIcon type={v.type} className="size-[18px]" />
-            </span>
+            <VehiclePicture type={v.type} className="h-9 w-12" />
             <div className="min-w-0">
               <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
               <p className="m-0 truncate text-xs text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(v.type)], v.licensePlate, ...v.groups].filter(Boolean).join(" · ")}</p>
@@ -136,7 +137,8 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         id: "speed",
         header: "Speed",
         meta: { sortKey: "speed", hideable: true, label: "Speed", className: "text-right tabular-nums" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) => (v.location ? u.fmtSpeed(v.location.speedKph) : "—")
+        // A silent tracker's last speed is history, not now: show a dash, never "65 mph" for a truck that stopped reporting days ago.
+        cell: ({ row: { original: v } }) => (v.location && !SILENT.has(v.state) ? u.fmtSpeed(v.location.speedKph) : "—")
       },
       {
         id: "ignition",
@@ -229,13 +231,11 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
           }
           mobileRow={(v) => (
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground [--vehicle-icon-gap:var(--color-muted)]">
-                <VehicleTypeIcon type={v.type} className="size-[18px]" />
-              </span>
+              <VehiclePicture type={v.type} className="mt-0.5" />
               <div className="min-w-0 flex-1">
                 <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
                 <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground">
-                  {[v.licensePlate, v.device ? (v.device.name ?? v.device.model) : "No device", v.location ? u.fmtSpeed(v.location.speedKph) : null, v.device ? relativeTime(v.lastSeenAt, Date.now(), t.timeZone) : null].filter(Boolean).join(" · ")}
+                  {[v.licensePlate, v.device ? (v.device.name ?? v.device.model) : "No device", v.location && !SILENT.has(v.state) ? u.fmtSpeed(v.location.speedKph) : null, v.device ? relativeTime(v.lastSeenAt, Date.now(), t.timeZone) : null].filter(Boolean).join(" · ")}
                 </p>
                 <div className="mt-1.5">
                   <VehicleStateBadge state={v.state} />

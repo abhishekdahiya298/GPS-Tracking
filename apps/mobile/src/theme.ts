@@ -7,25 +7,25 @@ import { Appearance, type TextStyle } from "react-native";
 
 const light = {
   background: "#ffffff",
-  canvas: "#f5f7fb",
+  canvas: "#e4e9f1",
   foreground: "#0f172a",
-  muted: "#eef2f7",
-  mutedForeground: "#55607a",
-  border: "#e3e8f0",
+  muted: "#e6ebf2",
+  mutedForeground: "#3f4b5e",
+  border: "#cbd4e1",
   /** Outlines of inputs and outline buttons: strong enough to be seen on white. */
-  borderStrong: "#8a94a8",
+  borderStrong: "#7a8599",
   primary: "#1d4ed8",
   primaryDark: "#1e3a8a",
   primaryForeground: "#ffffff",
-  primarySoft: "#eaf1ff",
-  success: "#15803d",
-  successSoft: "#e9f7ee",
+  primarySoft: "#dde7fb",
+  success: "#136c35",
+  successSoft: "#c8e8d2",
   warning: "#b45309",
-  warningSoft: "#fff5e1",
+  warningSoft: "#fdebcf",
   danger: "#c42b2b",
-  dangerSoft: "#fdecec",
+  dangerSoft: "#f6cdcd",
   info: "#0369a1",
-  offline: "#6b7280"
+  offline: "#4b5563"
 };
 
 /** Dark palette. Status colours are brighter so they stay readable on a dark surface. */
@@ -83,10 +83,13 @@ export const colors = isDark ? dark : light;
 
 /** Brighter twins of the fixed status and alert colours, for dark surfaces. */
 const BRIGHT: Record<string, string> = {
-  "#15803d": "#4ade80",
+  "#136c35": "#4ade80",
+  "#a3470a": "#fb923c",
+  "#ad1f1f": "#f87171",
+  "#6526d1": "#a78bfa",
   "#b45309": "#fbbf24",
   "#0369a1": "#38bdf8",
-  "#6b7280": "#9ca3af",
+  "#4b5563": "#9ca3af",
   "#5b6472": "#9ca3af",
   "#c42b2b": "#f87171",
   "#1d4ed8": "#8fb0ff"
@@ -126,9 +129,9 @@ export const type = {
 
 /** Soft shadows, lightest first. Spread into a style. Cards use a hairline border instead. */
 export const elevation = {
-  sm: { shadowColor: "#0f172a", shadowOpacity: 0.06, shadowRadius: 4, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
-  md: { shadowColor: "#0f172a", shadowOpacity: 0.12, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
-  lg: { shadowColor: "#0f172a", shadowOpacity: 0.16, shadowRadius: 22, shadowOffset: { width: 0, height: 8 }, elevation: 10 }
+  sm: { shadowColor: "#0f172a", shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
+  md: { shadowColor: "#0f172a", shadowOpacity: 0.16, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
+  lg: { shadowColor: "#0f172a", shadowOpacity: 0.22, shadowRadius: 22, shadowOffset: { width: 0, height: 8 }, elevation: 10 }
 } as const;
 
 /** Animation timings in ms. Keep motion short: it should explain, never delay. */

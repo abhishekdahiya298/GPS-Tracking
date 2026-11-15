@@ -1,4 +1,5 @@
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { THEME_COOKIE, readTheme } from "@/lib/theme";
 import { redirect } from "next/navigation";
 import { requireAuthenticatedUserFromHeaders } from "@/lib/authz";
 import { AppError } from "@/lib/errors";
@@ -25,5 +26,6 @@ export default async function AccountPage() {
     rc.status === "ok" ? getOrgSettings(rc.ctx.organizationId) : Promise.resolve(null),
     getDb().select({ twoStep: schema.users.twoFactorEnabled }).from(schema.users).where(eq(schema.users.id, user.userId)).limit(1)
   ]);
-  return <AccountForm twoStep={me?.twoStep ?? false} name={user.name} email={user.email} prefs={prefs} orgDefaults={org ? { timeZone: org.timeZone, timeFormat: org.timeFormat } : { timeZone: "UTC", timeFormat: "12h" }} />;
+  const theme = readTheme((await cookies()).get(THEME_COOKIE)?.value);
+  return <AccountForm theme={theme} twoStep={me?.twoStep ?? false} name={user.name} email={user.email} prefs={prefs} orgDefaults={org ? { timeZone: org.timeZone, timeFormat: org.timeFormat } : { timeZone: "UTC", timeFormat: "12h" }} />;
 }

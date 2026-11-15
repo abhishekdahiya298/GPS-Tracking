@@ -8,7 +8,7 @@ export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElemen
   return <div className={cn("flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3 sm:px-5", className)} {...props} />;
 }
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn("m-0 text-[15px] font-semibold leading-6 text-[#0a2463]", className)} {...props} />;
+  return <h2 className={cn("m-0 text-[15px] font-semibold leading-6 text-[#0a2463] dark:text-foreground", className)} {...props} />;
 }
 export function CardDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
   return <p className={cn("m-0 text-sm text-muted-foreground", className)} {...props} />;

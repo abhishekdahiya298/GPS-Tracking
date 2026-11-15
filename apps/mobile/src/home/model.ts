@@ -42,3 +42,26 @@ export function onTheMove(devices: FleetDevice[], limit: number): FleetDevice[] 
     .sort((a, b) => (b.location?.speedKph ?? 0) - (a.location?.speedKph ?? 0))
     .slice(0, limit);
 }
+
+/**
+ * What needs a person's attention, from the live fleet only: trackers that stopped reporting
+ * (offline) and vehicles that have never sent a position. Each item says who, in a short line.
+ */
+export interface AttentionItem {
+  key: "offline" | "never_seen";
+  title: string;
+  detail: string;
+  count: number;
+}
+export function needsAttention(devices: FleetDevice[], name: (d: FleetDevice) => string): AttentionItem[] {
+  const out: AttentionItem[] = [];
+  const offline = devices.filter((d) => fleetState(d) === "offline");
+  const never = devices.filter((d) => fleetState(d) === "never_seen");
+  const list = (ds: FleetDevice[]) => {
+    const names = ds.slice(0, 2).map(name).join(", ");
+    return ds.length > 2 ? `${names} and ${ds.length - 2} more` : names;
+  };
+  if (offline.length > 0) out.push({ key: "offline", title: `${offline.length} ${offline.length === 1 ? "vehicle" : "vehicles"} not reporting`, detail: list(offline), count: offline.length });
+  if (never.length > 0) out.push({ key: "never_seen", title: `${never.length} waiting for a first position`, detail: list(never), count: never.length });
+  return out;
+}

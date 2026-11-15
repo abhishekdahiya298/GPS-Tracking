@@ -2,7 +2,7 @@ import { contextHasPermission, units, type TenantContext, type Units } from "@ri
 import { Activity, AlertTriangle, PieChart, Zap, CheckCircle2, CalendarClock, ArrowRight, Bell, CircleOff, CircleParking, Hexagon, Map as MapIcon, Navigation, Package, Plus, Route, Truck, Users, Wrench } from "lucide-react";
 import Link from "next/link";
 import { CHART_RANGES, type ChartRange } from "@/lib/daily-stats";
-import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
+import { VehiclePicture } from "@/components/app/vehicle-picture";
 import { cache, Suspense } from "react";
 import { LocalTime } from "@/components/app/local-time";
 import { PageHeader } from "@/components/app/page-header";
@@ -99,7 +99,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const loadsSection = loadsDash ? (
     <section aria-label="Loads" className="mt-5">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[#0a2463]">
+        <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[#0a2463] dark:text-foreground">
           <Package className="size-5" aria-hidden="true" /> Loads
           <span className="text-sm font-normal text-muted-foreground">{loadsSummary}</span>
         </h2>
@@ -234,14 +234,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               .map(({ d, s }) => (
                 <li key={d.deviceId}>
                   <Link href={`/map?focus=${d.deviceId}`} className="flex items-center gap-3 px-4 py-3 text-foreground no-underline hover:bg-canvas sm:px-5">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground [--vehicle-icon-gap:var(--color-muted)]">
-                      <VehicleTypeIcon type={d.vehicle?.type ?? "other"} className="size-5" />
-                    </span>
+                    <VehiclePicture type={d.vehicle?.type} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? d.name ?? d.model ?? "Device"}</span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {d.location ? `${u.fmtSpeed(d.location.speedKph)} · engine ${d.location.ignition === true ? "on" : d.location.ignition === false ? "off" : "unknown"} · ` : ""}
-                        last update {relativeTime(d.lastSeenAt, now.getTime(), rc.timeZone)}
+                        {d.location && s !== "offline" && s !== "parked" ? `${u.fmtSpeed(d.location.speedKph)} · engine ${d.location.ignition === true ? "on" : d.location.ignition === false ? "off" : "unknown"} · last update ` : "last seen "}
+                        {relativeTime(d.lastSeenAt, now.getTime(), rc.timeZone)}
                       </span>
                     </span>
                     <StatusBadge tone={FLEET_STATE_META[s].tone} label={FLEET_STATE_META[s].label} pulse={s === "moving"} />
@@ -305,7 +303,7 @@ function RecentAlertsCard({ alerts, now, timeZone, canWrite, emptyHint }: { aler
                     <span aria-hidden="true" className="absolute inset-0 animate-ping rounded-full bg-success/15 [animation-duration:2.6s] motion-reduce:hidden" />
                     <CheckCircle2 className="relative size-7" aria-hidden="true" />
                   </span>
-                  <p className="m-0 mt-3 text-base font-semibold text-[#0a2463]">You&apos;re all caught up</p>
+                  <p className="m-0 mt-3 text-base font-semibold text-[#0a2463] dark:text-foreground">You&apos;re all caught up</p>
                   <p className="m-0 mt-1 max-w-xs text-sm text-muted-foreground">No new alerts. {emptyHint}</p>
                   {canWrite && (
                     <Link href="/alerts" className="mt-3 text-sm font-medium text-primary no-underline hover:underline">

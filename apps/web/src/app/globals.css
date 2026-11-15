@@ -18,28 +18,28 @@
 
   /* Neutral surfaces */
   --color-background: #ffffff;
-  --color-canvas: #f6f7f9;
-  --color-foreground: #111827;
+  --color-canvas: #e4e9f1;
+  --color-foreground: #0f172a;
   --color-muted: #f3f4f6;
-  --color-muted-foreground: #5b6472;
-  --color-border: #e3e6eb;
-  --color-input: #d4d8df;
+  --color-muted-foreground: #3f4b5e;
+  --color-border: #cbd4e1;
+  --color-input: #b9c4d4;
   --color-ring: #1d4fb8;
 
   /* Brand + semantic (contrast-checked against white for text use) */
   --color-primary: #133a8f;
   --color-primary-hover: #0a2463;
   --color-primary-foreground: #ffffff;
-  --color-primary-soft: #e9eefb;
-  --color-success: #15803d;
-  --color-success-soft: #e9f7ee;
-  --color-warning: #b45309;
-  --color-warning-soft: #fff5e1;
-  --color-danger: #c42b2b;
+  --color-primary-soft: #dbe4f8;
+  --color-success: #136c35;
+  --color-success-soft: #d3eedc;
+  --color-warning: #a3470a;
+  --color-warning-soft: #fde4c0;
+  --color-danger: #ad1f1f;
   --color-danger-hover: #a52121;
-  --color-danger-soft: #fdecec;
+  --color-danger-soft: #f9d6d6;
   --color-info: #0369a1;
-  --color-info-soft: #e8f4fb;
+  --color-info-soft: #d6eaf7;
   --color-offline: #6b7280;
 
   --radius-sm: 4px;
@@ -48,7 +48,7 @@
   --radius-lg: 10px;
   --radius-xl: 12px;
 
-  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.05);
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.08), 0 2px 10px rgb(16 24 40 / 0.07);
   --shadow-pop: 0 8px 24px rgb(16 24 40 / 0.12), 0 2px 6px rgb(16 24 40 / 0.06);
 
   --animate-in: rio-in 140ms ease-out;
@@ -56,6 +56,79 @@
   --animate-slide-in-bottom: rio-slide-bottom 200ms ease-out;
   --animate-fade: rio-fade 160ms ease-out;
   --animate-grow-x: rio-grow-x 520ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+
+
+/* `dark:` utilities follow the same rule as the dark tokens: chosen dark, or the computer is dark and light wasn't chosen. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
+/* ---------- Dark look ----------
+   Every surface reads the colour tokens above, so swapping them is enough. The choice is on
+   <html data-theme> (set by the server from the rio-theme cookie); without it the browser decides. */
+:root[data-theme="dark"] {
+  --color-background: #161b24;
+  --color-canvas: #0d1117;
+  --color-foreground: #eef1f6;
+  --color-muted: #222a36;
+  --color-muted-foreground: #a3adbd;
+  --color-border: #2c3543;
+  --color-input: #3a4556;
+  --color-ring: #6d93f5;
+  --color-primary: #4f7df3;
+  --color-primary-hover: #6d93f5;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #1b2a4e;
+  --color-success: #4ade80;
+  --color-success-soft: #12301f;
+  --color-warning: #fbbf24;
+  --color-warning-soft: #3a2a0a;
+  --color-danger: #f87171;
+  --color-danger-hover: #fca5a5;
+  --color-danger-soft: #3b1414;
+  --color-info: #38bdf8;
+  --color-info-soft: #0c2a3d;
+  --color-offline: #9ca3af;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+  --color-background: #161b24;
+  --color-canvas: #0d1117;
+  --color-foreground: #eef1f6;
+  --color-muted: #222a36;
+  --color-muted-foreground: #a3adbd;
+  --color-border: #2c3543;
+  --color-input: #3a4556;
+  --color-ring: #6d93f5;
+  --color-primary: #4f7df3;
+  --color-primary-hover: #6d93f5;
+  --color-primary-foreground: #ffffff;
+  --color-primary-soft: #1b2a4e;
+  --color-success: #4ade80;
+  --color-success-soft: #12301f;
+  --color-warning: #fbbf24;
+  --color-warning-soft: #3a2a0a;
+  --color-danger: #f87171;
+  --color-danger-hover: #fca5a5;
+  --color-danger-soft: #3b1414;
+  --color-info: #38bdf8;
+  --color-info-soft: #0c2a3d;
+  --color-offline: #9ca3af;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.3);
+  color-scheme: dark;
+  }
 }
 
 @keyframes rio-in { from { opacity: 0; transform: translateY(4px) scale(0.99); } to { opacity: 1; transform: none; } }

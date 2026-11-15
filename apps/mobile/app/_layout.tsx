@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { Stack, useRouter } from "expo-router";
+import { reloadAppAsync } from "expo";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
@@ -64,10 +65,12 @@ function Screens() {
         <Stack.Screen name="vehicle/[id]" options={{ ...pushed, title: "Vehicle" }} />
         <Stack.Screen name="trips/[id]" options={{ ...pushed, title: "Trips" }} />
         <Stack.Screen name="trip" options={{ ...pushed, title: "Trip" }} />
+        <Stack.Screen name="alert/[id]" options={{ ...pushed, title: "Alert" }} />
         <Stack.Screen name="password" options={{ ...pushed, title: "Change password" }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="login" />
+        <Stack.Screen name="forgot" />
       </Stack.Protected>
     </Stack>
   );
@@ -82,6 +85,15 @@ function Screens() {
 }
 
 export default function RootLayout() {
+  // "Same as phone": when the phone switches between light and dark while the app is open,
+  // restart quickly so every screen (and the map) changes together instead of half-way.
+  useEffect(() => {
+    if (themeChoice !== "system") return;
+    const sub = Appearance.addChangeListener(({ colorScheme }) => {
+      if ((colorScheme === "dark") !== isDark) void reloadAppAsync("Phone switched light/dark").catch(() => undefined);
+    });
+    return () => sub.remove();
+  }, []);
   return (
     <SafeAreaProvider>
       <StatusBar style={isDark ? "light" : "dark"} />

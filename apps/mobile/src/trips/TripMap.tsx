@@ -16,7 +16,7 @@ export default function TripMap({ track, at }: { track: Track; at: [number, numb
     () => ({
       type: "FeatureCollection",
       features: [
-        { type: "Feature", properties: { color: "#15803d" }, geometry: { type: "Point", coordinates: track.at[0]! } },
+        { type: "Feature", properties: { color: "#136c35" }, geometry: { type: "Point", coordinates: track.at[0]! } },
         { type: "Feature", properties: { color: "#c42b2b" }, geometry: { type: "Point", coordinates: track.at[track.at.length - 1]! } }
       ]
     }),

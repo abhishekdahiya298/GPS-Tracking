@@ -1,7 +1,7 @@
 import { cn } from "@/lib/cn";
 import { Badge } from "../ui/badge";
 
-export type StatusTone = "success" | "warning" | "danger" | "info" | "neutral" | "primary";
+export type StatusTone = "success" | "warning" | "danger" | "info" | "neutral" | "primary" | "parked";
 
 /**
  * Coloured dot + text label, so status is never conveyed by colour alone.

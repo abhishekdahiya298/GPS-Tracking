@@ -1,8 +1,9 @@
 "use client";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { readMapIcons, useMapIcons } from "@/lib/map-icons";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Box, Check, ChevronDown, ChevronUp, Copy, Cpu, Crosshair, Download, Expand, ExternalLink, History, Layers, Locate, LocateFixed, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Share2, Shrink, Truck, X } from "lucide-react";
+import { Activity, Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Crosshair, Download, Expand, ExternalLink, Gauge, History, KeyRound, Layers, Locate, LocateFixed, MapPin, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Satellite, Share2, Shrink, Truck, Wifi, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,7 +11,7 @@ import { shapeRing } from "@rio-gps/core/geo";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
 import { Select } from "@/components/ui/input";
-import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
+import { VehiclePicture } from "@/components/app/vehicle-picture";
 import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
@@ -40,7 +41,29 @@ const STATE_HINT: Record<MapState, string> = {
   offline: "Tracker not reporting"
 };
 /** Badge grounds: the status colour's soft tint (text uses the status colour itself). */
-const STATE_TINT: Record<MapState, string> = { moving: "#e9f7ee", idle: "#fff5e1", stopped: "#e8f4fb", parked: "#e8f4fb", offline: "#eef0f3" };
+/** Soft status fill that also works in dark mode (mixed with the page background). */
+const tint = (c: string, pct = 20) => `color-mix(in srgb, ${c} ${pct}%, var(--color-background))`;
+const STATE_TINT: Record<MapState, string> = { moving: tint("#136c35"), idle: tint("#a3470a"), stopped: tint("#ad1f1f"), parked: tint("#6526d1"), offline: tint("#6b7280") };
+const PRIMARY = "#1d4ed8";
+/** "45 min", "2 h 05 min", "2 d 8 h" (same as the phone app). */
+function durationText(minutes: number): string {
+  const m = Math.max(0, Math.round(minutes));
+  if (m < 60) return `${m} min`;
+  if (m >= 1440) return `${Math.floor(m / 1440)} d ${Math.floor((m % 1440) / 60)} h`;
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
+}
+/** One of the four live facts under the speed: coloured like the phone app. */
+function Fact({ icon: Icon, label, value, color }: { icon: typeof Truck; label: string; value: string; color: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 rounded-lg border px-2 py-1.5" style={{ background: tint(color, 16), borderColor: tint(color, 35) }}>
+      <Icon className="size-3.5 shrink-0" style={{ color }} aria-hidden="true" />
+      <span className="flex min-w-0 flex-col">
+        <span className="text-[10px] font-semibold leading-3 text-muted-foreground">{label}</span>
+        <span className="truncate text-xs font-bold leading-4" style={{ color }}>{value}</span>
+      </span>
+    </div>
+  );
+}
 const STATE_BADGE: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", parked: "Unhooked", offline: "Offline" };
 /** Floating map controls: white, raised, 40px targets. */
 const MAP_BTN =
@@ -88,17 +111,6 @@ function StatusBadge({ state }: { state: MapState }) {
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="min-w-0 rounded-lg bg-muted px-3 py-2">
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="m-0 truncate text-[15px] font-semibold tabular-nums" title={hint}>
-        {value}
-      </dd>
-    </div>
-  );
-}
-
 export function LiveMap({
   offlineSeconds,
   groups = [],
@@ -117,6 +129,8 @@ export function LiveMap({
   const mapDiv = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MlMap | null>(null);
   const layer = useRef<FleetLayer | null>(null);
+  const icons = useMapIcons();
+  useEffect(() => layer.current?.setIconPrefs(icons), [icons]);
     const hover = useRef<Popup | null>(null);
   const fitted = useRef(false);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -232,6 +246,7 @@ export function LiveMap({
       }
     });
     layer.current = fl;
+    fl.setIconPrefs(readMapIcons());
 
     const addFences = (list: GeofenceDto[]) => {
       if (m.getSource("fences")) return;
@@ -658,12 +673,15 @@ export function LiveMap({
                         onClick={() => focus(d.deviceId)}
                         aria-pressed={active}
                         className={cn(
-                          "flex h-full w-full cursor-pointer items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left transition-colors hover:bg-muted",
+                          "relative flex h-full w-full cursor-pointer items-center gap-3 overflow-hidden rounded-lg border-0 bg-transparent px-3 text-left transition-colors hover:bg-muted",
                           active && "bg-primary-soft shadow-[inset_0_0_0_1px_var(--color-primary)] hover:bg-primary-soft"
                         )}
+                        style={active ? undefined : { backgroundImage: `linear-gradient(110deg, transparent 50%, ${tint(STATE_COLORS[r.state], 16)} 100%)` }}
                       >
-                        <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full" style={{ background: STATE_TINT[r.state], color: STATE_COLORS[r.state] }}>
-                          {d.vehicle ? <VehicleTypeIcon type={d.vehicle.type} className="size-4" /> : <Cpu className="size-4" />}
+                        <span aria-hidden="true" className="absolute inset-y-1.5 left-0 w-1 rounded-r" style={{ background: STATE_COLORS[r.state] }} />
+                        <span className="relative shrink-0">
+                          <VehiclePicture type={d.vehicle?.type} className="h-9 w-12" />
+                          <span aria-hidden="true" className="absolute -right-1 -top-1 size-3 rounded-full border-2 border-background" style={{ background: STATE_COLORS[r.state] }} />
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="flex min-w-0 items-baseline gap-1.5">
@@ -688,6 +706,49 @@ export function LiveMap({
     </>
   );
 
+  // Previous / next vehicle in the list order (Life360-style): edge chips, the card's arrows and ← / →.
+  const located = rows.filter((r) => r.d.location);
+  const selIdx = located.findIndex((r) => r.d.deviceId === selected);
+  const neighbour = (by: -1 | 1) => (selIdx < 0 || located.length < 2 ? undefined : located[(selIdx + by + located.length) % located.length]);
+  const prevRow = located.length > 2 || selIdx === 1 ? neighbour(-1) : undefined;
+  const nextRow = located.length > 2 || selIdx === 0 ? neighbour(1) : undefined;
+  const stepTo = (by: -1 | 1) => {
+    const n = neighbour(by);
+    if (n) focus(n.d.deviceId);
+  };
+  const stepRef = useRef(stepTo);
+  stepRef.current = stepTo;
+  useEffect(() => {
+    if (!selected) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      if (e.key === "ArrowLeft") stepRef.current(-1);
+      if (e.key === "ArrowRight") stepRef.current(1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected]);
+  const edgeChip = (r: (typeof rows)[number] | undefined, side: "left" | "right") =>
+    r && (
+      <button
+        key={`${side}-${r.d.deviceId}`}
+        type="button"
+        onClick={() => focus(r.d.deviceId)}
+        aria-label={`${side === "left" ? "Previous" : "Next"} vehicle: ${r.name}`}
+        className={cn(
+          "absolute top-[42%] z-[1] flex h-10 max-w-[180px] cursor-pointer items-center gap-1.5 border-0 bg-background px-2 text-xs font-bold text-foreground shadow-pop hover:bg-muted",
+          side === "left" ? "left-0 animate-slide-in-left rounded-r-full pl-1" : "right-0 animate-in rounded-l-full pr-1",
+          sel && !historyFor && side === "left" && "md:left-[392px]"
+        )}
+      >
+        {side === "left" && <ChevronLeft className="size-4 shrink-0 text-primary" aria-hidden="true" />}
+        <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: STATE_COLORS[r.state] }} />
+        <span className="truncate">{splitName(r.name).main}</span>
+        {side === "right" && <ChevronRight className="size-4 shrink-0 text-primary" aria-hidden="true" />}
+      </button>
+    );
+
   const vehicleCard = sel && !historyFor && (
     <section
       key={sel.deviceId}
@@ -699,19 +760,28 @@ export function LiveMap({
       )}
     >
       <div className="flex items-start gap-3">
-        <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full" style={{ background: STATE_TINT[selState], color: STATE_COLORS[selState] }}>
-          {sel.vehicle ? <VehicleTypeIcon type={sel.vehicle.type} className="size-5" /> : <Cpu className="size-5" />}
-        </span>
+        <VehiclePicture type={sel.vehicle?.type} className="h-12 w-16" />
         <div className="min-w-0 flex-1">
           <h2 className="m-0 flex min-w-0 items-baseline gap-1.5 text-base font-semibold">
             <span className="truncate">{splitName(deviceLabel(sel)).main}</span>
             {splitName(deviceLabel(sel)).imei && <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{splitName(deviceLabel(sel)).imei}</span>}
           </h2>
-          <p className="m-0 truncate text-xs text-muted-foreground">
-            {sel.vehicle ? [VEHICLE_TYPE_LABEL[asVehicleType(sel.vehicle.type)], sel.vehicle.licensePlate].filter(Boolean).join(" · ") : "GPS tracker · no vehicle linked"}
+          <p className="m-0 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <StatusBadge state={selState} />
+            <span className="truncate">{sel.vehicle ? [VEHICLE_TYPE_LABEL[asVehicleType(sel.vehicle.type)], sel.vehicle.licensePlate].filter(Boolean).join(" · ") : "GPS tracker · no vehicle linked"}</span>
           </p>
         </div>
-        <StatusBadge state={selState} />
+        {located.length > 1 && selIdx >= 0 && (
+          <span className="flex shrink-0 items-center rounded-full bg-primary-soft text-primary">
+            <button type="button" aria-label="Previous vehicle" title="Previous vehicle (←)" className="grid size-7 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-primary hover:bg-background" onClick={() => stepTo(-1)}>
+              <ChevronLeft className="size-4" aria-hidden="true" />
+            </button>
+            <span className="text-xs font-bold tabular-nums">{selIdx + 1}/{located.length}</span>
+            <button type="button" aria-label="Next vehicle" title="Next vehicle (→)" className="grid size-7 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-primary hover:bg-background" onClick={() => stepTo(1)}>
+              <ChevronRight className="size-4" aria-hidden="true" />
+            </button>
+          </span>
+        )}
         <button
           type="button"
           aria-label="Close vehicle details"
@@ -723,43 +793,80 @@ export function LiveMap({
       </div>
       {sel.location ? (
         <>
-          <dl className="m-0 grid grid-cols-3 gap-2">
-            <Stat label="Speed" value={u.fmtSpeed(sel.location.speedKph)} />
-            <Stat label="Engine" value={sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} />
-            <Stat label="Heading" value={selState === "moving" ? (compass(sel.location.headingDeg) ?? "–") : "–"} />
-          </dl>
-          <div className="grid gap-1 text-xs text-muted-foreground">
-            <span>
-              Updated <span className="font-medium text-foreground">{ago(sel.location.recordedAt, now)}</span> · {time.dateTimeSec(sel.location.recordedAt)} {time.abbr(sel.location.recordedAt)}
-            </span>
-            <div className="flex items-center gap-1">
-              <span className="sr-only">Last location: </span>
-              <span className="truncate tabular-nums">
-                {sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)}
-              </span>
-              <button
-                type="button"
-                aria-label="Copy coordinates"
-                className="grid size-6 shrink-0 cursor-pointer place-items-center rounded border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
-                onClick={() => {
-                  const text = `${sel.location!.latitude.toFixed(6)}, ${sel.location!.longitude.toFixed(6)}`;
-                  navigator.clipboard.writeText(text).then(
-                    () => toast.success("Coordinates copied."),
-                    () => toast.error("Couldn't copy. Select the coordinates and copy them.")
-                  );
-                }}
-              >
-                <Copy className="size-3.5" aria-hidden="true" />
-              </button>
-              <a
-                className="ml-auto inline-flex shrink-0 items-center gap-1 text-primary hover:underline"
-                href={`https://www.google.com/maps/search/?api=1&query=${sel.location.latitude.toFixed(6)},${sel.location.longitude.toFixed(6)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Google Maps <ExternalLink className="size-3" aria-hidden="true" />
-              </a>
+          {selState === "offline" || selState === "parked" ? (
+            // Not reporting: say so plainly instead of showing a speed that is no longer true.
+            <div className="flex items-center gap-3 rounded-lg px-3 py-2.5" style={{ background: tint(STATE_COLORS.idle) }}>
+              <Radio className="size-5 shrink-0" style={{ color: STATE_COLORS.idle }} aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="m-0 text-sm font-bold">{sel.lastSeenAt ? `Not reporting for ${durationText((now - Date.parse(sel.lastSeenAt)) / 60000)}` : "No report yet"}</p>
+                <p className="m-0 text-xs text-muted-foreground">{selState === "parked" ? "Unhooked trailer: it reports only on its own battery." : "Usually no power or no mobile signal."}</p>
+              </div>
             </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="relative flex items-center gap-2.5 overflow-hidden rounded-lg border border-border px-3 py-2 shadow-card">
+                <span aria-hidden="true" className="absolute inset-y-2 left-0 w-1 rounded-r" style={{ background: STATE_COLORS[selState] }} />
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: tint(STATE_COLORS[selState]) }}>
+                  <Gauge className="size-5" style={{ color: STATE_COLORS[selState] }} aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[11px] font-semibold text-muted-foreground">Speed</span>
+                  <span className="block truncate text-lg font-extrabold leading-6 tabular-nums">{u.fmtSpeed(selState === "moving" ? sel.location.speedKph : 0)}</span>
+                </span>
+              </div>
+              <div className="relative flex items-center gap-2.5 overflow-hidden rounded-lg border border-border px-3 py-2 shadow-card">
+                <span aria-hidden="true" className="absolute inset-y-2 left-0 w-1 rounded-r" style={{ background: PRIMARY }} />
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: tint(PRIMARY) }}>
+                  <Navigation2 className="size-5" style={{ color: PRIMARY, transform: `rotate(${selState === "moving" ? (sel.location.headingDeg ?? 0) : 0}deg)` }} aria-hidden="true" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[11px] font-semibold text-muted-foreground">{selState === "moving" && sel.location.headingDeg !== null ? `Heading ${Math.round(sel.location.headingDeg)}°` : "Heading"}</span>
+                  <span className="block truncate text-sm font-bold leading-6">{selState === "moving" ? (compass(sel.location.headingDeg) ?? "–") : STATE_BADGE[selState]}</span>
+                </span>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: tint(PRIMARY, 14) }}>
+            <MapPin className="size-4 shrink-0" style={{ color: PRIMARY }} aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <span className="sr-only">Last location: </span>
+              <p className="m-0 truncate text-sm font-semibold tabular-nums">
+                {sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)}
+              </p>
+              <p className="m-0 text-xs text-muted-foreground">
+                Updated <span className="font-medium text-foreground">{ago(sel.location.recordedAt, now)}</span> · {time.dateTimeSec(sel.location.recordedAt)} {time.abbr(sel.location.recordedAt)}
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Copy coordinates"
+              className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-background text-primary shadow-card hover:bg-muted"
+              onClick={() => {
+                const text = `${sel.location!.latitude.toFixed(6)}, ${sel.location!.longitude.toFixed(6)}`;
+                navigator.clipboard.writeText(text).then(
+                  () => toast.success("Coordinates copied."),
+                  () => toast.error("Couldn't copy. Select the coordinates and copy them.")
+                );
+              }}
+            >
+              <Copy className="size-3.5" aria-hidden="true" />
+            </button>
+            <a
+              className="grid size-8 shrink-0 place-items-center rounded-md bg-background text-primary shadow-card hover:bg-muted"
+              href={`https://www.google.com/maps/search/?api=1&query=${sel.location.latitude.toFixed(6)},${sel.location.longitude.toFixed(6)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open in Google Maps"
+              title="Open in Google Maps"
+            >
+              <ExternalLink className="size-3.5" aria-hidden="true" />
+            </a>
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            <Fact icon={KeyRound} label="Ignition" value={sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} color={sel.location.ignition === false ? STATE_COLORS.stopped : sel.location.ignition ? STATE_COLORS.moving : STATE_COLORS.offline} />
+            <Fact icon={Activity} label="Motion" value={STATE_BADGE[selState]} color={PRIMARY} />
+            <Fact icon={Satellite} label="GPS" value={now - Date.parse(sel.location.recordedAt) < 120_000 ? "Live" : ago(sel.location.recordedAt, now)} color={now - Date.parse(sel.location.recordedAt) < 120_000 ? STATE_COLORS.parked : STATE_COLORS.idle} />
+            <Fact icon={Wifi} label="Tracker" value={selState === "offline" || selState === "parked" ? "Offline" : "Online"} color={selState === "offline" || selState === "parked" ? STATE_COLORS.offline : STATE_COLORS.moving} />
           </div>
         </>
       ) : (
@@ -923,6 +1030,8 @@ export function LiveMap({
         </div>
 
         {vehicleCard}
+        {sel && !historyFor && edgeChip(prevRow, "left")}
+        {sel && !historyFor && edgeChip(nextRow, "right")}
 
         {follow && sel && (
           <div className="pointer-events-none absolute inset-x-0 top-16 z-[1] flex justify-center">

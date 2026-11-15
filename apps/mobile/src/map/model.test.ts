@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FleetDevice } from "../fleet/model";
-import { FOCUS_ZOOM, MAP_STYLES, focusZoom, TRAIL_POINTS, bearing, boundsOf, distanceKm, isMapStyleId, lerpLngLat, nextTrails, positionOf, readTap, shapeOf, shouldAnimate, spriteName, styleUrl, toFeatures, trailFeatures, zoneFeatures, type Zone } from "./model";
+import { FOCUS_ZOOM, MAP_STYLES, focusZoom, TRAIL_POINTS, bearing, boundsOf, distanceKm, isMapStyleId, lerpLngLat, nextTrails, iconName, iconPrefix, positionOf, readTap, shapeOf, shouldAnimate, spriteName, styleUrl, toFeatures, trailFeatures, zoneFeatures, type Zone } from "./model";
 
 const dev = (id: string, lat: number | null, lng: number | null, over: Partial<FleetDevice> = {}): FleetDevice => ({
   deviceId: id, model: "FTM880", name: null, deviceStatus: "active", vehicle: { id, name: `Truck ${id}`, licensePlate: null, type: "truck" }, connectivity: "online", lastSeenAt: "2026-10-09T12:00:00Z",
@@ -13,7 +13,7 @@ describe("map features", () => {
     const fc = toFeatures([dev("1", 43.5, -79.6), dev("2", null, null), dev("3", 0, 0), dev("4", 43.6, -79.7, { connectivity: "offline" })]);
     expect(fc.features.map((f) => f.properties.deviceId)).toEqual(["1", "4"]);
     expect(fc.features[0]!.geometry.coordinates).toEqual([-79.6, 43.5]);
-    expect(fc.features[0]!.properties).toMatchObject({ name: "Truck 1", state: "moving", color: "#15803d", heading: 90 });
+    expect(fc.features[0]!.properties).toMatchObject({ name: "Truck 1", state: "moving", color: "#136c35", heading: 90 });
     expect(fc.features[1]!.properties.state).toBe("offline");
   });
   it("gives a position only when there is one", () => {
@@ -57,6 +57,17 @@ describe("vehicle pictures and labels", () => {
     expect(shapeOf(undefined)).toBe("car");
     expect(spriteName("trailer", "parked")).toBe("veh-trailer-stopped");
     expect(spriteName("van", "never_seen")).toBe("veh-van-offline");
+  });
+
+  it("picks a 3D pin by kind, state and heading", () => {
+    expect(iconName("trailer", "parked")).toBe("pin-status-trailer-parked");
+    expect(iconName("van", "never_seen")).toBe("pin-status-van-offline");
+    expect(iconName("semi", "idle", { style: "circle", color: "type" })).toBe("circle-type-truck-idle");
+    expect(iconName("forklift", "moving", { style: "square", color: "status" })).toBe("square-status-asset-moving");
+    expect(iconName("bus", "moving", { style: "top", color: "status" })).toBe("top-truck-moving");
+    expect(iconName("trailer", "stopped", { style: "top", color: "type" })).toBe("top-trailer-stopped");
+    expect(iconPrefix({ style: "top", color: "type" })).toBe("top-");
+    expect(iconPrefix({ style: "pin", color: "type" })).toBe("pin-type-");
     const f = toFeatures([dev("1", 43.5, -79.6)], (k) => `${Math.round(k ?? 0)} km/h`).features[0]!;
     expect(f.properties.icon).toBe("veh-truck-moving");
     expect(f.properties.sub).toBe("60 km/h");

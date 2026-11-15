@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advance, buildTrack, dayLabel, dayRange, durationText, positionAt, progressOf, shiftDay, timeAtProgress, todayKey, trackBounds, type HistoryPoint } from "./model";
+import { advance, buildTrack, dayLabel, dayRange, durationText, stillSince, trackSummary, positionAt, progressOf, shiftDay, timeAtProgress, todayKey, trackBounds, type HistoryPoint } from "./model";
 
 const TZ = "America/Toronto";
 const pt = (iso: string, lat: number, lng: number, speedKph: number | null = 50): HistoryPoint => ({ recordedAt: iso, latitude: lat, longitude: lng, speedKph, headingDeg: null });
@@ -29,6 +29,7 @@ describe("days in the organization's time zone", () => {
   });
   it("writes durations", () => {
     expect([0, 45, 60, 125, 59.6].map(durationText)).toEqual(["0 min", "45 min", "1 h 00 min", "2 h 05 min", "1 h 00 min"]);
+    expect(durationText(3360)).toBe("2 d 8 h");
   });
 });
 
@@ -70,5 +71,27 @@ describe("playback", () => {
     const [w, s, e, n] = trackBounds(tiny);
     expect(e - w).toBeCloseTo(0.01);
     expect(n - s).toBeCloseTo(0.01);
+  });
+});
+
+describe("trackSummary", () => {
+  it("adds up the legs and finds the top speed", () => {
+    const track = { t: [0, 60000, 120000], at: [[-79.0, 43.0], [-79.0, 43.1], [-79.0, 43.2]] as [number, number][], speedKph: [null, 60, 72], startT: 0, endT: 120000 };
+    const s = trackSummary(track);
+    expect(s.distanceKm).toBeCloseTo(22.24, 1);
+    expect(s.durationMs).toBe(120000);
+    expect(s.maxSpeedKph).toBe(72);
+  });
+});
+
+describe("stillSince", () => {
+  const pt = (t: string, v: number | null) => ({ latitude: 1, longitude: 1, speedKph: v, headingDeg: null, recordedAt: t });
+  it("finds the first standing point after the last movement", () => {
+    expect(stillSince([pt("2026-11-15T08:00:00Z", 60), pt("2026-11-15T08:10:00Z", 2), pt("2026-11-15T09:00:00Z", 0)])).toEqual({ since: Date.parse("2026-11-15T08:10:00Z"), whole: false });
+  });
+  it("is null while moving or without points, and whole when it never moved", () => {
+    expect(stillSince([pt("2026-11-15T08:00:00Z", 0), pt("2026-11-15T08:10:00Z", 40)])).toBeNull();
+    expect(stillSince([])).toBeNull();
+    expect(stillSince([pt("2026-11-15T08:00:00Z", 0), pt("2026-11-15T09:00:00Z", null)])).toEqual({ since: Date.parse("2026-11-15T08:00:00Z"), whole: true });
   });
 });

@@ -40,12 +40,13 @@ export function Button({ title, onPress, loading, variant = "primary", disabled,
 }
 
 /** A labelled text field. `icon` sits at the start; a password field gets an eye to show what was typed. */
-export function Field({ label, ref, secureTextEntry, icon, ...input }: { label: string; ref?: Ref<TextInput>; icon?: IconName } & TextInputProps) {
+/** A labelled text input. `hideLabel` keeps the label for screen readers but not on screen (sign-in, where the placeholder and icon say it). */
+export function Field({ label, ref, secureTextEntry, icon, hideLabel = false, ...input }: { label: string; ref?: Ref<TextInput>; icon?: IconName; hideLabel?: boolean } & TextInputProps) {
   const [shown, setShown] = useState(false);
   const [focused, setFocused] = useState(false);
   return (
     <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+      {hideLabel ? null : <Text style={styles.label}>{label}</Text>}
       <View>
         <TextInput
           ref={ref}

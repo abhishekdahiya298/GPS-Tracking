@@ -60,10 +60,11 @@ export function dayLabel(day: string, today: string): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" }).format(new Date(`${day}T12:00:00Z`));
 }
 
-/** "45 min", "2 h 05 min". */
+/** "45 min", "2 h 05 min", "2 d 8 h". */
 export function durationText(minutes: number): string {
   const m = Math.max(0, Math.round(minutes));
   if (m < 60) return `${m} min`;
+  if (m >= 1440) return `${Math.floor(m / 1440)} d ${Math.floor((m % 1440) / 60)} h`;
   return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
 }
 
@@ -154,4 +155,40 @@ export function progressOf(track: Track, t: number): number {
 }
 export function timeAtProgress(track: Track, fraction: number): number {
   return track.startT + Math.min(1, Math.max(0, fraction)) * (track.endT - track.startT);
+}
+
+/** Great-circle distance between two [lng, lat] points, in km. */
+function legKm(a: [number, number], b: [number, number]): number {
+  const rad = Math.PI / 180;
+  const dLat = (b[1] - a[1]) * rad;
+  const dLng = (b[0] - a[0]) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * rad) * Math.cos(b[1] * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Distance, duration and top speed of a recorded route, from its own points. */
+export function trackSummary(track: Track): { distanceKm: number; durationMs: number; maxSpeedKph: number | null } {
+  let km = 0;
+  for (let i = 1; i < track.at.length; i++) km += legKm(track.at[i - 1]!, track.at[i]!);
+  const speeds = track.speedKph.filter((v): v is number => v !== null && Number.isFinite(v));
+  return { distanceKm: km, durationMs: track.endT - track.startT, maxSpeedKph: speeds.length ? Math.max(...speeds) : null };
+}
+
+
+/** Below this a vehicle counts as standing (GPS jitter can read a few km/h at rest). */
+const STILL_KPH = 5;
+
+/**
+ * Since when the vehicle has been standing, from its recorded points (oldest first): the time of
+ * the first point after its last movement. Null when the latest point is moving or there are no
+ * points. When it stood still for the whole window, `whole` is true ("here for 12 h+").
+ */
+export function stillSince(points: HistoryPoint[]): { since: number; whole: boolean } | null {
+  if (points.length === 0) return null;
+  const moving = (p: HistoryPoint) => (p.speedKph ?? 0) >= STILL_KPH;
+  if (moving(points[points.length - 1]!)) return null;
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (moving(points[i]!)) return { since: Date.parse(points[i + 1]!.recordedAt), whole: false };
+  }
+  return { since: Date.parse(points[0]!.recordedAt), whole: true };
 }

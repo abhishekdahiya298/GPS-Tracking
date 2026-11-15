@@ -53,7 +53,7 @@ export function LoadAttentionCard({ d, limit = 6, className }: { d: LoadDashboar
             <CheckCircle2 className="size-5" aria-hidden="true" />
           </span>
           <span>
-            <span className="block font-semibold text-[#0a2463]">Every load is on track</span>
+            <span className="block font-semibold text-[#0a2463] dark:text-foreground">Every load is on track</span>
             <span className="text-muted-foreground">Late, silent or paused loads show up here first.</span>
           </span>
         </CardContent>
@@ -112,8 +112,8 @@ export function TodayStopsCard({ d, timeZone, timeFormat }: { d: LoadDashboard; 
             return (
               <li key={`${l.id}-${stop}`}>
                 <Link href={`/loads/${l.id}`} className="flex items-center gap-3 px-4 py-3 text-sm text-foreground no-underline hover:bg-primary-soft/40 sm:px-5">
-                  <span className={cn("w-[4.5rem] shrink-0 whitespace-nowrap font-semibold tabular-nums", past ? "text-muted-foreground" : "text-[#0a2463]")}>{f.time(new Date(at))}</span>
-                  <span className={cn("size-2.5 shrink-0 rounded-full", stop === "pickup" ? "bg-[#15803d]" : "bg-[#c81e2b]")} aria-hidden="true" />
+                  <span className={cn("w-[4.5rem] shrink-0 whitespace-nowrap font-semibold tabular-nums", past ? "text-muted-foreground" : "text-[#0a2463] dark:text-foreground")}>{f.time(new Date(at))}</span>
+                  <span className={cn("size-2.5 shrink-0 rounded-full", stop === "pickup" ? "bg-[#136c35]" : "bg-[#c81e2b]")} aria-hidden="true" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">
                       {stop === "pickup" ? "Pickup" : "Delivery"} · {shortPlace(s.name, s.address)}
@@ -151,13 +151,13 @@ export function DeliveriesCard({ d, timeZone, timeFormat }: { d: LoadDashboard; 
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg bg-muted/60 px-3 py-2.5">
             <p className="m-0 text-xs text-muted-foreground">Delivered this month</p>
-            <p className="m-0 mt-0.5 text-2xl font-semibold tabular-nums text-[#0a2463]">{d.month.delivered}</p>
+            <p className="m-0 mt-0.5 text-2xl font-semibold tabular-nums text-[#0a2463] dark:text-foreground">{d.month.delivered}</p>
           </div>
           <div className="rounded-lg bg-muted/60 px-3 py-2.5">
             <p className="m-0 flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="size-3" aria-hidden="true" /> On time this month
             </p>
-            <p className="m-0 mt-0.5 text-2xl font-semibold tabular-nums text-[#0a2463]">{onTimePct === null ? "—" : `${onTimePct}%`}</p>
+            <p className="m-0 mt-0.5 text-2xl font-semibold tabular-nums text-[#0a2463] dark:text-foreground">{onTimePct === null ? "—" : `${onTimePct}%`}</p>
             <p className="m-0 text-[11px] text-muted-foreground">{onTimePct === null ? "Needs delivery appointments" : `${d.month.onTime} of ${d.month.withAppointment} with an appointment`}</p>
           </div>
         </div>

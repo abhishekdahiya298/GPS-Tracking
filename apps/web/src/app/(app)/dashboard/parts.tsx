@@ -48,9 +48,9 @@ export function Hero({ greeting, orgName, dateLabel, summary, action }: { greeti
 
 /** Solid colour per status. Every pair is white text on a background of at least 4.5:1 contrast. */
 export const TILE_LOOK = {
-  moving: "bg-[linear-gradient(135deg,#15803d,#166534)]",
-  idle: "bg-[linear-gradient(135deg,#b45309,#92400e)]",
-  stopped: "bg-[linear-gradient(135deg,#0369a1,#075985)]",
+  moving: "bg-[linear-gradient(135deg,#136c35,#166534)]",
+  idle: "bg-[linear-gradient(135deg,#a3470a,#9a3412)]",
+  stopped: "bg-[linear-gradient(135deg,#ad1f1f,#991b1b)]",
   offline: "bg-[linear-gradient(135deg,#526079,#3b4558)]",
   alert: "bg-[linear-gradient(135deg,#c81e2b,#991b1b)]",
   calm: "bg-[linear-gradient(135deg,#0a2463,#12357f)]",
@@ -93,7 +93,7 @@ export function QuickAction({ href, icon: Icon, label, hint, tone }: { href: str
         <Icon className="size-[18px]" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-[#0a2463]">{label}</span>
+        <span className="block truncate text-sm font-semibold text-[#0a2463] dark:text-foreground">{label}</span>
         <span className="block truncate text-xs text-muted-foreground">{hint}</span>
       </span>
       <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />

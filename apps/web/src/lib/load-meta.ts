@@ -61,8 +61,8 @@ export const MOVING_KPH = 8;
 const MOVING_FRESH_MS = 10 * 60_000;
 
 export const MOTION_META: Record<LoadMotion, { label: string; color: string; order: number }> = {
-  moving: { label: "Moving", color: "#15803d", order: 2 },
-  stopped: { label: "Stopped", color: "#0369a1", order: 3 },
+  moving: { label: "Moving", color: "#136c35", order: 2 },
+  stopped: { label: "Stopped", color: "#ad1f1f", order: 3 },
   paused: { label: "Driver paused", color: "#b45309", order: 1 },
   no_signal: { label: "No signal", color: "#6b7280", order: 0 },
   waiting: { label: "Waiting for driver", color: "#9ca3af", order: 4 }

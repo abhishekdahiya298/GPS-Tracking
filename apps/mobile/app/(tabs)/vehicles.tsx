@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Platform, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { Banner, Chip, EmptyState, ListSkeleton, RowLine, ScreenHeader, SearchBox, groupedRow } from "@/components/kit";
+import { Banner, Chip, EmptyState, ListSkeleton, ScreenHeader, SearchBox, Segmented } from "@/components/kit";
 import { FadeInUp, LoadingBar } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
@@ -9,9 +9,13 @@ import { FILTERS, STATE_META, countByFilter, selectDevices, type FleetDevice, ty
 import { ROW_HEIGHT, VehicleRow } from "@/fleet/VehicleRow";
 import { colors, space } from "@/theme";
 
+type Kind = "all" | "truck" | "trailer" | "asset";
+/** Anything with an engine (truck, semi, van, pickup, car, bus) is a vehicle; trailers on their own; equipment and other are assets. */
+const kindOf = (type: string | null | undefined): Exclude<Kind, "all"> => (type === "trailer" ? "trailer" : type === "equipment" || type === "other" || !type ? "asset" : "truck");
+
 export default function VehiclesScreen() {
   const router = useRouter();
-  const { devices, loading, error, units, refresh } = useFleet();
+  const { devices, loading, error, units, orgName, refresh } = useFleet();
   const now = useNow();
   const params = useLocalSearchParams<{ filter?: string }>();
   const [filter, setFilter] = useState<FleetFilter>("all");
@@ -26,8 +30,11 @@ export default function VehiclesScreen() {
   const [search, setSearch] = useState("");
   const [pulling, setPulling] = useState(false);
 
-  const counts = useMemo(() => countByFilter(devices), [devices]);
-  const rows = useMemo(() => selectDevices(devices, filter, search), [devices, filter, search]);
+  // Trucks / trailers / other assets, from each vehicle's type on the website.
+  const [kind, setKind] = useState<Kind>("all");
+  const ofKind = useMemo(() => (kind === "all" ? devices : devices.filter((d) => kindOf(d.vehicle?.type) === kind)), [devices, kind]);
+  const counts = useMemo(() => countByFilter(ofKind), [ofKind]);
+  const rows = useMemo(() => selectDevices(ofKind, filter, search), [ofKind, filter, search]);
 
   async function onPull() {
     setPulling(true);
@@ -36,22 +43,30 @@ export default function VehiclesScreen() {
   }
 
   const open = useCallback((deviceId: string) => router.push({ pathname: "/vehicle/[id]", params: { id: deviceId } }), [router]);
-  const last = rows.length - 1;
   const row = useCallback(
-    ({ item, index }: { item: FleetDevice; index: number }) => (
-      <View style={groupedRow(index === 0, index === last)}>
-        <VehicleRow device={item} fmtSpeed={units.fmtSpeed} now={now} onPress={open} />
-      </View>
+    ({ item }: { item: FleetDevice }) => (
+      <VehicleRow device={item} fmtSpeed={units.fmtSpeed} now={now} onPress={open} />
     ),
-    [last, now, open, units.fmtSpeed]
+    [now, open, units.fmtSpeed]
   );
 
   const header = (
-    <ScreenHeader title="Vehicles" badge={loading ? undefined : String(devices.length)}>
+    <ScreenHeader org={orgName} title="Vehicles" badge={loading ? undefined : String(devices.length)}>
       <SearchBox value={search} onChangeText={setSearch} placeholder="Search name or plate" label="Search vehicles" />
+      <Segmented
+        label="Kind of vehicle"
+        value={kind}
+        onChange={setKind}
+        options={[
+          { value: "all", label: "All" },
+          { value: "truck", label: "Vehicles" },
+          { value: "trailer", label: "Trailers" },
+          { value: "asset", label: "Assets" }
+        ]}
+      />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
         {FILTERS.map((f) => (
-          <Chip key={f.key} label={f.label} count={loading ? undefined : counts[f.key]} selected={f.key === filter} dot={f.key === "all" ? undefined : STATE_META[f.key].color} onPress={() => setFilter(f.key)} />
+          <Chip key={f.key} label={f.label} count={loading ? undefined : counts[f.key]} selected={f.key === filter} dot={f.key === "all" ? undefined : STATE_META[f.key].color} glyph={f.key} onPress={() => setFilter(f.key)} />
         ))}
       </ScrollView>
     </ScreenHeader>
@@ -90,9 +105,8 @@ export default function VehiclesScreen() {
           data={rows}
           keyExtractor={keyOf}
           renderItem={row}
-          ItemSeparatorComponent={RowLine}
           // Every row has the same height, so the list never has to measure one.
-          getItemLayout={(_, index) => ({ length: ROW_HEIGHT + StyleSheet.hairlineWidth, offset: (ROW_HEIGHT + StyleSheet.hairlineWidth) * index + space.xs, index })}
+          getItemLayout={(_, index) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index + space.xs, index })}
           refreshControl={<RefreshControl refreshing={pulling} onRefresh={onPull} tintColor={colors.primary} colors={[colors.primary]} />}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"

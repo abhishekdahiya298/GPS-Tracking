@@ -6,7 +6,8 @@ import { ApiError, api, type ReadyResponse } from "@/api";
 import { useSession } from "@/auth/SessionProvider";
 import { Ionicons } from "@expo/vector-icons";
 import { reloadAppAsync } from "expo";
-import { Card, ScreenHeader, SectionLabel, Segmented } from "@/components/kit";
+import { Card, IconWell, ScreenHeader, SectionLabel, Segmented } from "@/components/kit";
+import { MapIconPicker } from "@/map/MapIconPicker";
 import { FadeInUp, PressableScale, PulseDot } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { API_BASE_URL } from "@/config";
@@ -24,7 +25,7 @@ export default function AccountScreen() {
   const [check, setCheck] = useState<Check>({ state: "checking" });
   const [leaving, setLeaving] = useState(false);
   const router = useRouter();
-  const { timeFormat } = useFleet();
+  const { timeFormat, orgName } = useFleet();
   const [push, setPush] = useState<PushPrefs>(DEFAULT_PREFS);
   const [pushBusy, setPushBusy] = useState(false);
   const [look, setLook] = useState<ThemeChoice>(themeChoice);
@@ -97,7 +98,7 @@ export default function AccountScreen() {
 
   return (
     <View style={styles.wrap}>
-      <ScreenHeader title="Account" />
+      <ScreenHeader org={orgName} title="Account" />
       <ScrollView contentContainerStyle={styles.content}>
         <FadeInUp index={0}>
           <Card style={styles.profile}>
@@ -115,7 +116,7 @@ export default function AccountScreen() {
           <SectionLabel text="Notifications" />
           <Card style={styles.group}>
             <View style={styles.setting}>
-              <Ionicons name="notifications-outline" size={size.icon} color={colors.mutedForeground} />
+              <IconWell icon="notifications-outline" box={34} />
               <View style={styles.flex}>
                 <Text style={styles.settingTitle}>Alert notifications</Text>
                 <Text style={type.small}>On this phone, even when the app is closed.</Text>
@@ -136,7 +137,7 @@ export default function AccountScreen() {
               : null}
             {push.enabled ? (
               <View style={[styles.setting, styles.line]}>
-                <Ionicons name="moon-outline" size={size.icon} color={colors.mutedForeground} />
+                <IconWell icon="moon-outline" color="#4f46e5" soft="#dfe1fb" box={34} />
                 <View style={styles.flex}>
                   <Text style={styles.settingTitle}>Quiet hours</Text>
                   <Text style={type.small}>{push.quiet ? `${clockText(push.quietStart, timeFormat)} to ${clockText(push.quietEnd, timeFormat)}` : "No notifications at night."}</Text>
@@ -167,12 +168,17 @@ export default function AccountScreen() {
           />
         </FadeInUp>
 
+        <FadeInUp index={2}>
+          <SectionLabel text="Map icons" />
+          <MapIconPicker />
+        </FadeInUp>
+
         <FadeInUp index={3}>
           <SectionLabel text="Account" />
           <Card style={styles.group}>
-            <LinkRow icon="lock-closed-outline" label="Change password" onPress={() => router.push("/password")} />
-            <LinkRow icon="help-circle-outline" label="Help" onPress={() => void Linking.openURL("https://www.riogps.com/help")} />
-            <LinkRow icon="shield-checkmark-outline" label="Privacy policy" onPress={() => void Linking.openURL("https://www.riogps.com/privacy")} last />
+            <LinkRow icon="lock-closed-outline" label="Change password" onPress={() => router.push("/password")} color="#6526d1" soft="#dccdfa" />
+            <LinkRow icon="help-circle-outline" label="Help" onPress={() => void Linking.openURL("https://www.riogps.com/help")} color="#136c35" soft="#c8e8d2" />
+            <LinkRow icon="shield-checkmark-outline" label="Privacy policy" onPress={() => void Linking.openURL("https://www.riogps.com/privacy")} color="#a3470a" soft="#fcd9b2" last />
           </Card>
         </FadeInUp>
 
@@ -219,10 +225,10 @@ function TimeStep({ label, value, disabled, onStep }: { label: string; value: st
   );
 }
 
-function LinkRow({ icon, label, onPress, last }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; last?: boolean }) {
+function LinkRow({ icon, label, onPress, last, color = colors.primary, soft = colors.primarySoft }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; last?: boolean; color?: string; soft?: string }) {
   return (
     <PressableScale onPress={onPress} scaleTo={0.985} style={[styles.link, !last && styles.linkLine]} accessibilityRole="button" accessibilityLabel={label}>
-      <Ionicons name={icon} size={size.icon} color={colors.mutedForeground} />
+      <IconWell icon={icon} color={color} soft={soft} box={34} />
       <Text style={styles.linkText}>{label}</Text>
       <Ionicons name="chevron-forward" size={18} color={colors.borderStrong} />
     </PressableScale>

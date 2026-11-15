@@ -5,6 +5,7 @@
  * slowed down. Clicking a vehicle opens Live tracking focused on it; there are no other tools here.
  */
 import "maplibre-gl/dist/maplibre-gl.css";
+import { readMapIcons, useMapIcons } from "@/lib/map-icons";
 import type { Map as MlMap, Popup } from "maplibre-gl";
 import { preferredStyleUrl } from "@/lib/map-style";
 import { Maximize2, Radio } from "lucide-react";
@@ -102,6 +103,8 @@ function GlanceMap({ offlineSeconds }: { offlineSeconds: number }) {
   const div = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const layer = useRef<FleetLayer | null>(null);
+  const icons = useMapIcons();
+  useEffect(() => layer.current?.setIconPrefs(icons), [icons]);
   const fitted = useRef(false);
   const [failed, setFailed] = useState(false);
 
@@ -169,6 +172,7 @@ function GlanceMap({ offlineSeconds }: { offlineSeconds: number }) {
           }
         });
         layer.current = fl;
+        fl.setIconPrefs(readMapIcons());
         m.on("load", () => {
           fl.install();
           fl.setLabels(true);

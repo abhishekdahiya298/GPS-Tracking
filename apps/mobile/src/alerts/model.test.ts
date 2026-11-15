@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alertDetail, alertMeta, alertTitle, badgeText, markRead, mergeEvents, type AlertEvent } from "./model";
+import { alertDetail, alertMeta, alertSeverity, alertTitle, badgeText, markRead, mergeEvents, type AlertEvent } from "./model";
 
 const ev = (over: Partial<AlertEvent> = {}): AlertEvent => ({
   id: 1, type: "speeding", ruleName: "Highway limit", deviceId: "d", vehicleId: "v", vehicleName: "Truck 1",
@@ -55,5 +55,14 @@ describe("list handling", () => {
   });
   it("shows a badge only when something is unread, capped at 99+", () => {
     expect([0, -1, 1, 99, 100].map(badgeText)).toEqual([undefined, undefined, "1", "99", "99+"]);
+  });
+});
+
+describe("alertSeverity", () => {
+  it("matches the website's table", () => {
+    expect(alertSeverity("speeding")).toBe("high");
+    expect(alertSeverity("device_offline")).toBe("medium");
+    expect(alertSeverity("geofence_enter")).toBe("info");
+    expect(alertSeverity("something_new")).toBe("info");
   });
 });

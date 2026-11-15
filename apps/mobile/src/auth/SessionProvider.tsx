@@ -13,6 +13,8 @@ interface SessionValue {
   state: State;
   signIn(email: string, password: string): Promise<SignInResult>;
   verifyCode(pending: string, code: string, kind: CodeKind): Promise<void>;
+  /** Emails a reset link (the server answers the same for unknown addresses). */
+  requestPasswordReset(email: string): Promise<void>;
   signOut(): Promise<void>;
 }
 
@@ -77,6 +79,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (result.step === "done") await enter(result.user);
         return result;
       },
+      requestPasswordReset: (email) => auth.requestPasswordReset(email),
       async verifyCode(pending, code, kind) {
         await auth.verifyCode(pending, code, kind);
         await enter(null);

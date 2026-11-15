@@ -93,6 +93,20 @@ export function createAuthService(deps: { api: ApiClient; tokens: TokenStore; ba
       await keepToken(headers);
     },
 
+    /**
+     * Ask the server to email a reset link. It answers the same whether or not the address has
+     * an account, so the app always says "check your email". The link opens the website.
+     */
+    async requestPasswordReset(email: string): Promise<void> {
+      await api.send<unknown>("request-password-reset", {
+        method: "POST",
+        area: "auth",
+        anonymous: true,
+        headers: { Origin: origin },
+        body: { email: email.trim(), redirectTo: "/reset-password" }
+      });
+    },
+
     /** The signed-in person, or null when the token is missing or no longer valid (it is then cleared). */
     async currentUser(): Promise<SessionUser | null> {
       if (!(await tokens.get())) return null;
