@@ -11,7 +11,7 @@ import { colors, space } from "@/theme";
 
 export default function VehiclesScreen() {
   const router = useRouter();
-  const { devices, loading, error, units, refresh } = useFleet();
+  const { devices, loading, error, units, orgName, refresh } = useFleet();
   const now = useNow();
   const params = useLocalSearchParams<{ filter?: string }>();
   const [filter, setFilter] = useState<FleetFilter>("all");
@@ -44,7 +44,7 @@ export default function VehiclesScreen() {
   );
 
   const header = (
-    <ScreenHeader title="Vehicles" badge={loading ? undefined : String(devices.length)}>
+    <ScreenHeader org={orgName} title="Vehicles" badge={loading ? undefined : String(devices.length)}>
       <SearchBox value={search} onChangeText={setSearch} placeholder="Search name or plate" label="Search vehicles" />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled">
         {FILTERS.map((f) => (

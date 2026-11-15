@@ -115,3 +115,21 @@ export function badgeText(unread: number): string | undefined {
   if (unread <= 0) return undefined;
   return unread > 99 ? "99+" : String(unread);
 }
+
+/** How urgent an alert type is, the same table as the website (lib/alert-meta.ts). */
+export type AlertSeverity = "high" | "medium" | "info";
+const SEVERITY: Record<string, AlertSeverity> = {
+  speeding: "high",
+  load_late: "high",
+  device_offline: "medium",
+  load_no_signal: "medium",
+  load_paused: "medium"
+};
+export function alertSeverity(type: string): AlertSeverity {
+  return SEVERITY[type] ?? "info";
+}
+export const SEVERITY_META: Record<AlertSeverity, { label: string; color: string; soft: string }> = {
+  high: { label: "High", color: "#c62828", soft: "#fdecec" },
+  medium: { label: "Medium", color: "#c2570c", soft: "#fff1e0" },
+  info: { label: "Info", color: "#1d4ed8", soft: "#eaf1ff" }
+};

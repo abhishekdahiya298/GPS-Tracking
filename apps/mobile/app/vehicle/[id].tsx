@@ -2,11 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Card, EmptyState, IconWell, StatusPill, VehicleAvatar } from "@/components/kit";
+import { AddressCard, Card, EmptyState, FactTile, IconWell, StatusPill, VehiclePicture } from "@/components/kit";
 import { FadeInUp, PressableScale } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { compassPoint, displayName, fleetState, statusLine, timeAgo } from "@/fleet/model";
+import { STATE_META, compassPoint, coordsText, displayName, fleetState, freshnessLine, sheetFacts, statusLine, timeAgo } from "@/fleet/model";
 import { useBottomInset } from "@/layout";
 import { colors, radius, size, space, type } from "@/theme";
 
@@ -53,12 +53,8 @@ export default function VehicleScreen() {
   }
 
   const kind = device.vehicle?.type;
-  const stats: Array<{ icon: keyof typeof Ionicons.glyphMap; label: string; value: string }> = [
-    { icon: "speedometer-outline", label: "Speed", value: loc && state !== "offline" && state !== "parked" ? units.fmtSpeed(loc.speedKph) : "—" },
-    { icon: "compass-outline", label: "Heading", value: loc?.headingDeg != null && point ? `${point} ${Math.round(loc.headingDeg)}°` : "—" },
-    { icon: "key-outline", label: "Engine", value: loc?.ignition === true ? "On" : loc?.ignition === false ? "Off" : "—" }
-  ];
-
+  const facts = sheetFacts(device, now);
+  const silent = state === "offline" || state === "parked" || state === "never_seen";
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={[styles.content, { paddingBottom: space.xl + bottom }]}>
       <Stack.Screen options={{ title: name }} />
@@ -66,41 +62,29 @@ export default function VehicleScreen() {
       <FadeInUp index={0}>
         <Card style={styles.hero}>
           <View style={styles.head}>
-            <VehicleAvatar type={kind} state={state} size={52} />
+            <VehiclePicture type={kind} width={104} height={76} />
             <View style={styles.flex}>
               <Text style={styles.name} numberOfLines={2}>{name}</Text>
               <Text style={type.small} numberOfLines={1}>
                 {[kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : null, device.vehicle?.licensePlate].filter(Boolean).join(" · ") || statusLine(device, units.fmtSpeed, now)}
               </Text>
-            </View>
-            <StatusPill state={state} compact />
-          </View>
-          <View style={styles.rule} />
-          <View style={styles.stats}>
-            {stats.map((s) => (
-              <View key={s.label} style={styles.stat}>
-                <View style={styles.statHead}>
-                  <Ionicons name={s.icon} size={14} color={colors.mutedForeground} />
-                  <Text style={type.caption}>{s.label}</Text>
-                </View>
-                <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{s.value}</Text>
+              <View style={styles.pillLine}>
+                <StatusPill state={state} compact />
               </View>
-            ))}
+            </View>
+          </View>
+          <View style={styles.stats}>
+            <FactTile icon="speedometer-outline" label="Speed" value={loc && !silent ? units.fmtSpeed(state === "moving" ? loc.speedKph : 0) : "—"} color={colors.primary} soft={colors.primarySoft} />
+            <FactTile icon="navigate-outline" label="Heading" value={loc?.headingDeg != null && point && state === "moving" ? `${point} ${Math.round(((loc.headingDeg % 360) + 360) % 360)}°` : "—"} color="#7c3aed" soft="#f3edff" />
+            <FactTile icon="key-outline" label="Ignition" value={facts.ignition} color={facts.ignition === "Off" ? STATE_META.stopped.color : STATE_META.moving.color} soft={facts.ignition === "Off" ? STATE_META.stopped.soft : STATE_META.moving.soft} />
+            <FactTile icon="wifi-outline" label="Tracker" value={facts.tracker.value} color={facts.tracker.online ? STATE_META.idle.color : STATE_META.offline.color} soft={facts.tracker.online ? STATE_META.idle.soft : STATE_META.offline.soft} valueColor={facts.tracker.online ? STATE_META.moving.color : STATE_META.offline.color} />
           </View>
         </Card>
       </FadeInUp>
 
       <FadeInUp index={1}>
         <Card style={styles.place}>
-          <View style={styles.placeHead}>
-            <IconWell icon="location-outline" />
-            <View style={styles.flex}>
-              <Text style={type.rowTitle}>{loc ? `Last position ${timeAgo(loc.recordedAt, now)}` : "No position yet"}</Text>
-              <Text style={[type.small, styles.tabular]} selectable>
-                {loc ? `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}` : "This tracker has not reported a position."}
-              </Text>
-            </View>
-          </View>
+          <AddressCard title={null} coords={coordsText(device) ?? "No position yet"} label={loc ? (silent ? `Last known position · ${freshnessLine(device, now)}` : freshnessLine(device, now)) : undefined} />
           {loc ? (
             <View style={styles.placeActions}>
               {hasMap ? (
@@ -145,13 +129,9 @@ const styles = StyleSheet.create({
   hero: { padding: 14, gap: space.md },
   head: { flexDirection: "row", alignItems: "center", gap: space.md },
   name: { fontSize: 20, lineHeight: 26, fontWeight: "700", letterSpacing: -0.2, color: colors.foreground },
-  rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  stats: { flexDirection: "row", gap: space.sm },
-  stat: { flex: 1, gap: 4 },
-  statHead: { flexDirection: "row", alignItems: "center", gap: 5 },
-  statValue: { fontSize: 17, lineHeight: 22, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
-  place: { padding: 14, gap: space.md },
-  placeHead: { flexDirection: "row", alignItems: "center", gap: space.md },
+  pillLine: { flexDirection: "row", marginTop: 4 },
+  stats: { flexDirection: "row", gap: 6 },
+  place: { padding: space.sm, gap: space.sm },
   placeActions: { flexDirection: "row", gap: space.sm },
   rows: { paddingVertical: 0, paddingHorizontal: 14 },
   row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.lg, minHeight: size.control, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },

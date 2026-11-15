@@ -19,12 +19,27 @@ export type IconName = keyof typeof Ionicons.glyphMap;
  * The top of a tab: a large title, an optional count badge beside it, and one action on the
  * right. It leaves room for the phone's status bar itself.
  */
-export function ScreenHeader({ title, badge, badgeTone = "brand", right, children }: { title: string; badge?: string; badgeTone?: "brand" | "danger"; right?: ReactNode; children?: ReactNode }) {
+/* eslint-disable-next-line @typescript-eslint/no-require-imports -- React Native loads images with require() */
+const LOGO = require("../../assets/logo.png") as number;
+
+/** The brand line at the top of the main tabs: logo, a thin rule and the organisation's name. */
+export function BrandRow({ org }: { org: string }) {
+  return (
+    <View style={styles.brandRow}>
+      <Image source={LOGO} style={styles.brandLogo} resizeMode="contain" accessibilityLabel="RIO GPS" />
+      {org ? <View style={styles.brandRule} /> : null}
+      <Text style={styles.brandOrg} numberOfLines={1}>{org}</Text>
+    </View>
+  );
+}
+
+export function ScreenHeader({ title, badge, badgeTone = "brand", right, org, children }: { title: string; badge?: string; badgeTone?: "brand" | "danger"; right?: ReactNode; org?: string; children?: ReactNode }) {
   const insets = useSafeAreaInsets();
   const tint = badgeTone === "danger" ? colors.danger : colors.primary;
   const soft = badgeTone === "danger" ? colors.dangerSoft : colors.primarySoft;
   return (
     <View style={[styles.header, { paddingTop: insets.top + space.sm }]}>
+      {org !== undefined ? <BrandRow org={org} /> : null}
       <View style={styles.headerRow}>
         <Text style={type.largeTitle} accessibilityRole="header" numberOfLines={1}>{title}</Text>
         {badge ? (
@@ -330,6 +345,10 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: size.controlSm },
   headerBadge: { paddingHorizontal: 9, paddingVertical: 2, borderRadius: 999 },
   headerBadgeText: { fontSize: font.small, lineHeight: 18, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: space.md, height: 40 },
+  brandLogo: { width: 68, height: 34 },
+  brandRule: { width: 1, height: 22, backgroundColor: colors.borderStrong },
+  brandOrg: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground },
   pill: { flexDirection: "row", alignItems: "center", gap: 5, paddingLeft: 8, paddingRight: 9, paddingVertical: 3, borderRadius: 999 },
   pillText: { fontSize: font.caption, lineHeight: 16, fontWeight: "700" },
   picture: { borderRadius: radius.lg, borderWidth: 1, borderColor: isDark ? colors.border : "#d3ddeb", backgroundColor: isDark ? "#1c2636" : "#e2eaf7", alignItems: "center", justifyContent: "center", overflow: "hidden" },

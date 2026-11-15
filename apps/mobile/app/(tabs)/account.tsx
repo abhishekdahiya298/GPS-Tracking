@@ -24,7 +24,7 @@ export default function AccountScreen() {
   const [check, setCheck] = useState<Check>({ state: "checking" });
   const [leaving, setLeaving] = useState(false);
   const router = useRouter();
-  const { timeFormat } = useFleet();
+  const { timeFormat, orgName } = useFleet();
   const [push, setPush] = useState<PushPrefs>(DEFAULT_PREFS);
   const [pushBusy, setPushBusy] = useState(false);
   const [look, setLook] = useState<ThemeChoice>(themeChoice);
@@ -97,7 +97,7 @@ export default function AccountScreen() {
 
   return (
     <View style={styles.wrap}>
-      <ScreenHeader title="Account" />
+      <ScreenHeader org={orgName} title="Account" />
       <ScrollView contentContainerStyle={styles.content}>
         <FadeInUp index={0}>
           <Card style={styles.profile}>

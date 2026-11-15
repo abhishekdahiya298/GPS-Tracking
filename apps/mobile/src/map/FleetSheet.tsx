@@ -43,7 +43,7 @@ export function FleetSheet({
     <Modal visible={visible} animationType="slide" presentationStyle={Platform.OS === "ios" ? "pageSheet" : "fullScreen"} onRequestClose={close}>
       <SafeAreaView style={styles.wrap} edges={Platform.OS === "ios" ? ["bottom"] : ["top", "bottom"]}>
         <View style={styles.head}>
-          <Text style={styles.title}>Find a vehicle</Text>
+          <Text style={styles.title}>{devices.length === 1 ? "1 vehicle" : `${devices.length} vehicles`}</Text>
           <Button variant="ghost" title="Done" onPress={close} />
         </View>
         <View style={styles.search}>

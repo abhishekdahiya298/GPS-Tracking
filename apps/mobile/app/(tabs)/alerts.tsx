@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useRouter } from "expo-router";
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { useAlerts } from "@/alerts/AlertsProvider";
-import { alertDetail, alertMeta, alertTitle, type AlertEvent } from "@/alerts/model";
+import { SEVERITY_META, alertDetail, alertMeta, alertSeverity, alertTitle, type AlertEvent } from "@/alerts/model";
 import { Banner, EmptyState, IconWell, ListSkeleton, RowLine, ScreenHeader, Segmented, groupedRow } from "@/components/kit";
 import { FadeInUp, LoadingBar, PressableScale } from "@/components/motion";
 import { Button } from "@/components/ui";
@@ -14,7 +14,7 @@ import { colors, font, size, space, type } from "@/theme";
 
 export default function AlertsScreen() {
   const { events, unread, unreadOnly, loading, loadingMore, hasMore, error, setUnreadOnly, refresh, loadMore, acknowledge } = useAlerts();
-  const { units, devices } = useFleet();
+  const { units, devices, orgName } = useFleet();
   const router = useRouter();
   const now = useNow();
   const [pulling, setPulling] = useState(false);
@@ -53,6 +53,12 @@ export default function AlertsScreen() {
         <IconWell icon={meta.icon} color={meta.color} soft={meta.soft} />
         <View style={styles.flex}>
           <Text style={[styles.title, isUnread && styles.titleUnread]} numberOfLines={2}>{alertTitle(item)}</Text>
+          <View style={styles.tagLine}>
+            <View style={[styles.tag, { backgroundColor: SEVERITY_META[alertSeverity(item.type)].soft }]}>
+              <Text style={[styles.tagText, { color: SEVERITY_META[alertSeverity(item.type)].color }]}>{SEVERITY_META[alertSeverity(item.type)].label}</Text>
+            </View>
+            <Text style={styles.typeText} numberOfLines={1}>{meta.label}</Text>
+          </View>
           <Text style={styles.sub} numberOfLines={2}>
             {detail ? `${detail} · ` : ""}
             {new Date(item.occurredAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
@@ -86,6 +92,7 @@ export default function AlertsScreen() {
   return (
     <View style={styles.wrap}>
       <ScreenHeader
+        org={orgName}
         title="Alerts"
         badge={unread > 0 ? `${unread} new` : undefined}
         badgeTone="danger"
@@ -156,6 +163,10 @@ const styles = StyleSheet.create({
   title: { fontSize: font.body, lineHeight: 20, fontWeight: "500", color: colors.foreground },
   titleUnread: { fontWeight: "700" },
   sub: { ...type.small, marginTop: 1 },
+  tagLine: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
+  tag: { paddingHorizontal: 7, paddingVertical: 1, borderRadius: 6 },
+  tagText: { fontSize: 11, lineHeight: 16, fontWeight: "700" },
+  typeText: { ...type.caption, flexShrink: 1 },
   side: { alignItems: "flex-end", gap: 6 },
   time: { ...type.caption, fontVariant: ["tabular-nums"] },
   read: { width: 36, height: size.controlSm, marginRight: -space.sm, alignItems: "center", justifyContent: "center" },
