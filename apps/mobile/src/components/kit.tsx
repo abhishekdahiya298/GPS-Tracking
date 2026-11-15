@@ -5,7 +5,6 @@
  */
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
-import { LinearGradient } from "expo-linear-gradient";
 import { Animated, Image, Pressable, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { STATE_META, type FleetState } from "../fleet/model";
@@ -136,25 +135,32 @@ export function MiniFact({ icon, label, value, color = colors.primary, soft = co
 }
 
 /** The speed band on a vehicle sheet: deep blue with white figures, speed on the left, what it is doing on the right. */
-export function SpeedBar({ speed, unit, title, detail, headingDeg }: { speed: string; unit: string; title: string; detail: string; headingDeg?: number | null }) {
+export function SpeedBar({ speed, unit, title, detail, headingDeg, state = "moving" }: { speed: string; unit: string; title: string; detail: string; headingDeg?: number | null; state?: FleetState }) {
+  const meta = STATE_META[state];
   return (
-    <LinearGradient colors={["#1d4ed8", "#0f2e8a"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.speedBar}>
-      <View style={styles.speedSide}>
-        <Ionicons name="speedometer-outline" size={28} color="#ffffff" />
-        <Text style={styles.speedValue} numberOfLines={1}>
-          {speed}
-          <Text style={styles.speedUnit}>{` ${unit}`}</Text>
-        </Text>
-      </View>
-      <View style={styles.speedRule} />
-      <View style={[styles.speedSide, styles.speedRight]}>
-        <Ionicons name="navigate-outline" size={22} color="#ffffff" style={{ transform: [{ rotate: `${(headingDeg ?? 45) - 45}deg` }] }} />
+    <View style={styles.speedRow}>
+      <View style={styles.speedCard}>
+        <View style={[styles.speedEdge, { backgroundColor: meta.color }]} />
+        <IconWell icon="speedometer-outline" color={meta.color} soft={meta.soft} box={38} />
         <View style={styles.flex}>
-          <Text style={styles.speedTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{title}</Text>
-          <Text style={styles.speedDetail} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{detail}</Text>
+          <Text style={styles.speedLabel}>Speed</Text>
+          <Text style={styles.speedValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+            {speed}
+            <Text style={styles.speedUnit}>{` ${unit}`}</Text>
+          </Text>
         </View>
       </View>
-    </LinearGradient>
+      <View style={styles.speedCard}>
+        <View style={[styles.speedEdge, { backgroundColor: colors.primary }]} />
+        <View style={[styles.speedWell, { backgroundColor: softTint(colors.primary, colors.primarySoft) }]}>
+          <Ionicons name="navigate-outline" size={19} color={ink(colors.primary)} style={{ transform: [{ rotate: `${(headingDeg ?? 45) - 45}deg` }] }} />
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.speedLabel} numberOfLines={1}>{detail}</Text>
+          <Text style={styles.speedTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{title}</Text>
+        </View>
+      </View>
+    </View>
   );
 }
 
@@ -373,14 +379,14 @@ const styles = StyleSheet.create({
   mini: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5, height: 40, paddingHorizontal: 6, borderRadius: radius.lg, borderWidth: 1 },
   miniLabel: { fontSize: 10, lineHeight: 12, color: colors.mutedForeground },
   miniValue: { fontSize: 12, lineHeight: 16, fontWeight: "800" },
-  speedBar: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, borderRadius: radius.xl + 2, ...elevation.md },
-  speedSide: { flexDirection: "row", alignItems: "center", gap: 8 },
-  speedRight: { flex: 1, minWidth: 0 },
-  speedRule: { width: 1, alignSelf: "stretch", backgroundColor: "rgba(255,255,255,0.3)", marginHorizontal: 12 },
-  speedValue: { fontSize: 28, lineHeight: 32, fontWeight: "800", color: "#ffffff", fontVariant: ["tabular-nums"] },
-  speedUnit: { fontSize: 15, fontWeight: "600", color: "rgba(255,255,255,0.85)" },
-  speedTitle: { fontSize: 13, lineHeight: 18, fontStyle: "italic", color: "rgba(255,255,255,0.85)" },
-  speedDetail: { fontSize: 15, lineHeight: 20, fontWeight: "800", color: "#ffffff", fontVariant: ["tabular-nums"] },
+  speedRow: { flexDirection: "row", gap: space.sm },
+  speedCard: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, paddingHorizontal: 12, borderRadius: radius.lg + 2, backgroundColor: colors.background, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: "hidden", ...elevation.sm },
+  speedEdge: { position: "absolute", left: 0, top: 10, bottom: 10, width: 4, borderTopRightRadius: 4, borderBottomRightRadius: 4 },
+  speedWell: { width: 38, height: 38, borderRadius: radius.md + 1, alignItems: "center", justifyContent: "center" },
+  speedLabel: { fontSize: 12, lineHeight: 16, fontWeight: "600", color: colors.mutedForeground },
+  speedValue: { fontSize: 22, lineHeight: 26, fontWeight: "800", color: colors.foreground, fontVariant: ["tabular-nums"] },
+  speedUnit: { fontSize: 13, fontWeight: "600", color: colors.mutedForeground },
+  speedTitle: { fontSize: 15, lineHeight: 20, fontWeight: "700", color: colors.foreground },
   address: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, paddingLeft: space.md, paddingRight: 6, borderRadius: radius.xl, backgroundColor: colors.primarySoft },
   addressTitle: { fontSize: 14, lineHeight: 20, fontWeight: "700", color: colors.foreground },
   addressCopy: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },

@@ -433,7 +433,7 @@ export default function LiveMap() {
         >
           {selected && selectedState ? (
             <ScrollView contentContainerStyle={styles.sheetBody} scrollEnabled={snap === "full"} showsVerticalScrollIndicator={false}>
-              <SpeedBar speed={speedText[0]} unit={speedText[1]} title={headline.title} detail={headline.detail} headingDeg={loc?.headingDeg ?? null} />
+              <SpeedBar speed={speedText[0]} unit={speedText[1]} title={headline.title} detail={headline.detail} headingDeg={loc?.headingDeg ?? null} state={selectedState === "never_seen" ? "offline" : selectedState} />
               <AddressCard title={null} coords={coordsText(selected) ?? "No position yet"} label={selectedState === "offline" || selectedState === "parked" ? "Last known position" : undefined} />
               {/* Four facts in one compact row: everything at a glance without lifting the sheet. */}
               <View style={styles.tiles}>
