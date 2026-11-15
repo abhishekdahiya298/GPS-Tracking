@@ -5,7 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAlerts } from "@/alerts/AlertsProvider";
-import { alertMeta, alertTitle } from "@/alerts/model";
+import { SEVERITY_META, alertDetail, alertMeta, alertSeverity, alertTitle } from "@/alerts/model";
 import { useSession } from "@/auth/SessionProvider";
 import { Banner, Card, IconWell, type IconName } from "@/components/kit";
 import { CountText, FadeInUp, LoadingBar, PressableScale, PulseDot, Skeleton } from "@/components/motion";
@@ -15,7 +15,7 @@ import { VehicleRow } from "@/fleet/VehicleRow";
 import { MiniFleetMap } from "@/map/MiniFleetMap";
 import { firstName, fleetSummary, greeting, needsAttention, onTheMove, type SummaryKey } from "@/home/model";
 import { Welcome } from "@/home/Welcome";
-import { colors, elevation, font, isDark, radius, size, space, type } from "@/theme";
+import { colors, elevation, font, ink, isDark, radius, size, softTint, space, type } from "@/theme";
 
 /* eslint-disable @typescript-eslint/no-require-imports -- React Native loads images with require() */
 const LOGO = require("../../assets/logo.png");
@@ -24,7 +24,6 @@ const MAP_PREVIEW = isDark ? require("../../assets/map-preview-dark.png") : requ
 
 /** Each status tile shows the same shape as the status badges: play, pause, square, no signal. */
 const TILE_ICON: Record<SummaryKey, IconName> = { moving: "play", idle: "pause", stopped: "square", offline: "cloud-offline-outline" };
-const ROW = 64;
 
 /** Home: the fleet at a glance. Status counts, the way into the map, who is on the move, and the latest alerts. */
 export default function HomeScreen() {
@@ -40,13 +39,13 @@ export default function HomeScreen() {
   const summary = useMemo(() => fleetSummary(devices), [devices]);
   // Who to show under "Latest vehicle activity": the moving ones first, then the freshest reports.
   const activity = useMemo(() => {
-    const moving = onTheMove(devices, 3);
-    if (moving.length >= 3) return moving;
+    const moving = onTheMove(devices, 2);
+    if (moving.length >= 2) return moving;
     const rest = devices.filter((d) => !moving.includes(d) && d.location).sort((a, b) => (b.location?.recordedAt ?? "").localeCompare(a.location?.recordedAt ?? ""));
-    return [...moving, ...rest].slice(0, 3);
+    return [...moving, ...rest].slice(0, 2);
   }, [devices]);
   const attention = useMemo(() => needsAttention(devices, displayName), [devices]);
-  const latest = events.slice(0, 3);
+  const latest = events.slice(0, 2);
   const name = firstName(user?.name);
   const live = connection === "live";
   const movingCount = summary.parts.find((p) => p.key === "moving")?.count ?? 0;
@@ -77,119 +76,119 @@ export default function HomeScreen() {
         {error && devices.length > 0 ? <Banner text={`Showing the last update. ${error}`} /> : null}
 
         <FadeInUp index={0} style={styles.hello}>
-          <Text style={type.largeTitle} accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-            {greeting(new Date(now).getHours())}
-            {name ? `, ${name}` : ""}
-          </Text>
-          <View style={styles.helloLine}>
-            <PulseDot size={7} color={live ? colors.success : colors.warning} live={live} />
-            <Text style={type.small}>
-              {loading ? "Loading your fleet…" : summary.total === 0 ? "No vehicles yet" : `${movingCount} of ${summary.total} on the road`} · {live ? "Live" : error ? "Offline" : "Updating"}
+          <View style={styles.flex}>
+            <Text style={styles.helloTitle} accessibilityRole="header" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {greeting(new Date(now).getHours())}
+              {name ? `, ${name}` : ""}
             </Text>
+            <Text style={type.small}>{loading ? "Loading your fleet…" : summary.total === 0 ? "No vehicles yet" : `${movingCount} of ${summary.total} on the road`}</Text>
+          </View>
+          <View style={[styles.livePill, { backgroundColor: softTint(live ? STATE_META.moving.color : STATE_META.idle.color, live ? STATE_META.moving.soft : STATE_META.idle.soft) }]}>
+            <PulseDot size={7} color={ink(live ? STATE_META.moving.color : STATE_META.idle.color)} live={live} />
+            <Text style={[styles.livePillText, { color: ink(live ? STATE_META.moving.color : STATE_META.idle.color) }]}>{live ? "Live" : error ? "Offline" : "Updating"}</Text>
           </View>
         </FadeInUp>
 
-        {/* The fleet total on navy, then one tinted tile per status. Each opens the vehicle list with that filter. */}
-        <FadeInUp index={1} style={styles.tiles}>
-          {/* The fleet total on a navy band, then one tile per status in a single row. Each opens the list with that filter. */}
-          <PressableScale onPress={() => router.navigate("/(tabs)/vehicles")} style={styles.total} accessibilityRole="button" accessibilityLabel={`${summary.total} vehicles, ${movingCount} on the road. Show them.`}>
-            <LinearGradient colors={["#1a3a8f", "#0f1f4d"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-            <View style={styles.totalWave} />
-            <View style={styles.totalIcon}>
-              <Ionicons name="bus-outline" size={24} color="#ffffff" />
+        {/* One card: the fleet on a live map, then the share of each status and a tile per status. */}
+        <FadeInUp index={1} style={styles.fleetCard}>
+          <PressableScale onPress={() => openMap()} feedback="press" scaleTo={0.99} style={styles.mapArea} accessibilityRole="button" accessibilityLabel="Open the live map">
+            {loading ? <Image source={MAP_PREVIEW} style={styles.mapImage} resizeMode="cover" /> : <MiniFleetMap devices={devices} />}
+            <View style={styles.mapChip}>
+              <Ionicons name="bus-outline" size={15} color={colors.foreground} />
+              <Text style={styles.mapChipText}>{loading ? "Your fleet" : `${summary.total} vehicle${summary.total === 1 ? "" : "s"}`}</Text>
             </View>
-            <View style={styles.flex}>
-              <Text style={styles.totalLabel}>Total vehicles</Text>
-              <Text style={styles.totalSub}>{loading ? "Loading…" : `${movingCount} on the road now`}</Text>
+            <View style={styles.mapOpen}>
+              <Text style={styles.mapOpenText}>Open map</Text>
+              <Ionicons name="arrow-forward" size={15} color="#ffffff" />
             </View>
-            {loading ? <Skeleton width={44} height={34} style={styles.countSkeleton} /> : <CountText value={summary.total} style={styles.totalValue} />}
           </PressableScale>
-          <View style={styles.tileRow}>
-            {summary.parts.map((p) => {
-              const soft = STATE_META[p.key].soft;
-              return (
+          <View style={styles.statArea}>
+            {summary.total > 0 ? (
+              <View style={styles.shareBar} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                {summary.parts.filter((p) => p.count > 0).map((p) => <View key={p.key} style={{ flex: p.count, backgroundColor: ink(p.color) }} />)}
+              </View>
+            ) : null}
+            <View style={styles.tileRow}>
+              {summary.parts.map((p) => (
                 <PressableScale
                   key={p.key}
                   onPress={() => router.navigate({ pathname: "/(tabs)/vehicles", params: { filter: p.key } })}
                   outerStyle={styles.tileSlot}
-                  style={[styles.tile, { borderColor: isDark ? colors.border : `${p.color}33` }]}
+                  style={[styles.tile, { backgroundColor: softTint(p.color, STATE_META[p.key].soft) }]}
                   accessibilityRole="button"
                   accessibilityLabel={`${p.count} ${p.label}. Show them.`}
                 >
-                  {isDark ? null : <LinearGradient colors={[soft, colors.background]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />}
-                  <View style={[styles.tileIcon, { backgroundColor: isDark ? colors.muted : `${p.color}1f` }]}>
-                    <Ionicons name={TILE_ICON[p.key]} size={p.key === "stopped" ? 12 : 15} color={p.color} />
+                  <View style={styles.tileTop}>
+                    <Ionicons name={TILE_ICON[p.key]} size={p.key === "stopped" ? 10 : 12} color={ink(p.color)} />
+                    {loading ? <Skeleton width={22} height={20} style={styles.countSkeleton} /> : <CountText value={p.count} style={[styles.tileValue, { color: ink(p.color) }]} />}
                   </View>
-                  {loading ? <Skeleton width={24} height={22} style={styles.countSkeleton} /> : <CountText value={p.count} style={styles.tileValue} />}
                   <Text style={styles.tileLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{p.label}</Text>
                 </PressableScale>
-              );
-            })}
+              ))}
+            </View>
           </View>
         </FadeInUp>
 
-        {/* The way into the live map. A drawn picture, not a second live map: it costs nothing to show. */}
-        <FadeInUp index={2}>
-          <PressableScale onPress={() => openMap()} feedback="press" scaleTo={0.985} style={styles.mapCard} accessibilityRole="button" accessibilityLabel="Open the live map">
-            {loading ? <Image source={MAP_PREVIEW} style={styles.mapImage} resizeMode="cover" /> : <MiniFleetMap devices={devices} />}
-            <View style={styles.mapChip}>
-              <PulseDot size={7} color={live ? colors.success : colors.warning} live={live} />
-              <Text style={styles.mapChipText}>{loading ? "Live fleet" : movingCount > 0 ? `${movingCount} moving now` : "Live fleet"}</Text>
-            </View>
-            <View style={styles.mapOpen}>
-              <Text style={styles.mapOpenText}>View map</Text>
-              <Ionicons name="arrow-forward" size={16} color={colors.primary} />
-            </View>
-          </PressableScale>
-        </FadeInUp>
-
         {attention.length > 0 ? (
-          <FadeInUp index={3}>
+          <FadeInUp index={2}>
             <SectionHead title="Needs attention" />
-            <Card style={styles.listCard}>
-              {attention.map((item, i) => (
-                <View key={item.key}>
-                  {i > 0 ? <View style={styles.line} /> : null}
-                  <PressableScale onPress={() => router.navigate({ pathname: "/(tabs)/vehicles", params: { filter: "offline" } })} scaleTo={0.985} style={styles.alert} accessibilityRole="button">
-                    <IconWell icon={item.key === "offline" ? "cloud-offline-outline" : "hourglass-outline"} color={item.key === "offline" ? STATE_META.offline.color : STATE_META.idle.color} soft={item.key === "offline" ? STATE_META.offline.soft : STATE_META.idle.soft} />
-                    <View style={styles.flex}>
-                      <Text style={styles.alertTitleBold} numberOfLines={1}>{item.title}</Text>
-                      <Text style={type.small} numberOfLines={1}>{item.detail}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.bleed} contentContainerStyle={styles.needRow}>
+              {attention.map((item) => {
+                const meta = item.key === "offline" ? STATE_META.offline : STATE_META.idle;
+                return (
+                  <PressableScale key={item.key} onPress={() => router.navigate({ pathname: "/(tabs)/vehicles", params: { filter: "offline" } })} scaleTo={0.97} style={styles.needCard} accessibilityRole="button" accessibilityLabel={`${item.title}. ${item.detail}`}>
+                    {isDark ? null : <LinearGradient colors={[colors.background, meta.soft]} locations={[0.35, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+                    <View style={[styles.edge, { backgroundColor: ink(meta.color) }]} />
+                    <View style={styles.needTop}>
+                      <IconWell icon={item.key === "offline" ? "cloud-offline-outline" : "hourglass-outline"} color={meta.color} soft={meta.soft} box={34} />
+                      <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color={colors.mutedForeground} />
+                    <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={type.small} numberOfLines={1}>{item.detail}</Text>
                   </PressableScale>
-                </View>
-              ))}
-            </Card>
+                );
+              })}
+            </ScrollView>
           </FadeInUp>
         ) : null}
 
-        <FadeInUp index={4}>
-          <SectionHead title="Recent alerts" action={latest.length > 0 ? "See all" : undefined} onAction={() => router.navigate("/(tabs)/alerts")} />
-          <Card style={styles.listCard}>
-            {latest.length === 0 ? (
-              <Text style={styles.quiet}>No alerts yet. Alert rules are set up on the website.</Text>
-            ) : (
-              latest.map((e, i) => {
+        <FadeInUp index={3}>
+          <SectionHead title="Recent alerts" action={latest.length > 0 ? "View all" : undefined} onAction={() => router.navigate("/(tabs)/alerts")} />
+          {latest.length === 0 ? (
+            <Card>
+              <Text style={styles.quietInCard}>No alerts yet. Alert rules are set up on the website.</Text>
+            </Card>
+          ) : (
+            <View style={styles.stack}>
+              {latest.map((e) => {
                 const meta = alertMeta(e.type);
+                const sev = SEVERITY_META[alertSeverity(e.type)];
+                const detail = alertDetail(e, units.fmtSpeed);
                 return (
-                  <View key={e.id}>
-                    {i > 0 ? <View style={styles.line} /> : null}
-                    <PressableScale onPress={() => router.push({ pathname: "/alert/[id]", params: { id: String(e.id) } })} scaleTo={0.985} style={styles.alert} accessibilityRole="button">
-                      <IconWell icon={meta.icon} color={meta.color} soft={meta.soft} />
-                      <View style={styles.flex}>
-                        <Text style={[styles.alertTitle, !e.acknowledgedAt && styles.alertUnread]} numberOfLines={1}>{alertTitle(e)}</Text>
-                        <Text style={type.small}>{timeAgo(e.occurredAt, now)}</Text>
+                  <PressableScale key={e.id} onPress={() => router.push({ pathname: "/alert/[id]", params: { id: String(e.id) } })} scaleTo={0.985} style={styles.alertCard} accessibilityRole="button">
+                    {isDark ? null : <LinearGradient colors={[colors.background, sev.soft]} locations={[0.4, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+                    <View style={[styles.edge, { backgroundColor: ink(sev.color) }]} />
+                    <IconWell icon={meta.icon} color={meta.color} soft={meta.soft} box={40} />
+                    <View style={styles.flex}>
+                      <View style={styles.alertHead}>
+                        <Text style={[styles.cardTitle, styles.shrink, !e.acknowledgedAt && styles.unreadTitle]} numberOfLines={1}>{alertTitle(e)}</Text>
+                        <View style={[styles.sevTag, { backgroundColor: softTint(sev.color, sev.soft) }]}>
+                          <Text style={[styles.sevText, { color: ink(sev.color) }]}>{sev.label}</Text>
+                        </View>
                       </View>
-                      {!e.acknowledgedAt ? <View style={styles.unreadDot} /> : null}
-                    </PressableScale>
-                  </View>
+                      <Text style={type.small} numberOfLines={1}>{detail || meta.label}</Text>
+                    </View>
+                    <View style={styles.alertSide}>
+                      <Text style={styles.alertTime}>{timeAgo(e.occurredAt, now).replace(" ago", "")}</Text>
+                      {!e.acknowledgedAt ? <View style={styles.unreadDot} /> : <Ionicons name="chevron-forward" size={16} color={colors.mutedForeground} />}
+                    </View>
+                  </PressableScale>
                 );
-              })
-            )}
-          </Card>
+              })}
+            </View>
+          )}
         </FadeInUp>
-        <FadeInUp index={5}>
+        <FadeInUp index={4}>
           <SectionHead title="Latest vehicle activity" action={activity.length > 0 ? "View all" : undefined} onAction={() => router.navigate("/(tabs)/vehicles")} />
           <View style={styles.cardList}>
             {loading ? (
@@ -232,41 +231,46 @@ const styles = StyleSheet.create({
   bell: { width: size.controlSm, height: size.controlSm, borderRadius: size.controlSm / 2, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
   bellDot: { position: "absolute", right: 10, top: 9, width: 10, height: 10, borderRadius: 5, backgroundColor: colors.danger, borderWidth: 2, borderColor: colors.background },
   content: { paddingHorizontal: space.lg, paddingTop: space.xs, paddingBottom: space.xl, gap: space.lg },
-  hello: { gap: 4 },
-  helloLine: { flexDirection: "row", alignItems: "center", gap: 6 },
-  live: { flexDirection: "row", alignItems: "center", gap: 6 },
-  liveText: { fontSize: font.caption, lineHeight: 16, fontWeight: "600" },
-  headlineSkeleton: { marginVertical: 3 },
-  tiles: { gap: space.sm },
-  total: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 84, paddingHorizontal: space.lg, borderRadius: radius.xl + 2, overflow: "hidden", ...elevation.md },
-  totalWave: { position: "absolute", right: -40, bottom: -50, width: 220, height: 110, borderRadius: 110, backgroundColor: "#2563eb", opacity: 0.35 },
-  totalIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
-  totalLabel: { fontSize: 16, lineHeight: 21, fontWeight: "700", color: "#ffffff" },
-  totalSub: { fontSize: 13, lineHeight: 18, color: "rgba(255,255,255,0.8)" },
-  totalValue: { fontSize: 38, lineHeight: 44, fontWeight: "800", color: "#ffffff", fontVariant: ["tabular-nums"] },
-  tileRow: { flexDirection: "row", gap: space.sm },
+  hello: { flexDirection: "row", alignItems: "flex-end", gap: space.md },
+  helloTitle: { fontSize: 24, lineHeight: 30, fontWeight: "700", letterSpacing: -0.4, color: colors.foreground },
+  livePill: { flexDirection: "row", alignItems: "center", gap: 5, height: 26, paddingHorizontal: 10, borderRadius: 13, marginBottom: 2 },
+  livePillText: { fontSize: 12, lineHeight: 16, fontWeight: "700" },
+  fleetCard: { borderRadius: radius.xl + 2, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.background, overflow: "hidden", ...elevation.md },
+  mapArea: { height: 232, backgroundColor: colors.muted, overflow: "hidden" },
+  statArea: { padding: 10, gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  shareBar: { flexDirection: "row", height: 6, borderRadius: 3, overflow: "hidden", gap: 2 },
+  tileRow: { flexDirection: "row", gap: 6 },
   tileSlot: { flex: 1 },
-  tile: { alignItems: "center", gap: 3, paddingTop: 10, paddingBottom: 9, paddingHorizontal: 4, borderRadius: radius.xl, borderWidth: 1, backgroundColor: colors.background, overflow: "hidden", ...elevation.sm },
-  tileIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
-  tileLabel: { fontSize: 12, lineHeight: 16, fontWeight: "600", color: colors.mutedForeground },
-  tileValue: { fontSize: 22, lineHeight: 26, fontWeight: "800", color: colors.foreground, fontVariant: ["tabular-nums"] },
+  tile: { alignItems: "center", gap: 1, paddingVertical: 7, paddingHorizontal: 2, borderRadius: radius.lg },
+  tileTop: { flexDirection: "row", alignItems: "center", gap: 4 },
+  tileLabel: { fontSize: 12, lineHeight: 15, fontWeight: "600", color: colors.foreground },
+  tileValue: { fontSize: 20, lineHeight: 24, fontWeight: "800", fontVariant: ["tabular-nums"] },
+  bleed: { marginHorizontal: -space.lg },
+  needRow: { paddingHorizontal: space.lg, gap: space.sm },
+  needCard: { width: 214, gap: 6, paddingVertical: space.md, paddingLeft: 15, paddingRight: space.md, borderRadius: radius.xl + 2, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.background, overflow: "hidden", ...elevation.sm },
+  needTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 2 },
+  edge: { position: "absolute", left: 0, top: 0, bottom: 0, width: 4 },
+  stack: { gap: space.sm },
+  alertCard: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 70, paddingVertical: 10, paddingLeft: 15, paddingRight: space.md, borderRadius: radius.xl + 2, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.background, overflow: "hidden", ...elevation.sm },
+  alertHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  shrink: { flexShrink: 1 },
+  cardTitle: { fontSize: font.body, lineHeight: 20, fontWeight: "700", color: colors.foreground },
+  unreadTitle: { fontWeight: "800" },
+  sevTag: { paddingHorizontal: 6, borderRadius: 5 },
+  sevText: { fontSize: 11, lineHeight: 17, fontWeight: "700" },
+  alertSide: { alignItems: "flex-end", gap: 8 },
+  alertTime: { ...type.caption, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  quietInCard: { ...type.body, color: colors.mutedForeground },
   cardSkeleton: { marginHorizontal: space.lg, marginBottom: 10 },
   countSkeleton: { marginVertical: 2 },
-  mapCard: { height: 168, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, overflow: "hidden", backgroundColor: colors.muted },
   mapImage: { position: "absolute", left: 0, top: 0, width: "100%", height: "100%" },
-  mapChip: { position: "absolute", left: 10, bottom: 10, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, height: 28, borderRadius: 14, backgroundColor: colors.background, ...elevation.sm },
-  mapChipText: { fontSize: font.caption, lineHeight: 16, fontWeight: "600", color: colors.foreground, fontVariant: ["tabular-nums"] },
-  mapOpen: { position: "absolute", right: 10, bottom: 10, flexDirection: "row", alignItems: "center", gap: 6, height: 34, paddingHorizontal: 14, borderRadius: 17, backgroundColor: colors.background, ...elevation.md },
-  mapOpenText: { fontSize: 14, lineHeight: 20, fontWeight: "700", color: colors.primary },
+  mapChip: { position: "absolute", left: 10, top: 10, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, height: 34, borderRadius: 17, backgroundColor: colors.background, ...elevation.md },
+  mapChipText: { fontSize: 13, lineHeight: 18, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
+  mapOpen: { position: "absolute", right: 10, top: 10, flexDirection: "row", alignItems: "center", gap: 4, height: 34, paddingHorizontal: 12, borderRadius: 17, backgroundColor: colors.primary, ...elevation.md },
+  mapOpenText: { fontSize: 13, lineHeight: 18, fontWeight: "700", color: "#ffffff" },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: space.sm, paddingHorizontal: 2 },
   sectionAction: { minHeight: 24, justifyContent: "center" },
   sectionActionText: { fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.primary },
-  listCard: { padding: 0, overflow: "hidden" },
   quiet: { ...type.body, padding: space.lg, color: colors.mutedForeground },
-  line: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: space.md + size.well + space.md },
-  alert: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, height: ROW },
-  alertTitleBold: { fontSize: font.body, lineHeight: 20, fontWeight: "700", color: colors.foreground },
-  alertTitle: { fontSize: font.body, lineHeight: 20, fontWeight: "500", color: colors.foreground },
-  alertUnread: { fontWeight: "700" },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary }
 });
