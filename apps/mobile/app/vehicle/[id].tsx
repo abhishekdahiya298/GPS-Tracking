@@ -1,14 +1,14 @@
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { AddressCard, Card, EmptyState, FactRow, IconWell, SpeedBar, StatusPill, VehiclePicture, type IconName } from "@/components/kit";
+import { Linking, Platform, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { AddressCard, Card, EmptyState, IconWell, StatusPill, VehiclePicture, type IconName } from "@/components/kit";
 import { FadeInUp, PressableScale } from "@/components/motion";
-import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { STATE_META, coordsText, displayName, fleetState, freshnessLine, sheetFacts, sheetHeadline, statusLine, timeAgo } from "@/fleet/model";
+import { STATE_META, coordsText, displayName, fleetState, freshnessLine, statusLine, timeAgo } from "@/fleet/model";
 import { useBottomInset } from "@/layout";
 import { MiniFleetMap } from "@/map/MiniFleetMap";
 import { useAddress } from "@/map/useAddress";
+import { ActionBar, FactStrip, factCellsFor } from "@/map/VehicleCard";
 import { TodayCard } from "@/trips/TodayCard";
 import { colors, radius, size, space, themed, type } from "@/theme";
 
@@ -54,17 +54,18 @@ export default function VehicleScreen() {
     Linking.openURL(url).catch(() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${at}`));
   }
 
+  const showOnMap = () => router.navigate({ pathname: "/(tabs)", params: { device: device.deviceId } });
+  /** Sends where the vehicle is now: its name, the address if known, and a map link. */
+  function shareLocation() {
+    if (!loc) return;
+    const at = `${loc.latitude.toFixed(5)},${loc.longitude.toFixed(5)}`;
+    const where = address?.label ?? address?.line1;
+    void Share.share({ message: `${name}${where ? `: ${where}` : ""}\nhttps://www.google.com/maps/search/?api=1&query=${at}` }).catch(() => undefined);
+  }
+
   const kind = device.vehicle?.type;
-  const facts = sheetFacts(device, now);
   const silent = state === "offline" || state === "parked" || state === "never_seen";
-  const headline = sheetHeadline(device, now);
   const address = useAddress(loc?.latitude, loc?.longitude, state === "moving");
-  const speedParts = ((): [string, string] => {
-    if (!loc || state === "offline" || state === "never_seen") return ["—", ""];
-    const t = units.fmtSpeed(state === "moving" ? loc.speedKph : 0);
-    const i = t.lastIndexOf(" ");
-    return i < 0 ? [t, ""] : [t.slice(0, i), t.slice(i + 1)];
-  })();
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={[styles.content, { paddingBottom: space.xl + bottom }]}>
       <Stack.Screen options={{ title: name }} />
@@ -83,30 +84,27 @@ export default function VehicleScreen() {
               </View>
             </View>
           </View>
-          <SpeedBar speed={speedParts[0]} unit={speedParts[1]} title={headline.title} detail={headline.detail} headingDeg={loc?.headingDeg ?? null} state={state === "never_seen" ? "offline" : state} />
-          <FactRow facts={facts} />
+          <FactStrip cells={factCellsFor(device, now, units.fmtSpeed)} />
         </Card>
       </FadeInUp>
 
       <FadeInUp index={1}>
         <Card style={styles.place}>
           {loc && hasMap ? (
-            <PressableScale onPress={() => router.navigate({ pathname: "/(tabs)", params: { device: device.deviceId } })} scaleTo={0.99} style={styles.miniMap} accessibilityRole="button" accessibilityLabel="Show on the live map">
+            <PressableScale onPress={showOnMap} scaleTo={0.99} style={styles.miniMap} accessibilityRole="button" accessibilityLabel="Show on the live map">
               <MiniFleetMap devices={[device]} focus={[loc.longitude, loc.latitude]} />
             </PressableScale>
           ) : null}
           <AddressCard title={address?.line1 ?? null} line={address?.line2} coords={coordsText(device) ?? "No position yet"} label={loc ? (silent ? `Last known position · ${freshnessLine(device, now)}` : freshnessLine(device, now)) : undefined} />
           {loc ? (
-            <View style={styles.placeActions}>
-              {hasMap ? (
-                <View style={styles.flex}>
-                  <Button compact title="Show on map" icon="map-outline" onPress={() => router.navigate({ pathname: "/(tabs)", params: { device: device.deviceId } })} />
-                </View>
-              ) : null}
-              <View style={styles.flex}>
-                <Button compact variant="outline" title="Open in Maps" icon="navigate-outline" onPress={openInMaps} />
-              </View>
-            </View>
+            <ActionBar
+              main={hasMap ? { icon: "map-outline", label: "On map", onPress: showOnMap } : { icon: "navigate-outline", label: "Navigate", onPress: openInMaps }}
+              items={[
+                { icon: "git-commit-outline", label: "Trips", onPress: () => router.push({ pathname: "/trips/[id]", params: { id: device.deviceId } }) },
+                ...(hasMap ? [{ icon: "navigate-outline" as const, label: "Navigate", onPress: openInMaps }] : []),
+                { icon: "share-outline", label: "Share", onPress: shareLocation }
+              ]}
+            />
           ) : null}
         </Card>
       </FadeInUp>
@@ -139,7 +137,6 @@ const styles = themed(() => ({
   pillLine: { flexDirection: "row", marginTop: 4 },
   stats: { flexDirection: "row", gap: 6 },
   place: { padding: space.sm, gap: space.sm },
-  placeActions: { flexDirection: "row", gap: space.sm },
   miniMap: { height: 150, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.muted },
   rows: { paddingVertical: 0, paddingHorizontal: 14 },
   row: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: size.control, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },

@@ -2,11 +2,39 @@ import { Ionicons } from "@expo/vector-icons";
 import { Pressable, Text, View } from "react-native";
 import { StatusPill, VehiclePicture, type IconName } from "@/components/kit";
 import { PressableScale } from "@/components/motion";
-import { STATE_META, displayName, fleetState, type FleetDevice, type FleetState } from "@/fleet/model";
+import { STATE_META, compassPoint, displayName, fleetState, sheetFacts, type FleetDevice, type FleetState } from "@/fleet/model";
 import { colors, ink, isDark, radius, softTint, space, themed } from "@/theme";
 
 /** One cell of the fact strip: icon and value on one line, the label centred under them. */
 export type FactCell = { icon: IconName; value: string; label: string; color: string };
+
+/**
+ * The four facts shown for a vehicle, the same on the map card and on its details screen:
+ * speed, heading, ignition and GPS while it reports; ignition, motion, GPS age and tracker when silent.
+ */
+export function factCellsFor(d: FleetDevice, now: number, fmtSpeed: (kph: number | null) => string): FactCell[] {
+  const state = fleetState(d);
+  const facts = sheetFacts(d, now);
+  const loc = d.location;
+  const ignition: FactCell = { icon: "key-outline", value: facts.ignition, label: "Ignition", color: facts.ignition === "Off" ? STATE_META.stopped.color : STATE_META.moving.color };
+  if (state === "offline" || state === "parked" || state === "never_seen") {
+    return [
+      ignition,
+      { icon: "pulse-outline", value: facts.motion, label: "Motion", color: colors.primary },
+      { icon: "locate-outline", value: facts.gps.value.replace(" old", ""), label: "GPS age", color: STATE_META.idle.color },
+      { icon: "wifi-outline", value: facts.tracker.online ? "On" : "Off", label: "Tracker", color: facts.tracker.online ? STATE_META.moving.color : STATE_META.offline.color }
+    ];
+  }
+  const text = fmtSpeed(state === "moving" ? (loc?.speedKph ?? null) : 0);
+  const cut = text.lastIndexOf(" ");
+  const heading = loc?.headingDeg ?? null;
+  return [
+    { icon: "speedometer-outline", value: cut < 0 ? text : text.slice(0, cut), label: cut < 0 ? "Speed" : text.slice(cut + 1), color: STATE_META[state].color },
+    { icon: "navigate-outline", value: compassPoint(heading) ?? "—", label: heading != null ? `${Math.round(((heading % 360) + 360) % 360)}°` : "Heading", color: colors.primary },
+    ignition,
+    { icon: "locate-outline", value: facts.gps.fresh ? "Live" : facts.gps.value.replace(" old", ""), label: "GPS", color: facts.gps.fresh ? STATE_META.parked.color : STATE_META.idle.color }
+  ];
+}
 
 /**
  * The selected vehicle on the live map, as in the design (M5/M6): one compact card with the
@@ -119,26 +147,37 @@ function SidePeek({ side, device, onPress }: { side: "left" | "right"; device: F
   );
 }
 
-/** Follow as the main button, then Trips, Navigate and Details together in one light tray. */
-export function ActionRow({ following, canFollow, onFollow, onTrips, onNavigate, onDetails }: { following: boolean; canFollow: boolean; onFollow: () => void; onTrips: () => void; onNavigate: () => void; onDetails: () => void }) {
+/** One solid main action, then the others together in one light tray. */
+export type BarAction = { icon: IconName; label: string; onPress: () => void };
+export function ActionBar({ main, items, inset = false }: { main: BarAction & { selected?: boolean; disabled?: boolean }; items: BarAction[]; inset?: boolean }) {
+  const off = main.disabled === true;
   return (
-    <View style={styles.actions}>
-      <Pressable
-        onPress={onFollow}
-        disabled={!canFollow}
-        style={[styles.follow, following && styles.followOn, !canFollow && styles.followOff]}
-        accessibilityRole="button"
-        accessibilityState={{ selected: following, disabled: !canFollow }}
-      >
-        <Ionicons name={following ? "navigate" : "navigate-outline"} size={16} color={canFollow ? colors.primaryForeground : colors.mutedForeground} />
-        <Text style={[styles.followText, !canFollow && { color: colors.mutedForeground }]}>{following ? "Following" : "Follow"}</Text>
+    <View style={[styles.actions, inset && styles.actionsInset]}>
+      <Pressable onPress={main.onPress} disabled={off} style={[styles.follow, main.selected && styles.followOn, off && styles.followOff]} accessibilityRole="button" accessibilityState={{ selected: main.selected === true, disabled: off }}>
+        <Ionicons name={main.icon} size={16} color={off ? colors.mutedForeground : colors.primaryForeground} />
+        <Text style={[styles.followText, off && { color: colors.mutedForeground }]}>{main.label}</Text>
       </Pressable>
       <View style={styles.tray}>
-        <TrayButton icon="git-commit-outline" label="Trips" onPress={onTrips} />
-        <TrayButton icon="map-outline" label="Navigate" onPress={onNavigate} />
-        <TrayButton icon="information-circle-outline" label="Details" onPress={onDetails} />
+        {items.map((it) => (
+          <TrayButton key={it.label} icon={it.icon} label={it.label} onPress={it.onPress} />
+        ))}
       </View>
     </View>
+  );
+}
+
+/** The map card's actions: Follow, then Trips, Navigate and Details. */
+export function ActionRow({ following, canFollow, onFollow, onTrips, onNavigate, onDetails }: { following: boolean; canFollow: boolean; onFollow: () => void; onTrips: () => void; onNavigate: () => void; onDetails: () => void }) {
+  return (
+    <ActionBar
+      inset
+      main={{ icon: following ? "navigate" : "navigate-outline", label: following ? "Following" : "Follow", onPress: onFollow, selected: following, disabled: !canFollow }}
+      items={[
+        { icon: "git-commit-outline", label: "Trips", onPress: onTrips },
+        { icon: "map-outline", label: "Navigate", onPress: onNavigate },
+        { icon: "information-circle-outline", label: "Details", onPress: onDetails }
+      ]}
+    />
   );
 }
 
@@ -185,7 +224,8 @@ const styles = themed(() => ({
   peekNameBox: { flex: 1, width: PEEK_W, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   peekName: { width: 96, textAlign: "center", fontSize: 12, lineHeight: 15, fontWeight: "700", color: colors.foreground },
   peekDot: { width: 7, height: 7, borderRadius: 4 },
-  actions: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 6 },
+  actionsInset: { paddingHorizontal: 14 },
   follow: { flexDirection: "row", alignItems: "center", gap: 5, height: 42, paddingHorizontal: 16, borderRadius: 14, backgroundColor: colors.primary },
   followOn: { backgroundColor: colors.primaryDark },
   followOff: { backgroundColor: colors.muted },

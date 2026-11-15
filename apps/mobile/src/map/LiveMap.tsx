@@ -10,7 +10,7 @@ import { api } from "@/api";
 import { AddressCard, Chip, FactRow } from "@/components/kit";
 import { Dots, FadeIn, PressableScale, PulseDot, SlideUp } from "@/components/motion";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { FILTERS, STATE_META, compassPoint, coordsText, countByFilter, displayName, fleetState, selectDevices, sheetFacts, sheetHeadline, timeAgo, type FleetFilter } from "@/fleet/model";
+import { FILTERS, STATE_META, coordsText, countByFilter, displayName, fleetState, selectDevices, sheetFacts, sheetHeadline, timeAgo, type FleetFilter } from "@/fleet/model";
 import { haptic } from "@/haptics";
 import { colors, elevation, font, isDark, radius, size, space, themed, type } from "@/theme";
 import { FleetSheet } from "./FleetSheet";
@@ -27,7 +27,7 @@ import { useIconPrefs } from "./iconPrefs";
 import { useAddress } from "./useAddress";
 import { iconPrefix } from "./model";
 import { SwipeToStep } from "./NeighbourHints";
-import { ActionRow, VehicleCarousel, type FactCell } from "./VehicleCard";
+import { ActionRow, VehicleCarousel, factCellsFor, type FactCell } from "./VehicleCard";
 
 /** Movement trails only once the map is close enough for them to read as roads. */
 const TRAIL_ZOOM = 11;
@@ -274,28 +274,7 @@ export default function LiveMap() {
     const full = Math.max(360, areaHeight - insets.top - 72);
     return selected ? { peek: silent ? 290 : 240, half: Math.min(full, silent ? 470 : 440), full } : { peek: 196, half: Math.min(full, Math.round(areaHeight * 0.5)), full };
   }, [areaHeight, insets.top, selected, silent]);
-  const speedText = ((): [string, string] => {
-    if (!selected || selectedState === "offline" || selectedState === "never_seen") return ["—", ""];
-    const t = units.fmtSpeed(selectedState === "moving" ? (loc?.speedKph ?? null) : 0);
-    const i = t.lastIndexOf(" ");
-    return i < 0 ? [t, ""] : [t.slice(0, i), t.slice(i + 1)];
-  })();
-  // The four facts on the card: what it is doing now, or, when it is silent, why we can't say.
-  const factCells: FactCell[] = !selected || !facts || !selectedState
-    ? []
-    : silent
-      ? [
-          { icon: "key-outline", value: facts.ignition, label: "Ignition", color: facts.ignition === "Off" ? STATE_META.stopped.color : STATE_META.moving.color },
-          { icon: "pulse-outline", value: facts.motion, label: "Motion", color: colors.primary },
-          { icon: "locate-outline", value: facts.gps.value.replace(" old", ""), label: "GPS age", color: STATE_META.idle.color },
-          { icon: "wifi-outline", value: facts.tracker.online ? "On" : "Off", label: "Tracker", color: facts.tracker.online ? STATE_META.moving.color : STATE_META.offline.color }
-        ]
-      : [
-          { icon: "speedometer-outline", value: speedText[0], label: speedText[1] || "Speed", color: STATE_META[selectedState].color },
-          { icon: "navigate-outline", value: compassPoint(loc?.headingDeg ?? null) ?? "—", label: loc?.headingDeg != null ? `${Math.round(((loc.headingDeg % 360) + 360) % 360)}°` : "Heading", color: colors.primary },
-          { icon: "key-outline", value: facts.ignition, label: "Ignition", color: facts.ignition === "Off" ? STATE_META.stopped.color : STATE_META.moving.color },
-          { icon: "locate-outline", value: facts.gps.fresh ? "Live" : facts.gps.value.replace(" old", ""), label: "GPS", color: facts.gps.fresh ? STATE_META.parked.color : STATE_META.idle.color }
-        ];
+  const factCells: FactCell[] = selected ? factCellsFor(selected, now, units.fmtSpeed) : [];
 
   return (
     <View style={styles.wrap} onLayout={(e) => {
