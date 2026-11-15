@@ -22,6 +22,8 @@ type VehicleFeature = GeoJSON.Feature<GeoJSON.Point, { deviceId: string; pin: st
 
 /** Which map to draw: streets, satellite, or "auto" (streets up close, satellite when zoomed far out). */
 export type NativeMapType = "auto" | "street" | "satellite";
+/** Camera height for the opening: far enough that the whole Earth fits on a phone held upright. */
+const GLOBE_ALTITUDE_M = 42_000_000;
 /** How long a vehicle takes to glide from one reported position to the next. */
 const GLIDE_MS = 1000;
 
@@ -58,6 +60,7 @@ export const NativeLiveMap = forwardRef<
   // Started as the globe? Fixed at first render so the camera props never reset the view.
   const startedAsGlobe = useRef(globe && Platform.OS === "ios").current;
   const shown = useRef<Region | null>(null);
+  const diving = useRef(startedAsGlobe);
   const [far, setFar] = useState(false);
 
   const region = (center: [number, number], zoom: number): Region => {
@@ -80,14 +83,26 @@ export const NativeLiveMap = forwardRef<
       if (zoom === undefined) map.current?.animateCamera({ center: { latitude: center[1], longitude: center[0] } }, { duration: ms(center, duration) });
       else map.current?.animateToRegion(region(center, zoom), ms(center, duration));
     },
-    fitBounds: ([w, s, e, n], o) =>
-      map.current?.fitToCoordinates(
-        [
-          { latitude: s, longitude: w },
-          { latitude: n, longitude: e }
-        ],
-        { edgePadding: o?.padding ?? { top: 80, right: 40, bottom: 80, left: 40 }, animated: (o?.duration ?? 0) > 0 }
-      )
+    fitBounds: ([w, s, e, n], o) => {
+      const fit = () =>
+        map.current?.fitToCoordinates(
+          [
+            { latitude: s, longitude: w },
+            { latitude: n, longitude: e }
+          ],
+          { edgePadding: o?.padding ?? { top: 80, right: 40, bottom: 80, left: 40 }, animated: (o?.duration ?? 0) > 0 }
+        );
+      // The opening: from the whole Earth, one long smooth descent to the fleet (the camera's
+      // height is animated, which a plain "fit" cannot do), then settle exactly on the vehicles.
+      if (diving.current && (o?.duration ?? 0) >= 1500) {
+        diving.current = false;
+        const spanM = Math.max((n - s) * 111_320, (e - w) * 111_320 * Math.cos((((s + n) / 2) * Math.PI) / 180), 2_000);
+        map.current?.animateCamera({ center: { latitude: (s + n) / 2, longitude: (w + e) / 2 }, altitude: spanM * 2.4, pitch: 0, heading: 0 }, { duration: o!.duration! });
+        setTimeout(fit, o!.duration! + 150);
+        return;
+      }
+      fit();
+    }
   }));
 
   const lines = useMemo(
@@ -103,7 +118,7 @@ export const NativeLiveMap = forwardRef<
       ref={map}
       style={StyleSheet.absoluteFill}
       {...(startedAsGlobe
-        ? { initialCamera: { center: { latitude: initial.center[1], longitude: initial.center[0] }, altitude: 22_000_000, pitch: 0, heading: 0, zoom: 1 } }
+        ? { initialCamera: { center: { latitude: initial.center[1], longitude: initial.center[0] }, altitude: GLOBE_ALTITUDE_M, pitch: 0, heading: 0, zoom: 1 } }
         : { initialRegion: region(initial.center, initial.zoom) })}
       mapType={globe && Platform.OS === "ios" ? "hybridFlyover" : mapType === "satellite" || (mapType === "auto" && far) ? "hybrid" : "standard"}
       mapPadding={{ top: topInset, right: 0, bottom: bottomInset, left: 0 }}

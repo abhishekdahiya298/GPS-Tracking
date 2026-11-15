@@ -39,6 +39,9 @@ const FIT_PADDING = { top: 190, right: 50, bottom: 240, left: 50 };
 const FOLLOW_ZOOM = FOCUS_ZOOM;
 const STYLE_KEY = "rio.map-style";
 const MAP_TYPE_KEY = "rio.map-type";
+/** The opening: how long the whole Earth is held, and how long the descent to the fleet takes. */
+const GLOBE_HOLD_MS = 1100;
+const DIVE_MS = 2800;
 const MAP_TYPES: ReadonlyArray<{ id: NativeMapType; label: string }> = [
   { id: "auto", label: "Auto" },
   { id: "street", label: "Street" },
@@ -166,7 +169,7 @@ export default function LiveMap() {
   }, [mapReady, devices, params.device]);
 
   const dive = useCallback(() => {
-    if (diveTo.current) camera.current?.fitBounds(diveTo.current, { padding: FIT_PADDING, duration: 2200, easing: "fly" });
+    if (diveTo.current) camera.current?.fitBounds(diveTo.current, { padding: FIT_PADDING, duration: DIVE_MS, easing: "fly" });
   }, []);
   const endIntro = useCallback(() => {
     introPlayed = true;
@@ -182,8 +185,9 @@ export default function LiveMap() {
       const giveUp = setTimeout(endIntro, 9000);
       return () => clearTimeout(giveUp);
     }
-    const start = setTimeout(dive, 700);
-    const done = setTimeout(endIntro, 700 + 3000);
+    // Hold on the whole Earth for a moment, then descend; the street map takes over as it lands.
+    const start = setTimeout(dive, GLOBE_HOLD_MS);
+    const done = setTimeout(endIntro, GLOBE_HOLD_MS + DIVE_MS + 400);
     return () => {
       clearTimeout(start);
       clearTimeout(done);
