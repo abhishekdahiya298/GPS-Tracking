@@ -16,6 +16,7 @@ import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { authClient } from "@/lib/client/auth-client";
 import { AppearanceCard } from "./appearance-card";
+import { MapIconsCard } from "./map-icons-card";
 import { MenuStyleCard } from "./menu-style-card";
 import type { ThemeChoice } from "@/lib/theme";
 import { TwoStepCard } from "./two-step-card";
@@ -67,6 +68,7 @@ export function AccountForm({ name, email, prefs, orgDefaults, twoStep, theme }:
         </Card>
         <TimePreferences initial={prefs} orgDefaults={orgDefaults} />
         <AppearanceCard initial={theme} />
+        <MapIconsCard />
         <MenuStyleCard initial={prefs.navTheme ?? null} />
         <Card>
           <CardHeader>

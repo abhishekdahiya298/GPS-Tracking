@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PIN_NAMES, bearing, compass, csvSafe, indexAtTime, lerpLngLat, mapState, pinName, quickRange, shouldAnimate, stateBucket, trackStats } from "./fleet-model";
+import { bearing, compass, csvSafe, iconName, iconNames, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, stateBucket, trackStats } from "./fleet-model";
 
 const now = Date.parse("2026-09-25T12:00:00Z");
 const loc = (speedKph: number | null, ignition: boolean | null = null) => ({ latitude: 0, longitude: 0, speedKph, headingDeg: 0, altitudeM: null, ignition, motion: null, recordedAt: "2026-09-25T11:59:00Z", receivedAt: "2026-09-25T11:59:00Z" });
@@ -82,12 +82,13 @@ describe("fleet-model", () => {
   });
 });
 
-describe("pinName", () => {
-  it("matches the phone app's pins", () => {
-    expect(pinName("trailer", "parked", null)).toBe("pin-trailer-parked");
-    expect(pinName("van", "offline", null)).toBe("pin-truck-offline");
-    expect(pinName("truck", "moving", 92)).toBe("pin-truck-moving-2");
-    expect(pinName("truck", "moving", -90)).toBe("pin-truck-moving-6");
-    expect(PIN_NAMES).toHaveLength(24);
+describe("iconName", () => {
+  it("matches the phone app's icons", () => {
+    expect(iconName("trailer", "parked")).toBe("pin-status-trailer-parked");
+    expect(iconName("semi", "idle", { style: "circle", color: "type" })).toBe("circle-type-truck-idle");
+    expect(iconName("other", "moving", { style: "square", color: "status" })).toBe("square-status-asset-moving");
+    expect(iconName("bus", "stopped", { style: "top", color: "status" })).toBe("top-truck-stopped");
+    expect(iconNames({ style: "pin", color: "status" })).toHaveLength(40);
+    expect(iconNames({ style: "top", color: "type" })).toHaveLength(10);
   });
 });

@@ -1,5 +1,6 @@
 "use client";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { readMapIcons, useMapIcons } from "@/lib/map-icons";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Box, Check, ChevronDown, ChevronUp, Copy, Crosshair, Download, Expand, ExternalLink, History, Layers, Locate, LocateFixed, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Share2, Shrink, Truck, X } from "lucide-react";
@@ -117,6 +118,8 @@ export function LiveMap({
   const mapDiv = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MlMap | null>(null);
   const layer = useRef<FleetLayer | null>(null);
+  const icons = useMapIcons();
+  useEffect(() => layer.current?.setIconPrefs(icons), [icons]);
     const hover = useRef<Popup | null>(null);
   const fitted = useRef(false);
   const [mapError, setMapError] = useState<string | null>(null);
@@ -232,6 +235,7 @@ export function LiveMap({
       }
     });
     layer.current = fl;
+    fl.setIconPrefs(readMapIcons());
 
     const addFences = (list: GeofenceDto[]) => {
       if (m.getSource("fences")) return;
