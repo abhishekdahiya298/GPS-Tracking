@@ -137,8 +137,8 @@ export function SpeedBar({ speed, unit, title, detail, headingDeg }: { speed: st
       <View style={[styles.speedSide, styles.speedRight]}>
         <Ionicons name="navigate-outline" size={22} color="#ffffff" style={{ transform: [{ rotate: `${(headingDeg ?? 45) - 45}deg` }] }} />
         <View style={styles.flex}>
-          <Text style={styles.speedTitle} numberOfLines={1}>{title}</Text>
-          <Text style={styles.speedDetail} numberOfLines={1}>{detail}</Text>
+          <Text style={styles.speedTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{title}</Text>
+          <Text style={styles.speedDetail} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{detail}</Text>
         </View>
       </View>
     </LinearGradient>
@@ -357,11 +357,11 @@ const styles = StyleSheet.create({
   fact: { flex: 1, minWidth: 0, alignItems: "center", gap: 2, paddingTop: 10, paddingBottom: 9, paddingHorizontal: 4, borderRadius: radius.xl, borderWidth: 1 },
   factValue: { fontSize: 15, lineHeight: 20, fontWeight: "800" },
   factLabel: { ...type.caption, color: colors.foreground, marginTop: 2 },
-  speedBar: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 14, borderRadius: radius.xl + 2, ...elevation.md },
-  speedSide: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-  speedRight: { flex: 1.3, minWidth: 0 },
-  speedRule: { width: 1, alignSelf: "stretch", backgroundColor: "rgba(255,255,255,0.3)", marginHorizontal: 14 },
-  speedValue: { fontSize: 30, lineHeight: 34, fontWeight: "800", color: "#ffffff", fontVariant: ["tabular-nums"] },
+  speedBar: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, borderRadius: radius.xl + 2, ...elevation.md },
+  speedSide: { flexDirection: "row", alignItems: "center", gap: 8 },
+  speedRight: { flex: 1, minWidth: 0 },
+  speedRule: { width: 1, alignSelf: "stretch", backgroundColor: "rgba(255,255,255,0.3)", marginHorizontal: 12 },
+  speedValue: { fontSize: 28, lineHeight: 32, fontWeight: "800", color: "#ffffff", fontVariant: ["tabular-nums"] },
   speedUnit: { fontSize: 15, fontWeight: "600", color: "rgba(255,255,255,0.85)" },
   speedTitle: { fontSize: 13, lineHeight: 18, fontStyle: "italic", color: "rgba(255,255,255,0.85)" },
   speedDetail: { fontSize: 15, lineHeight: 20, fontWeight: "800", color: "#ffffff", fontVariant: ["tabular-nums"] },

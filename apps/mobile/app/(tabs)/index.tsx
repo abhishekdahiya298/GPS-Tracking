@@ -12,6 +12,7 @@ import { CountText, FadeInUp, LoadingBar, PressableScale, PulseDot, Skeleton } f
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { STATE_META, displayName, timeAgo } from "@/fleet/model";
 import { VehicleRow } from "@/fleet/VehicleRow";
+import { MiniFleetMap } from "@/map/MiniFleetMap";
 import { firstName, fleetSummary, greeting, needsAttention, onTheMove, type SummaryKey } from "@/home/model";
 import { Welcome } from "@/home/Welcome";
 import { colors, elevation, font, isDark, radius, size, space, type } from "@/theme";
@@ -90,16 +91,20 @@ export default function HomeScreen() {
 
         {/* The fleet total on navy, then one tinted tile per status. Each opens the vehicle list with that filter. */}
         <FadeInUp index={1} style={styles.tiles}>
-          <PressableScale onPress={() => router.navigate("/(tabs)/vehicles")} outerStyle={styles.totalSlot} style={styles.total} accessibilityRole="button" accessibilityLabel={`${summary.total} vehicles. Show them.`}>
-            <LinearGradient colors={["#13286b", "#0f1f4d"]} start={{ x: 0, y: 0 }} end={{ x: 0.8, y: 1 }} style={StyleSheet.absoluteFill} />
+          {/* The fleet total on a navy band, then one tile per status in a single row. Each opens the list with that filter. */}
+          <PressableScale onPress={() => router.navigate("/(tabs)/vehicles")} style={styles.total} accessibilityRole="button" accessibilityLabel={`${summary.total} vehicles, ${movingCount} on the road. Show them.`}>
+            <LinearGradient colors={["#1a3a8f", "#0f1f4d"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
             <View style={styles.totalWave} />
-            <Ionicons name="bus-outline" size={28} color="#ffffff" />
-            <View>
-              <Text style={styles.totalLabel}>Total vehicles</Text>
-              {loading ? <Skeleton width={44} height={34} style={styles.countSkeleton} /> : <CountText value={summary.total} style={styles.totalValue} />}
+            <View style={styles.totalIcon}>
+              <Ionicons name="bus-outline" size={24} color="#ffffff" />
             </View>
+            <View style={styles.flex}>
+              <Text style={styles.totalLabel}>Total vehicles</Text>
+              <Text style={styles.totalSub}>{loading ? "Loading…" : `${movingCount} on the road now`}</Text>
+            </View>
+            {loading ? <Skeleton width={44} height={34} style={styles.countSkeleton} /> : <CountText value={summary.total} style={styles.totalValue} />}
           </PressableScale>
-          <View style={styles.tileGrid}>
+          <View style={styles.tileRow}>
             {summary.parts.map((p) => {
               const soft = STATE_META[p.key].soft;
               return (
@@ -111,14 +116,12 @@ export default function HomeScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={`${p.count} ${p.label}. Show them.`}
                 >
-                  {isDark ? null : <LinearGradient colors={[soft, colors.background]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+                  {isDark ? null : <LinearGradient colors={[soft, colors.background]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />}
                   <View style={[styles.tileIcon, { backgroundColor: isDark ? colors.muted : `${p.color}1f` }]}>
-                    <Ionicons name={TILE_ICON[p.key]} size={p.key === "stopped" ? 13 : 16} color={p.color} />
+                    <Ionicons name={TILE_ICON[p.key]} size={p.key === "stopped" ? 12 : 15} color={p.color} />
                   </View>
-                  <View style={styles.flex}>
-                    <Text style={styles.tileLabel} numberOfLines={1}>{p.label}</Text>
-                    {loading ? <Skeleton width={24} height={20} style={styles.countSkeleton} /> : <CountText value={p.count} style={styles.tileValue} />}
-                  </View>
+                  {loading ? <Skeleton width={24} height={22} style={styles.countSkeleton} /> : <CountText value={p.count} style={styles.tileValue} />}
+                  <Text style={styles.tileLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{p.label}</Text>
                 </PressableScale>
               );
             })}
@@ -128,7 +131,7 @@ export default function HomeScreen() {
         {/* The way into the live map. A drawn picture, not a second live map: it costs nothing to show. */}
         <FadeInUp index={2}>
           <PressableScale onPress={() => openMap()} feedback="press" scaleTo={0.985} style={styles.mapCard} accessibilityRole="button" accessibilityLabel="Open the live map">
-            <Image source={MAP_PREVIEW} style={styles.mapImage} resizeMode="cover" />
+            {loading ? <Image source={MAP_PREVIEW} style={styles.mapImage} resizeMode="cover" /> : <MiniFleetMap devices={devices} />}
             <View style={styles.mapChip}>
               <PulseDot size={7} color={live ? colors.success : colors.warning} live={live} />
               <Text style={styles.mapChipText}>{loading ? "Live fleet" : movingCount > 0 ? `${movingCount} moving now` : "Live fleet"}</Text>
@@ -234,17 +237,18 @@ const styles = StyleSheet.create({
   live: { flexDirection: "row", alignItems: "center", gap: 6 },
   liveText: { fontSize: font.caption, lineHeight: 16, fontWeight: "600" },
   headlineSkeleton: { marginVertical: 3 },
-  tiles: { flexDirection: "row", gap: space.sm },
-  totalSlot: { flex: 1 },
-  total: { flex: 1, minHeight: 148, borderRadius: radius.xl + 2, padding: 14, justifyContent: "space-between", overflow: "hidden", ...elevation.md },
-  totalWave: { position: "absolute", left: -20, right: -20, bottom: -36, height: 72, borderRadius: 60, backgroundColor: "#1d4ed8", opacity: 0.45, transform: [{ rotate: "-6deg" }] },
-  totalLabel: { fontSize: 14, lineHeight: 18, fontWeight: "600", color: "rgba(255,255,255,0.88)" },
-  totalValue: { fontSize: 36, lineHeight: 42, fontWeight: "800", color: "#ffffff", fontVariant: ["tabular-nums"] },
-  tileGrid: { flex: 1.9, flexDirection: "row", flexWrap: "wrap", gap: space.sm },
-  tileSlot: { flexBasis: "46%", flexGrow: 1 },
-  tile: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 70, paddingHorizontal: 10, borderRadius: radius.xl, borderWidth: 1, backgroundColor: colors.background, overflow: "hidden", ...elevation.sm },
-  tileIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
-  tileLabel: { fontSize: 12, lineHeight: 16, fontWeight: "600", color: colors.foreground },
+  tiles: { gap: space.sm },
+  total: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 84, paddingHorizontal: space.lg, borderRadius: radius.xl + 2, overflow: "hidden", ...elevation.md },
+  totalWave: { position: "absolute", right: -40, bottom: -50, width: 220, height: 110, borderRadius: 110, backgroundColor: "#2563eb", opacity: 0.35 },
+  totalIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.14)", alignItems: "center", justifyContent: "center" },
+  totalLabel: { fontSize: 16, lineHeight: 21, fontWeight: "700", color: "#ffffff" },
+  totalSub: { fontSize: 13, lineHeight: 18, color: "rgba(255,255,255,0.8)" },
+  totalValue: { fontSize: 38, lineHeight: 44, fontWeight: "800", color: "#ffffff", fontVariant: ["tabular-nums"] },
+  tileRow: { flexDirection: "row", gap: space.sm },
+  tileSlot: { flex: 1 },
+  tile: { alignItems: "center", gap: 3, paddingTop: 10, paddingBottom: 9, paddingHorizontal: 4, borderRadius: radius.xl, borderWidth: 1, backgroundColor: colors.background, overflow: "hidden", ...elevation.sm },
+  tileIcon: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  tileLabel: { fontSize: 12, lineHeight: 16, fontWeight: "600", color: colors.mutedForeground },
   tileValue: { fontSize: 22, lineHeight: 26, fontWeight: "800", color: colors.foreground, fontVariant: ["tabular-nums"] },
   cardSkeleton: { marginHorizontal: space.lg, marginBottom: 10 },
   countSkeleton: { marginVertical: 2 },
