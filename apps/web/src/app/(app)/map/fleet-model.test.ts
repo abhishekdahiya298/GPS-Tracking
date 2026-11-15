@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bearing, compass, csvSafe, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, stateBucket, trackStats } from "./fleet-model";
+import { PIN_NAMES, bearing, compass, csvSafe, indexAtTime, lerpLngLat, mapState, pinName, quickRange, shouldAnimate, stateBucket, trackStats } from "./fleet-model";
 
 const now = Date.parse("2026-09-25T12:00:00Z");
 const loc = (speedKph: number | null, ignition: boolean | null = null) => ({ latitude: 0, longitude: 0, speedKph, headingDeg: 0, altitudeM: null, ignition, motion: null, recordedAt: "2026-09-25T11:59:00Z", receivedAt: "2026-09-25T11:59:00Z" });
@@ -79,5 +79,15 @@ describe("fleet-model", () => {
     // "Yesterday" across the fall-back change is 25 hours long
     const y = quickRange("yesterday", "America/Toronto", new Date("2026-11-02T15:00:00Z"));
     expect((y.to!.getTime() - y.from.getTime()) / 3600_000).toBe(25);
+  });
+});
+
+describe("pinName", () => {
+  it("matches the phone app's pins", () => {
+    expect(pinName("trailer", "parked", null)).toBe("pin-trailer-parked");
+    expect(pinName("van", "offline", null)).toBe("pin-truck-offline");
+    expect(pinName("truck", "moving", 92)).toBe("pin-truck-moving-2");
+    expect(pinName("truck", "moving", -90)).toBe("pin-truck-moving-6");
+    expect(PIN_NAMES).toHaveLength(24);
   });
 });

@@ -59,6 +59,18 @@
 }
 
 
+/* `dark:` utilities follow the same rule as the dark tokens: chosen dark, or the computer is dark and light wasn't chosen. */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+}
+
 /* ---------- Dark look ----------
    Every surface reads the colour tokens above, so swapping them is enough. The choice is on
    <html data-theme> (set by the server from the rio-theme cookie); without it the browser decides. */

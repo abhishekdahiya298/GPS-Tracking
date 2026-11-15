@@ -2,7 +2,7 @@ import { contextHasPermission, units, type TenantContext, type Units } from "@ri
 import { Activity, AlertTriangle, PieChart, Zap, CheckCircle2, CalendarClock, ArrowRight, Bell, CircleOff, CircleParking, Hexagon, Map as MapIcon, Navigation, Package, Plus, Route, Truck, Users, Wrench } from "lucide-react";
 import Link from "next/link";
 import { CHART_RANGES, type ChartRange } from "@/lib/daily-stats";
-import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
+import { VehiclePicture } from "@/components/app/vehicle-picture";
 import { cache, Suspense } from "react";
 import { LocalTime } from "@/components/app/local-time";
 import { PageHeader } from "@/components/app/page-header";
@@ -234,9 +234,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               .map(({ d, s }) => (
                 <li key={d.deviceId}>
                   <Link href={`/map?focus=${d.deviceId}`} className="flex items-center gap-3 px-4 py-3 text-foreground no-underline hover:bg-canvas sm:px-5">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground [--vehicle-icon-gap:var(--color-muted)]">
-                      <VehicleTypeIcon type={d.vehicle?.type ?? "other"} className="size-5" />
-                    </span>
+                    <VehiclePicture type={d.vehicle?.type} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? d.name ?? d.model ?? "Device"}</span>
                       <span className="block truncate text-xs text-muted-foreground">

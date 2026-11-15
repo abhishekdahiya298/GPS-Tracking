@@ -132,3 +132,18 @@ export function csvSafe(v: string | number | null | undefined): string {
 
 /** North America fallback when there's nothing to fit. */
 export const FALLBACK_VIEW = { center: [-98.6, 39.8] as [number, number], zoom: 3.2 };
+
+/**
+ * The 3D pin for a vehicle, the same artwork as the phone app (public/map/pin-*.png):
+ * a trailer pin for trailers, a truck pin for everything else, and for a moving vehicle one of
+ * eight heading arrows (0 = north, 2 = east …), so the map and the app always look alike.
+ */
+export function pinName(type: string | null | undefined, state: MapState, headingDeg: number | null | undefined): string {
+  const kind = type === "trailer" ? "trailer" : "truck";
+  if (state !== "moving") return `pin-${kind}-${state === "idle" ? "idle" : state}`;
+  const h = headingDeg !== null && headingDeg !== undefined && Number.isFinite(headingDeg) ? ((headingDeg % 360) + 360) % 360 : 0;
+  return `pin-${kind}-moving-${Math.round(h / 45) % 8}`;
+}
+
+/** Every 3D pin image name, for loading them onto the map. */
+export const PIN_NAMES: string[] = ["truck", "trailer"].flatMap((k) => [...["idle", "stopped", "parked", "offline"].map((s) => `pin-${k}-${s}`), ...Array.from({ length: 8 }, (_, i) => `pin-${k}-moving-${i}`)]);

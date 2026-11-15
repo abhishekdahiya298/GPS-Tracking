@@ -2,7 +2,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Box, Check, ChevronDown, ChevronUp, Copy, Cpu, Crosshair, Download, Expand, ExternalLink, History, Layers, Locate, LocateFixed, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Share2, Shrink, Truck, X } from "lucide-react";
+import { Box, Check, ChevronDown, ChevronUp, Copy, Crosshair, Download, Expand, ExternalLink, History, Layers, Locate, LocateFixed, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Share2, Shrink, Truck, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,7 +10,7 @@ import { shapeRing } from "@rio-gps/core/geo";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
 import { Select } from "@/components/ui/input";
-import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
+import { VehiclePicture } from "@/components/app/vehicle-picture";
 import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
@@ -40,7 +40,7 @@ const STATE_HINT: Record<MapState, string> = {
   offline: "Tracker not reporting"
 };
 /** Badge grounds: the status colour's soft tint (text uses the status colour itself). */
-const STATE_TINT: Record<MapState, string> = { moving: "#e9f7ee", idle: "#fff5e1", stopped: "#e8f4fb", parked: "#e8f4fb", offline: "#eef0f3" };
+const STATE_TINT: Record<MapState, string> = { moving: "#e7f6ec", idle: "#fff1e0", stopped: "#fdecec", parked: "#f1eafe", offline: "#eef0f3" };
 const STATE_BADGE: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", parked: "Unhooked", offline: "Offline" };
 /** Floating map controls: white, raised, 40px targets. */
 const MAP_BTN =
@@ -662,8 +662,9 @@ export function LiveMap({
                           active && "bg-primary-soft shadow-[inset_0_0_0_1px_var(--color-primary)] hover:bg-primary-soft"
                         )}
                       >
-                        <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full" style={{ background: STATE_TINT[r.state], color: STATE_COLORS[r.state] }}>
-                          {d.vehicle ? <VehicleTypeIcon type={d.vehicle.type} className="size-4" /> : <Cpu className="size-4" />}
+                        <span className="relative shrink-0">
+                          <VehiclePicture type={d.vehicle?.type} className="h-9 w-12" />
+                          <span aria-hidden="true" className="absolute -right-1 -top-1 size-3 rounded-full border-2 border-background" style={{ background: STATE_COLORS[r.state] }} />
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="flex min-w-0 items-baseline gap-1.5">
@@ -699,9 +700,7 @@ export function LiveMap({
       )}
     >
       <div className="flex items-start gap-3">
-        <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full" style={{ background: STATE_TINT[selState], color: STATE_COLORS[selState] }}>
-          {sel.vehicle ? <VehicleTypeIcon type={sel.vehicle.type} className="size-5" /> : <Cpu className="size-5" />}
-        </span>
+        <VehiclePicture type={sel.vehicle?.type} className="h-12 w-16" />
         <div className="min-w-0 flex-1">
           <h2 className="m-0 flex min-w-0 items-baseline gap-1.5 text-base font-semibold">
             <span className="truncate">{splitName(deviceLabel(sel)).main}</span>

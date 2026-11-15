@@ -23,7 +23,7 @@ import { relativeTime } from "@/lib/format";
 import { RelativeTime } from "@/components/app/local-time";
 import { useTime } from "@/components/app/time-context";
 import dynamic from "next/dynamic";
-import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
+import { VehiclePicture } from "@/components/app/vehicle-picture";
 import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 import type { EditableVehicle } from "../_fleet/vehicle-form-dialog";
 
@@ -118,9 +118,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         meta: { sortKey: "name" } satisfies ColumnMeta,
         cell: ({ row: { original: v } }) => (
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground [--vehicle-icon-gap:var(--color-muted)]" title={VEHICLE_TYPE_LABEL[asVehicleType(v.type)]}>
-              <VehicleTypeIcon type={v.type} className="size-[18px]" />
-            </span>
+            <VehiclePicture type={v.type} className="h-9 w-12" />
             <div className="min-w-0">
               <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
               <p className="m-0 truncate text-xs text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(v.type)], v.licensePlate, ...v.groups].filter(Boolean).join(" · ")}</p>
@@ -233,9 +231,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
           }
           mobileRow={(v) => (
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground [--vehicle-icon-gap:var(--color-muted)]">
-                <VehicleTypeIcon type={v.type} className="size-[18px]" />
-              </span>
+              <VehiclePicture type={v.type} className="mt-0.5" />
               <div className="min-w-0 flex-1">
                 <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
                 <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground">
