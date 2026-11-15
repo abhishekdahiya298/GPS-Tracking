@@ -1,5 +1,6 @@
 import { units, type Units, type UnitSystem } from "@rio-gps/core/units";
 import { applyPlatformIconDefault } from "@/map/iconPrefs";
+import { applyMapEngine } from "@/map/mapEngine";
 import type { IconPrefs } from "@/map/model";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
@@ -120,8 +121,11 @@ export function FleetProvider({ children }: { children: ReactNode }) {
       .catch(() => undefined);
     // Default map icons chosen by the platform admin (an older server without this simply 404s).
     api
-      .get<{ iconStyle?: string; iconColor?: string }>("maps/config")
-      .then((c) => applyPlatformIconDefault({ style: c.iconStyle as IconPrefs["style"], color: c.iconColor as IconPrefs["color"] }))
+      .get<{ iconStyle?: string; iconColor?: string; mobileMap?: string }>("maps/config")
+      .then((c) => {
+        applyPlatformIconDefault({ style: c.iconStyle as IconPrefs["style"], color: c.iconColor as IconPrefs["color"] });
+        applyMapEngine(c.mobileMap);
+      })
       .catch(() => undefined);
   }, []);
 

@@ -1,5 +1,5 @@
 "use client";
-import { Check, Globe2, KeyRound, MapPinned, Moon, Sun, Map as MapIcon, Truck } from "lucide-react";
+import { Check, Globe2, KeyRound, MapPinned, Moon, Sun, Map as MapIcon, Smartphone, Truck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PageHeader } from "@/components/app/page-header";
@@ -16,6 +16,11 @@ const PROVIDERS: ReadonlyArray<{ value: AddressProvider; name: string; cost: str
   { value: "osm", name: "OpenStreetMap", cost: "Free", text: "Good street addresses in the US and Canada. Shared limit of 1 new spot per second, so best for small and medium fleets." },
   { value: "geoapify", name: "Geoapify", cost: "Free up to 3,000 new spots a day, then paid", text: "OpenStreetMap data with higher limits. Needs RIO_GEOAPIFY_KEY on the server." },
   { value: "google", name: "Google Maps", cost: "Paid after Google's monthly free credit", text: "The most complete addresses. Needs RIO_GOOGLE_MAPS_KEY on the server." }
+];
+
+const MOBILE_CHOICES: ReadonlyArray<{ value: MapsSettings["mobileMap"]; name: string; cost: string; text: string }> = [
+  { value: "osm", name: "OpenStreetMap", cost: "Free on every phone", text: "The same map as the website, with grouped vehicles, trails and every map style." },
+  { value: "native", name: "Phone's own map", cost: "Free (Apple Maps on iPhone)", text: "Apple Maps on iPhone, like Life360. Android uses Google Maps only when the app build has a Google Maps key, otherwise OpenStreetMap. Needs app version 2.1 or later." }
 ];
 
 const ICON_CHOICES: ReadonlyArray<{ value: MapsSettings["iconStyle"]; label: string }> = [
@@ -36,7 +41,7 @@ export function MapsSettingsView({ initial, keys }: { initial: MapsSettings; key
   const router = useRouter();
   const [v, setV] = useState<MapsSettings>(initial);
   const [busy, setBusy] = useState(false);
-  const dirty = v.addressProvider !== initial.addressProvider || v.mapStyle !== initial.mapStyle || v.iconStyle !== initial.iconStyle || v.iconColor !== initial.iconColor;
+  const dirty = v.addressProvider !== initial.addressProvider || v.mapStyle !== initial.mapStyle || v.iconStyle !== initial.iconStyle || v.iconColor !== initial.iconColor || v.mobileMap !== initial.mobileMap;
 
   async function save() {
     setBusy(true);
@@ -128,6 +133,35 @@ export function MapsSettingsView({ initial, keys }: { initial: MapsSettings; key
             <p className="m-0 text-sm text-muted-foreground">
               Maps are drawn from OpenStreetMap through OpenFreeMap: free, no key, no usage limit. On phones, the Navigate button opens Apple Maps on iPhone and Google Maps on Android for turn-by-turn directions, also free.
             </p>
+          </div>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <Smartphone className="size-4" aria-hidden="true" /> Map in the phone app
+            </CardTitle>
+          </CardHeader>
+          <div role="radiogroup" aria-label="Map in the phone app" className="grid gap-2 p-4 sm:grid-cols-2">
+            {MOBILE_CHOICES.map((c) => {
+              const on = v.mobileMap === c.value;
+              return (
+                <button
+                  key={c.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setV((s) => ({ ...s, mobileMap: c.value }))}
+                  className={cn("flex cursor-pointer flex-col gap-1 rounded-lg border-2 p-3 text-left", on ? "border-primary bg-primary-soft" : "border-border bg-background hover:border-input")}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="flex-1 font-semibold">{c.name}</span>
+                    {on && <Check className="size-4 text-primary" aria-hidden="true" />}
+                  </span>
+                  <span className="text-xs font-semibold text-muted-foreground">{c.cost}</span>
+                  <span className="text-sm text-muted-foreground">{c.text}</span>
+                </button>
+              );
+            })}
           </div>
         </Card>
         <Card>

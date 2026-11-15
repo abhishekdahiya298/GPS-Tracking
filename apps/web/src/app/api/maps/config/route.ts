@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   try {
     await requireTenantContext(request);
     const s = await getMapsSettings();
-    return NextResponse.json({ addresses: s.addressProvider !== "off", mapStyle: s.mapStyle, iconStyle: s.iconStyle, iconColor: s.iconColor }, { headers: { "Cache-Control": "private, max-age=300" } });
+    return NextResponse.json({ addresses: s.addressProvider !== "off", mapStyle: s.mapStyle, iconStyle: s.iconStyle, iconColor: s.iconColor, mobileMap: s.mobileMap }, { headers: { "Cache-Control": "private, max-age=300" } });
   } catch (err) {
     return errorResponse(err, { route: "maps.config" });
   }

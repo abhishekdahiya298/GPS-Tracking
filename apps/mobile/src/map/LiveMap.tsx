@@ -21,6 +21,8 @@ import { durationText } from "@/trips/model";
 import { GlobeIntro } from "./GlobeIntro";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, WORLD_VIEW, FOCUS_ZOOM, MAP_STYLES, focusZoom, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
 import { iconImages } from "./sprites";
+import { useMapEngine } from "./mapEngine";
+import { NativeLiveMap, type CameraLike } from "./NativeLiveMap";
 import { useIconPrefs } from "./iconPrefs";
 import { useAddress } from "./useAddress";
 import { iconPrefix } from "./model";
@@ -85,6 +87,7 @@ export default function LiveMap() {
   // The status filter narrows the map exactly as it narrows the list.
   const visible = useMemo(() => (filter === "all" ? devices : selectDevices(devices, filter, "")), [devices, filter]);
   const prefs = useIconPrefs();
+  const engine = useMapEngine();
   const images = useMemo(() => iconImages(iconPrefix(prefs)), [prefs]);
   const isPin = prefs.style === "pin";
   const { vehicles, trails } = useGlide(visible, units.fmtSpeed, prefs);
@@ -259,6 +262,35 @@ export default function LiveMap() {
         setAreaHeight(e.nativeEvent.layout.height);
         setAreaWidth(e.nativeEvent.layout.width);
       }}>
+      {engine === "native" ? (
+        <NativeLiveMap
+          ref={camera as unknown as React.Ref<CameraLike>}
+          vehicles={vehicles}
+          trails={trails}
+          selectedId={selectedId}
+          prefs={prefs}
+          topInset={insets.top + 70}
+          bottomInset={cardHeight}
+          initial={{ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }}
+          onReady={() => setMapReady(true)}
+          onZoom={(z) => {
+            zoomNow.current = z;
+          }}
+          onUserMove={() => setFollowing(false)}
+          onMapPress={() => {
+            setStyleMenu(false);
+            if (Date.now() - vehicleTapAt.current > 400) setSelectedId(null);
+          }}
+          onSelect={(id) => {
+            vehicleTapAt.current = Date.now();
+            haptic.tap();
+            setSelectedId(id);
+            setFollowing(false);
+            const at = positionOf(devicesNow.current.find((d) => d.deviceId === id));
+            if (at) camera.current?.flyTo({ center: at, zoom: focusZoom(zoomNow.current), duration: 700, padding: focusPad() });
+          }}
+        />
+      ) : (
       <Map
         style={styles.map}
         mapStyle={styleUrl(style)}
@@ -368,6 +400,7 @@ export default function LiveMap() {
           </ViewAnnotation>
         ) : null}
       </Map>
+      )}
 
       {/* Top: search (opens the fleet list) and the status chips. */}
       <View style={[styles.top, { top: insets.top + space.sm }]} pointerEvents="box-none">
@@ -410,9 +443,11 @@ export default function LiveMap() {
         <PressableScale onPress={fitAll} scaleTo={0.9} style={styles.fab} accessibilityRole="button" accessibilityLabel="Show all vehicles">
           <Ionicons name="scan-outline" size={size.icon} color={colors.foreground} />
         </PressableScale>
+{engine === "osm" ? (
         <PressableScale onPress={() => setStyleMenu((open) => !open)} scaleTo={0.9} style={styles.fab} accessibilityRole="button" accessibilityLabel="Change the map style">
           <Ionicons name="layers-outline" size={size.icon} color={colors.foreground} />
         </PressableScale>
+        ) : null}
       </View>
 
       {/* The vehicles either side of the open one, at the map's edges: tap (or swipe the card) to move. */}
