@@ -155,3 +155,21 @@ export function progressOf(track: Track, t: number): number {
 export function timeAtProgress(track: Track, fraction: number): number {
   return track.startT + Math.min(1, Math.max(0, fraction)) * (track.endT - track.startT);
 }
+
+/** Great-circle distance between two [lng, lat] points, in km. */
+function legKm(a: [number, number], b: [number, number]): number {
+  const rad = Math.PI / 180;
+  const dLat = (b[1] - a[1]) * rad;
+  const dLng = (b[0] - a[0]) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * rad) * Math.cos(b[1] * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Distance, duration and top speed of a recorded route, from its own points. */
+export function trackSummary(track: Track): { distanceKm: number; durationMs: number; maxSpeedKph: number | null } {
+  let km = 0;
+  for (let i = 1; i < track.at.length; i++) km += legKm(track.at[i - 1]!, track.at[i]!);
+  const speeds = track.speedKph.filter((v): v is number => v !== null && Number.isFinite(v));
+  return { distanceKm: km, durationMs: track.endT - track.startT, maxSpeedKph: speeds.length ? Math.max(...speeds) : null };
+}
+

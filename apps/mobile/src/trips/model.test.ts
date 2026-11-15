@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advance, buildTrack, dayLabel, dayRange, durationText, positionAt, progressOf, shiftDay, timeAtProgress, todayKey, trackBounds, type HistoryPoint } from "./model";
+import { advance, buildTrack, dayLabel, dayRange, durationText, trackSummary, positionAt, progressOf, shiftDay, timeAtProgress, todayKey, trackBounds, type HistoryPoint } from "./model";
 
 const TZ = "America/Toronto";
 const pt = (iso: string, lat: number, lng: number, speedKph: number | null = 50): HistoryPoint => ({ recordedAt: iso, latitude: lat, longitude: lng, speedKph, headingDeg: null });
@@ -70,5 +70,15 @@ describe("playback", () => {
     const [w, s, e, n] = trackBounds(tiny);
     expect(e - w).toBeCloseTo(0.01);
     expect(n - s).toBeCloseTo(0.01);
+  });
+});
+
+describe("trackSummary", () => {
+  it("adds up the legs and finds the top speed", () => {
+    const track = { t: [0, 60000, 120000], at: [[-79.0, 43.0], [-79.0, 43.1], [-79.0, 43.2]] as [number, number][], speedKph: [null, 60, 72], startT: 0, endT: 120000 };
+    const s = trackSummary(track);
+    expect(s.distanceKm).toBeCloseTo(22.24, 1);
+    expect(s.durationMs).toBe(120000);
+    expect(s.maxSpeedKph).toBe(72);
   });
 });

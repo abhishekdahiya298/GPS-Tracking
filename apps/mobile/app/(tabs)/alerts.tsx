@@ -14,7 +14,7 @@ import { colors, font, ink, size, softTint, space, type } from "@/theme";
 
 export default function AlertsScreen() {
   const { events, unread, unreadOnly, loading, loadingMore, hasMore, error, setUnreadOnly, refresh, loadMore, acknowledge } = useAlerts();
-  const { units, devices, orgName } = useFleet();
+  const { units, orgName } = useFleet();
   const router = useRouter();
   const now = useNow();
   const [pulling, setPulling] = useState(false);
@@ -46,8 +46,7 @@ export default function AlertsScreen() {
     const meta = alertMeta(item.type);
     const detail = alertDetail(item, units.fmtSpeed);
     const isUnread = !item.acknowledgedAt;
-    // An alert about a vehicle we know opens that vehicle; load alerts have no vehicle.
-    const known = item.deviceId !== null && devices.some((d) => d.deviceId === item.deviceId);
+
     const body = (
       <>
         <IconWell icon={meta.icon} color={meta.color} soft={meta.soft} />
@@ -78,13 +77,10 @@ export default function AlertsScreen() {
     );
     return (
       <FadeInUp index={index < 10 ? index : 0} distance={index < 10 ? 10 : 0} style={groupedRow(index === 0, index === last)}>
-        {known ? (
-          <PressableScale onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: item.deviceId! } })} scaleTo={0.985} style={styles.row} accessibilityRole="button" accessibilityHint="Opens the vehicle">
-            {body}
-          </PressableScale>
-        ) : (
-          <View style={styles.row}>{body}</View>
-        )}
+        {/* Every alert opens its own page; from there, "View vehicle" goes to the truck. */}
+        <PressableScale onPress={() => router.push({ pathname: "/alert/[id]", params: { id: String(item.id) } })} scaleTo={0.985} style={styles.row} accessibilityRole="button" accessibilityHint="Opens the alert">
+          {body}
+        </PressableScale>
       </FadeInUp>
     );
   };

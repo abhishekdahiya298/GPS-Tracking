@@ -288,8 +288,10 @@ export function EmptyState({ icon, title, note, tone = "neutral", children }: { 
   const soft = tone === "brand" ? colors.primarySoft : tone === "danger" ? colors.dangerSoft : colors.muted;
   return (
     <FadeInUp style={styles.empty}>
-      <View style={[styles.emptyBadge, { backgroundColor: soft }]}>
-        <Ionicons name={icon} size={28} color={tint} />
+      <View style={[styles.emptyRing, { borderColor: soft }]}>
+        <View style={[styles.emptyBadge, { backgroundColor: soft }]}>
+          <Ionicons name={icon} size={32} color={tint} />
+        </View>
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       {note ? <Text style={styles.emptyNote}>{note}</Text> : null}
@@ -309,20 +311,18 @@ export function Loading({ text }: { text: string }) {
 }
 
 /** Placeholder rows shown while a list loads for the first time. They have the size of real rows. */
-export function ListSkeleton({ rows = 7 }: { rows?: number }) {
+export function ListSkeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <View accessibilityLabel="Loading" accessibilityRole="progressbar" style={styles.skeletonCard}>
+    <View accessibilityLabel="Loading" accessibilityRole="progressbar" style={styles.skeletonList}>
       {Array.from({ length: rows }, (_, i) => (
-        <View key={i}>
-          {i > 0 ? <View style={[styles.rowLine, { marginLeft: space.md + size.well + space.md }]} /> : null}
-          <View style={styles.skeletonRow}>
-            <Skeleton width={size.well} height={size.well} round={radius.lg} />
-            <View style={styles.skeletonText}>
-              <Skeleton width={`${55 - (i % 3) * 8}%`} height={14} />
-              <Skeleton width={`${38 + (i % 2) * 10}%`} height={11} />
-            </View>
-            <Skeleton width={64} height={22} round={11} />
+        <View key={i} style={styles.skeletonCard}>
+          <Skeleton width={76} height={60} round={radius.lg} />
+          <View style={styles.skeletonText}>
+            <Skeleton width={`${58 - (i % 3) * 8}%`} height={15} />
+            <Skeleton width={`${72 - (i % 2) * 12}%`} height={11} />
+            <Skeleton width={`${40 + (i % 2) * 10}%`} height={11} />
           </View>
+          <Skeleton width={52} height={44} round={radius.lg} />
         </View>
       ))}
     </View>
@@ -333,7 +333,9 @@ export function ListSkeleton({ rows = 7 }: { rows?: number }) {
 export function Banner({ text }: { text: string }) {
   return (
     <View style={styles.banner} accessibilityRole="alert">
-      <Ionicons name="cloud-offline-outline" size={16} color={colors.warning} />
+      <View style={styles.bannerIcon}>
+        <Ionicons name="cloud-offline-outline" size={16} color={colors.warning} />
+      </View>
       <Text style={styles.bannerText}>{text}</Text>
     </View>
   );
@@ -390,14 +392,16 @@ const styles = StyleSheet.create({
   rowLineWrap: { marginHorizontal: space.lg, backgroundColor: colors.background, borderLeftWidth: 1, borderRightWidth: 1, borderColor: colors.border },
   rowLine: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl, gap: space.sm },
-  emptyBadge: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: space.sm },
+  emptyRing: { padding: 8, borderRadius: 48, borderWidth: 1, marginBottom: space.sm },
+  emptyBadge: { width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center" },
   emptyTitle: { ...type.title, textAlign: "center" },
   emptyNote: { ...type.body, color: colors.mutedForeground, textAlign: "center" },
   emptyAction: { marginTop: space.md, alignSelf: "stretch" },
   loadingText: { ...type.small, marginTop: space.sm, textAlign: "center" },
-  skeletonCard: { marginHorizontal: space.lg, backgroundColor: colors.background, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
-  skeletonRow: { flexDirection: "row", alignItems: "center", gap: space.md, paddingHorizontal: space.md, height: size.row + 4 },
+  skeletonList: { gap: 10 },
+  skeletonCard: { flexDirection: "row", alignItems: "center", gap: space.md, marginHorizontal: space.lg, padding: space.md, minHeight: 92, backgroundColor: colors.background, borderRadius: radius.xl + 2, borderWidth: 1, borderColor: colors.border },
   skeletonText: { flex: 1, gap: space.sm },
-  banner: { flexDirection: "row", alignItems: "center", gap: space.sm, backgroundColor: colors.warningSoft, paddingHorizontal: space.lg, paddingVertical: space.sm },
-  bannerText: { flex: 1, color: colors.warning, fontSize: font.small, lineHeight: 18 }
+  banner: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.lg, marginBottom: space.sm, padding: space.sm, borderRadius: radius.lg, borderWidth: 1, borderColor: isDark ? colors.border : "#f6d7ae", backgroundColor: colors.warningSoft },
+  bannerIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: isDark ? colors.muted : "#fde4c4", alignItems: "center", justifyContent: "center" },
+  bannerText: { flex: 1, color: colors.foreground, fontSize: font.small, lineHeight: 18, fontWeight: "600" }
 });

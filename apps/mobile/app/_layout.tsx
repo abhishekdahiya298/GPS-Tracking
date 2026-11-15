@@ -64,6 +64,7 @@ function Screens() {
         <Stack.Screen name="vehicle/[id]" options={{ ...pushed, title: "Vehicle" }} />
         <Stack.Screen name="trips/[id]" options={{ ...pushed, title: "Trips" }} />
         <Stack.Screen name="trip" options={{ ...pushed, title: "Trip" }} />
+        <Stack.Screen name="alert/[id]" options={{ ...pushed, title: "Alert" }} />
         <Stack.Screen name="password" options={{ ...pushed, title: "Change password" }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>

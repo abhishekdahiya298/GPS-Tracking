@@ -11,8 +11,8 @@ import { Button } from "@/components/ui";
 import { useBottomInset } from "@/layout";
 import { Placeholder } from "@/components/Placeholder";
 import { useFleet } from "@/fleet/FleetProvider";
-import { colors, elevation, font, ink, size, space, type } from "@/theme";
-import { SPEEDS, advance, buildTrack, positionAt, progressOf, timeAtProgress, type HistoryPage, type HistoryPoint, type Track } from "@/trips/model";
+import { colors, elevation, ink, size, space, type } from "@/theme";
+import { SPEEDS, advance, buildTrack, durationText, positionAt, progressOf, timeAtProgress, trackSummary, type HistoryPage, type HistoryPoint, type Track } from "@/trips/model";
 
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 const TripMap = inExpoGo ? null : lazy(() => import("@/trips/TripMap"));
@@ -108,6 +108,10 @@ export default function TripScreen() {
 
   const head = positionAt(track, t);
   const progress = progressOf(track, t);
+  const summary = trackSummary(track);
+  const first = track.at[0]!;
+  const last = track.at[track.at.length - 1]!;
+  const where = (p: [number, number]) => `${p[1].toFixed(4)}, ${p[0].toFixed(4)}`;
 
   return (
     <View style={styles.wrap}>
@@ -124,9 +128,23 @@ export default function TripScreen() {
 
       <SlideUp style={[styles.panel, { paddingBottom: Math.max(space.xl, bottom + space.md) }]}>
         <View style={styles.grabber} />
+        {/* The trip in one line: who, how far, when and how long. */}
+        <View style={styles.summary}>
+          <View style={styles.flex}>
+            <Text style={styles.tripName} numberOfLines={1}>{name ?? "Trip"}</Text>
+            <View style={styles.summaryLine}>
+              <Ionicons name="time-outline" size={14} color={colors.mutedForeground} />
+              <Text style={styles.summaryText} numberOfLines={1}>{`${fmt.time(track.startT)} – ${fmt.time(track.endT)} (${durationText(summary.durationMs / 60000)})`}</Text>
+            </View>
+          </View>
+          <Text style={styles.distance}>{units.fmtDist(summary.distanceKm)}</Text>
+        </View>
         <View style={styles.readout}>
           <Text style={styles.clock}>{fmt.timeSec(t)}</Text>
-          <Text style={styles.speed}>{units.fmtSpeed(head.speedKph)}</Text>
+          <View style={styles.speedPill}>
+            <Ionicons name="speedometer-outline" size={15} color={colors.primary} />
+            <Text style={styles.speed}>{units.fmtSpeed(head.speedKph)}</Text>
+          </View>
         </View>
 
         <View
@@ -158,7 +176,36 @@ export default function TripScreen() {
             <Segmented label="Playback speed" value={speed} onChange={setSpeed} options={SPEEDS.map((v) => ({ value: v, label: `${v}x` }))} />
           </View>
         </View>
+
+        {/* Start, driving and end, like a short timeline. Positions are coordinates until addresses are switched on. */}
+        <View style={styles.timeline}>
+          <Stop color={STOP_START} title="Start" time={fmt.time(track.startT)} detail={where(first)} />
+          <Stop color={colors.primary} title="Driving" time={durationText(summary.durationMs / 60000)} detail={`${units.fmtDist(summary.distanceKm)}${summary.maxSpeedKph !== null ? ` · top ${units.fmtSpeed(summary.maxSpeedKph)}` : ""}`} />
+          <Stop color={STOP_END} title="End" time={fmt.time(track.endT)} detail={where(last)} last />
+        </View>
       </SlideUp>
+    </View>
+  );
+}
+
+const STOP_START = "#15803d";
+const STOP_END = "#c62828";
+
+/** One row of the start / driving / end timeline. */
+function Stop({ color, title, time, detail, last = false }: { color: string; title: string; time: string; detail: string; last?: boolean }) {
+  return (
+    <View style={styles.stop}>
+      <View style={styles.stopRail}>
+        <View style={[styles.stopDot, { backgroundColor: color }]} />
+        {last ? null : <View style={styles.stopLine} />}
+      </View>
+      <View style={styles.flex}>
+        <View style={styles.stopHead}>
+          <Text style={styles.stopTitle}>{title}</Text>
+          <Text style={styles.stopTime}>{time}</Text>
+        </View>
+        <Text style={styles.stopDetail} numberOfLines={1}>{detail}</Text>
+      </View>
     </View>
   );
 }
@@ -169,9 +216,24 @@ const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: colors.canvas },
   panel: { backgroundColor: colors.background, paddingHorizontal: space.lg, paddingTop: 10, paddingBottom: space.xl, borderTopLeftRadius: 20, borderTopRightRadius: 20, marginTop: -16, ...elevation.lg },
   grabber: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: space.md },
-  readout: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
+  summary: { flexDirection: "row", alignItems: "center", gap: space.md, marginBottom: space.md },
+  tripName: { fontSize: 18, lineHeight: 24, fontWeight: "700", color: colors.foreground },
+  summaryLine: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 },
+  summaryText: { ...type.small, flexShrink: 1, fontVariant: ["tabular-nums"] },
+  distance: { fontSize: 20, lineHeight: 26, fontWeight: "800", color: colors.foreground, fontVariant: ["tabular-nums"] },
+  readout: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  speedPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, height: 30, borderRadius: 15, backgroundColor: colors.primarySoft },
+  timeline: { marginTop: space.lg, gap: 0 },
+  stop: { flexDirection: "row", gap: space.md },
+  stopRail: { width: 12, alignItems: "center" },
+  stopDot: { width: 12, height: 12, borderRadius: 6, marginTop: 4, borderWidth: 2, borderColor: colors.background },
+  stopLine: { flex: 1, width: 2, backgroundColor: colors.border, marginVertical: 2 },
+  stopHead: { flexDirection: "row", justifyContent: "space-between", gap: space.sm },
+  stopTitle: { fontSize: 14, lineHeight: 20, fontWeight: "700", color: colors.foreground },
+  stopTime: { ...type.small, fontVariant: ["tabular-nums"] },
+  stopDetail: { ...type.small, marginBottom: space.md, fontVariant: ["tabular-nums"] },
   clock: { fontSize: 20, lineHeight: 26, fontWeight: "700", letterSpacing: -0.2, color: colors.foreground, fontVariant: ["tabular-nums"] },
-  speed: { fontSize: font.title, lineHeight: 22, fontWeight: "700", color: ink(colors.primary), fontVariant: ["tabular-nums"] },
+  speed: { fontSize: 15, lineHeight: 20, fontWeight: "700", color: ink(colors.primary), fontVariant: ["tabular-nums"] },
   barHit: { height: size.controlSm, justifyContent: "center" },
   bar: { height: 6, borderRadius: 3, backgroundColor: colors.muted, overflow: "hidden" },
   barFill: { height: 6, backgroundColor: colors.primary },

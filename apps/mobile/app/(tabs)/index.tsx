@@ -172,7 +172,7 @@ export default function HomeScreen() {
                 return (
                   <View key={e.id}>
                     {i > 0 ? <View style={styles.line} /> : null}
-                    <PressableScale onPress={() => router.navigate("/(tabs)/alerts")} scaleTo={0.985} style={styles.alert} accessibilityRole="button">
+                    <PressableScale onPress={() => router.push({ pathname: "/alert/[id]", params: { id: String(e.id) } })} scaleTo={0.985} style={styles.alert} accessibilityRole="button">
                       <IconWell icon={meta.icon} color={meta.color} soft={meta.soft} />
                       <View style={styles.flex}>
                         <Text style={[styles.alertTitle, !e.acknowledgedAt && styles.alertUnread]} numberOfLines={1}>{alertTitle(e)}</Text>
