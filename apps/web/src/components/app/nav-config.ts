@@ -88,6 +88,7 @@ export const PLATFORM_NAV: NavSection[] = [
     title: "Platform",
     items: [
       { href: "/admin/app", label: "Mobile app", icon: "smartphone" },
+      { href: "/admin/maps", label: "Maps & addresses", icon: "map" },
       { href: "/admin/activity", label: "Activity log", icon: "activity" },
       { href: "/settings/account", label: "My account", icon: "user" }
     ]

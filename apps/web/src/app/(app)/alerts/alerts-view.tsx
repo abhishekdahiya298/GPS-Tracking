@@ -31,7 +31,7 @@ function AlertTile({ type, color }: { type: string; color: string }) {
   const Icon = TYPE_ICON[type] ?? (type.startsWith("load_") ? Package : BellRing);
   return (
     <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: tint(color) }}>
-      <Icon className="size-[18px]" style={{ color }} aria-hidden="true" />
+      <Icon className="size-[18px]" style={{ color: `color-mix(in srgb, ${color} 62%, var(--color-foreground))` }} aria-hidden="true" />
     </span>
   );
 }

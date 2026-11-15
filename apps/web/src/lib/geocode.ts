@@ -20,7 +20,7 @@ const ENDPOINT = "https://nominatim.openstreetmap.org/search";
 const USER_AGENT = "RIO GPS load tracking (support@riogps.com)";
 const CACHE_SECONDS = 7 * 24 * 3600;
 
-interface NominatimRow {
+export interface NominatimRow {
   display_name?: string;
   name?: string;
   lat?: string;
@@ -55,7 +55,7 @@ export function parseCoordinates(q: string): GeocodeResult | null {
   return { label: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`, latitude, longitude };
 }
 
-async function waitForSlot(): Promise<void> {
+export async function waitForSlot(): Promise<void> {
   try {
     const redis = await getReadyRedisPublisher();
     for (let i = 0; i < 12; i++) {

@@ -10,7 +10,7 @@ import { api } from "@/api";
 import { AddressCard, Chip, FactRow, SpeedBar, StatusPill, VehiclePicture } from "@/components/kit";
 import { Dots, FadeIn, PressableScale, PulseDot, SlideUp } from "@/components/motion";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { FILTERS, STATE_META, coordsText, countByFilter, displayName, fleetState, freshnessLine, selectDevices, sheetFacts, sheetHeadline, type FleetFilter } from "@/fleet/model";
+import { FILTERS, STATE_META, coordsText, countByFilter, displayName, fleetState, selectDevices, sheetFacts, sheetHeadline, timeAgo, type FleetFilter } from "@/fleet/model";
 import { haptic } from "@/haptics";
 import { colors, elevation, font, ink, isDark, radius, size, softTint, space, type } from "@/theme";
 import { FleetSheet } from "./FleetSheet";
@@ -22,13 +22,14 @@ import { GlobeIntro } from "./GlobeIntro";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, WORLD_VIEW, FOCUS_ZOOM, MAP_STYLES, focusZoom, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
 import { iconImages } from "./sprites";
 import { useIconPrefs } from "./iconPrefs";
+import { useAddress } from "./useAddress";
 import { iconPrefix } from "./model";
 import { NeighbourHints, SwipeToStep } from "./NeighbourHints";
 
 /** Movement trails only once the map is close enough for them to read as roads. */
 const TRAIL_ZOOM = 11;
 /** Zoomed out further than this, vehicles are plain status dots; closer in, the 3D icons. */
-const DOT_ZOOM = 8;
+const DOT_ZOOM = 4;
 import { useGlide } from "./useGlide";
 
 const FIT_PADDING = { top: 190, right: 50, bottom: 240, left: 50 };
@@ -65,6 +66,7 @@ export default function LiveMap() {
   // The selected-vehicle card's height, so the round buttons can sit just above it.
   const [cardHeight, setCardHeight] = useState(0);
   const [areaHeight, setAreaHeight] = useState(0);
+  const [areaWidth, setAreaWidth] = useState(0);
   const [snap, setSnap] = useState<SheetSnap>("peek");
   // Choosing a vehicle (or going back to the fleet) starts the sheet low again, so the map stays big.
   useEffect(() => setSnap("peek"), [selectedId]);
@@ -206,7 +208,7 @@ export default function LiveMap() {
     setSelectedId(next.deviceId);
     setFollowing(false);
     const at = positionOf(next);
-    if (at) camera.current?.flyTo({ center: at, zoom: focusZoom(zoomNow.current), duration: 600, padding: focusPad() });
+    if (at) camera.current?.easeTo({ center: at, zoom: focusZoom(zoomNow.current), duration: 550, padding: focusPad() });
   }
 
   function toggleFollow() {
@@ -238,10 +240,12 @@ export default function LiveMap() {
       : still
         ? `Here for ${durationText((now - still.since) / 60000)}${still.whole ? "+" : ""}`
         : null;
-  const placeLine = selectedState === "moving" ? freshnessLine(selected!, now) : still ? `Since ${fmt.time(still.since)}` : selected ? freshnessLine(selected, now) : "";
+  const address = useAddress(selected?.location?.latitude, selected?.location?.longitude, selectedState === "moving");
+  // Short, so it fits next to the status pill: "just now", "Since 7:42 AM", "Seen 6 h ago".
+  const placeLine = !selected ? "" : selectedState === "moving" ? timeAgo(selected.location?.recordedAt ?? selected.lastSeenAt, now) : still ? `Since ${fmt.time(still.since)}` : selectedState === "offline" || selectedState === "parked" ? `Seen ${timeAgo(selected.lastSeenAt, now)}` : timeAgo(selected.location?.recordedAt ?? selected.lastSeenAt, now);
   const sheetHeights = useMemo(() => {
     const full = Math.max(360, areaHeight - insets.top - 72);
-    return selected ? { peek: 384, half: Math.min(full, 470), full } : { peek: 196, half: Math.min(full, Math.round(areaHeight * 0.5)), full };
+    return selected ? { peek: 206, half: Math.min(full, 430), full } : { peek: 196, half: Math.min(full, Math.round(areaHeight * 0.5)), full };
   }, [areaHeight, insets.top, selected]);
   const speedText = ((): [string, string] => {
     if (!selected || selectedState === "offline" || selectedState === "never_seen") return ["—", ""];
@@ -251,7 +255,10 @@ export default function LiveMap() {
   })();
 
   return (
-    <View style={styles.wrap} onLayout={(e) => setAreaHeight(e.nativeEvent.layout.height)}>
+    <View style={styles.wrap} onLayout={(e) => {
+        setAreaHeight(e.nativeEvent.layout.height);
+        setAreaWidth(e.nativeEvent.layout.width);
+      }}>
       <Map
         style={styles.map}
         mapStyle={styleUrl(style)}
@@ -325,7 +332,7 @@ export default function LiveMap() {
             filter={NOT_CLUSTER}
             layout={{
               "icon-image": ["get", "pin"],
-              "icon-size": ["interpolate", ["linear"], ["zoom"], DOT_ZOOM, 0.27, 12, 0.32, 16, 0.36],
+              "icon-size": ["interpolate", ["linear"], ["zoom"], DOT_ZOOM, 0.22, 8, 0.27, 12, 0.32, 16, 0.36],
               "icon-anchor": isPin ? "bottom" : "center",
               "icon-rotate": prefs.style === "top" ? ["get", "rot"] : 0,
               "icon-rotation-alignment": prefs.style === "top" ? "map" : "viewport",
@@ -351,6 +358,15 @@ export default function LiveMap() {
             paint={{ "text-color": labelColor, "text-halo-color": labelHalo, "text-halo-width": 1.6 }}
           />
         </GeoJSONSource>
+        {/* The bubble over the chosen vehicle: how long it has stood there, or how fast it goes. */}
+        {selected && selectedAt && bubble ? (
+          <ViewAnnotation id="selected-bubble" lngLat={selectedAt} anchor="bottom" offset={[0, isPin ? -64 : -34]}>
+            <View style={styles.bubble}>
+              <Ionicons name={selectedState === "moving" ? "speedometer-outline" : "location"} size={13} color={colors.primary} />
+              <Text style={styles.bubbleText}>{bubble}</Text>
+            </View>
+          </ViewAnnotation>
+        ) : null}
       </Map>
 
       {/* Top: search (opens the fleet list) and the status chips. */}
@@ -404,9 +420,10 @@ export default function LiveMap() {
         <NeighbourHints
           keyId={selected.deviceId}
           prefs={prefs}
+          from={selectedAt ?? null}
           prev={steps.length > 2 || stepIndex === 1 ? steps[(stepIndex - 1 + steps.length) % steps.length] : undefined}
           next={steps.length > 2 || stepIndex === 0 ? steps[(stepIndex + 1) % steps.length] : undefined}
-          top={Math.round(insets.top + 76 + (areaHeight - cardHeight - insets.top - 76) / 2 - 20)}
+          area={{ top: insets.top + 84, bottom: areaHeight - cardHeight - 8, width: areaWidth }}
           onStep={step}
         />
       ) : null}
@@ -429,17 +446,16 @@ export default function LiveMap() {
                     <Text style={styles.cardName} numberOfLines={1}>{displayName(selected)}</Text>
                     <View style={styles.cardNameLine}>
                       <StatusPill state={selectedState} compact />
-                      <Text style={styles.cardSub} numberOfLines={1}>{placeLine}</Text>
+                      <Text style={styles.cardSub} numberOfLines={1}>{steps.length > 1 && stepIndex >= 0 ? `${placeLine} · ${stepIndex + 1} of ${steps.length}` : placeLine}</Text>
                     </View>
                   </View>
                   {steps.length > 1 ? (
                     <View style={styles.stepper}>
-                      <PressableScale onPress={() => step(-1)} scaleTo={0.9} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Previous vehicle">
-                        <Ionicons name="chevron-back" size={18} color={colors.primary} />
+                      <PressableScale onPress={() => step(-1)} scaleTo={0.88} hitSlop={4} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Previous vehicle">
+                        <Ionicons name="chevron-back" size={18} color={colors.foreground} />
                       </PressableScale>
-                      <Text style={styles.stepCountText}>{stepIndex >= 0 ? `${stepIndex + 1}/${steps.length}` : steps.length}</Text>
-                      <PressableScale onPress={() => step(1)} scaleTo={0.9} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Next vehicle">
-                        <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+                      <PressableScale onPress={() => step(1)} scaleTo={0.88} hitSlop={4} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel={`Next vehicle (${stepIndex + 1} of ${steps.length})`}>
+                        <Ionicons name="chevron-forward" size={18} color={colors.foreground} />
                       </PressableScale>
                     </View>
                   ) : null}
@@ -478,14 +494,14 @@ export default function LiveMap() {
               ) : (
                 <SpeedBar speed={speedText[0]} unit={speedText[1]} title={headline.title} detail={headline.detail} headingDeg={loc?.headingDeg ?? null} state={selectedState} />
               )}
-              <AddressCard title={null} coords={coordsText(selected) ?? "No position yet"} label={selectedState === "offline" || selectedState === "parked" ? "Last known position" : undefined} />
-              <FactRow facts={facts!} />
               <View style={styles.cardActions}>
                 <ActionButton icon={following ? "navigate" : "navigate-outline"} label={following ? "Following" : "Follow"} primary onPress={toggleFollow} selected={following} />
                 <ActionButton icon="git-commit-outline" label="Trips" onPress={() => router.push({ pathname: "/trips/[id]", params: { id: selected.deviceId } })} />
                 <ActionButton icon="map-outline" label="Navigate" onPress={openInMaps} />
                 <ActionButton icon="information-circle-outline" label="Details" onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: selected.deviceId } })} />
               </View>
+              <AddressCard title={address?.line1 ?? null} line={address?.line2} coords={coordsText(selected) ?? "No position yet"} label={selectedState === "offline" || selectedState === "parked" ? "Last known position" : undefined} />
+              <FactRow facts={facts!} />
               <PressableScale onPress={() => router.push({ pathname: "/trips/[id]", params: { id: selected.deviceId } })} scaleTo={0.985} style={styles.todayCard} accessibilityRole="button">
                 <View style={styles.todayIcon}>
                   <Ionicons name="git-commit-outline" size={20} color={colors.primary} />
@@ -511,15 +527,6 @@ export default function LiveMap() {
         </MapSheet>
       ) : null}
 
-      {/* The bubble over the chosen vehicle: how long it has stood there, or how fast it goes. */}
-      {selected && selectedAt && bubble ? (
-        <ViewAnnotation id="selected-bubble" lngLat={selectedAt} anchor="bottom" offset={[0, isPin ? -64 : -34]}>
-          <View style={styles.bubble}>
-            <Ionicons name={selectedState === "moving" ? "speedometer-outline" : "location"} size={13} color={colors.primary} />
-            <Text style={styles.bubbleText}>{bubble}</Text>
-          </View>
-        </ViewAnnotation>
-      ) : null}
 
       {intro ? <GlobeIntro ready={diveReady} count={devices.length} onDive={dive} onDone={endIntro} /> : null}
 
@@ -591,8 +598,8 @@ const styles = StyleSheet.create({
   todayTitle: { fontSize: 15, lineHeight: 20, fontWeight: "700", color: colors.foreground },
   bubble: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: colors.background, ...elevation.md },
   bubbleText: { fontSize: 13, lineHeight: 17, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
-  stepper: { flexDirection: "row", alignItems: "center", borderRadius: 18, backgroundColor: colors.primarySoft },
-  stepBtn: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+  stepper: { flexDirection: "row", alignItems: "center", gap: 6 },
+  stepBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: colors.muted, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   close: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   cardHead: { flexDirection: "row", alignItems: "center", gap: space.md },
   cardTitle: { flex: 1, minWidth: 0, gap: 4 },

@@ -1,51 +1,99 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { Animated, Image, PanResponder, StyleSheet, Text } from "react-native";
+import { Animated, Image, PanResponder, StyleSheet, Text, View } from "react-native";
 import { PressableScale } from "@/components/motion";
-import { displayName, fleetState, type FleetDevice } from "@/fleet/model";
+import { displayName, fleetState, STATE_META, type FleetDevice } from "@/fleet/model";
 import { haptic } from "@/haptics";
-import { colors, elevation, font, radius } from "@/theme";
-import { iconName, type IconPrefs } from "./model";
+import { colors, elevation } from "@/theme";
+import { bearing, iconName, type IconPrefs } from "./model";
 import { MAP_ICONS } from "./sprites";
 
+const SIZE = 40;
+const EDGE = 10;
+
 /**
- * Life360-style hints at the left and right edges of the map while a vehicle is open:
- * the previous and next vehicle, tap to go there. They slide in each time the vehicle changes.
+ * Life360-style hints while a vehicle is open: the previous and next vehicle as small round icons
+ * on the edge of the map, placed in the real direction of that vehicle from the open one, with an
+ * arrow pointing to it. Tap one to glide there. They fade in again each time the vehicle changes.
  */
-export function NeighbourHints({ prev, next, top, prefs, onStep, keyId }: { prev?: FleetDevice; next?: FleetDevice; top: number; prefs: IconPrefs; onStep: (by: -1 | 1) => void; keyId: string }) {
+export function NeighbourHints({
+  from,
+  prev,
+  next,
+  area,
+  prefs,
+  onStep,
+  keyId
+}: {
+  from: [number, number] | null;
+  prev?: FleetDevice;
+  next?: FleetDevice;
+  /** The visible part of the map: between the search bar and the sheet. */
+  area: { top: number; bottom: number; width: number };
+  prefs: IconPrefs;
+  onStep: (by: -1 | 1) => void;
+  keyId: string;
+}) {
   const show = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     show.setValue(0);
-    Animated.spring(show, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 6 }).start();
+    Animated.timing(show, { toValue: 1, duration: 260, useNativeDriver: true }).start();
   }, [keyId, show]);
-  if (!prev && !next) return null;
-  const chip = (d: FleetDevice, side: "left" | "right") => {
-    const icon = MAP_ICONS[iconName(d.vehicle?.type, fleetState(d), prefs.style === "top" ? { style: "circle", color: prefs.color } : prefs)];
-    const shift = show.interpolate({ inputRange: [0, 1], outputRange: [side === "left" ? -60 : 60, 0] });
+  if (!from || area.width <= 0 || area.bottom - area.top < SIZE * 3) return null;
+
+  const place = (d: FleetDevice) => {
+    const loc = d.location;
+    if (!loc) return null;
+    const b = (bearing(from, [loc.longitude, loc.latitude]) * Math.PI) / 180;
+    const dx = Math.sin(b);
+    const dy = -Math.cos(b);
+    // Push the point out from the centre until it meets the edge of the visible map.
+    const cx = area.width / 2;
+    const cy = (area.top + area.bottom) / 2;
+    const hx = cx - EDGE - SIZE / 2;
+    const hy = (area.bottom - area.top) / 2 - EDGE - SIZE / 2 - 14;
+    const k = Math.min(Math.abs(dx) > 1e-6 ? hx / Math.abs(dx) : Infinity, Math.abs(dy) > 1e-6 ? hy / Math.abs(dy) : Infinity);
+    return { x: cx + dx * k - SIZE / 2, y: cy + dy * k - SIZE / 2, deg: (b * 180) / Math.PI };
+  };
+
+  const chip = (d: FleetDevice | undefined, by: -1 | 1) => {
+    if (!d) return null;
+    const at = place(d);
+    if (!at) return null;
+    const state = fleetState(d);
+    const meta = STATE_META[state === "never_seen" ? "offline" : state];
+    const icon = MAP_ICONS[iconName(d.vehicle?.type, state, { style: "circle", color: prefs.color })];
+    const name = displayName(d);
     return (
-      <Animated.View style={[styles.slot, side === "left" ? styles.left : styles.right, { top, opacity: show, transform: [{ translateX: shift }] }]}>
+      <Animated.View key={`${by}-${d.deviceId}`} style={[styles.slot, { left: at.x, top: at.y, opacity: show, transform: [{ scale: show.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }] }]}>
         <PressableScale
           onPress={() => {
             haptic.tap();
-            onStep(side === "left" ? -1 : 1);
+            onStep(by);
           }}
-          scaleTo={0.94}
-          style={[styles.chip, side === "left" ? styles.chipLeft : styles.chipRight]}
+          scaleTo={0.9}
+          hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel={`${side === "left" ? "Previous" : "Next"} vehicle: ${displayName(d)}`}
+          accessibilityLabel={`${by === -1 ? "Previous" : "Next"} vehicle: ${name}`}
         >
-          {side === "left" ? <Ionicons name="chevron-back" size={16} color={colors.primary} /> : null}
-          {icon ? <Image source={icon} style={styles.icon} resizeMode="contain" /> : null}
-          <Text style={styles.name} numberOfLines={1}>{displayName(d)}</Text>
-          {side === "right" ? <Ionicons name="chevron-forward" size={16} color={colors.primary} /> : null}
+          {/* The arrow sits on the ring, on the side the vehicle is. */}
+          <View style={[styles.ring, { transform: [{ rotate: `${at.deg}deg` }] }]} pointerEvents="none">
+            <View style={[styles.arrow, { borderBottomColor: meta.color }]} />
+          </View>
+          <View style={[styles.badge, { borderColor: meta.color }]}>
+            {icon ? <Image source={icon} style={styles.icon} resizeMode="contain" /> : <Ionicons name="car-outline" size={18} color={colors.primary} />}
+          </View>
+          <Text style={styles.name} numberOfLines={1}>
+            {name}
+          </Text>
         </PressableScale>
       </Animated.View>
     );
   };
   return (
     <>
-      {prev ? chip(prev, "left") : null}
-      {next ? chip(next, "right") : null}
+      {chip(prev, -1)}
+      {chip(next, 1)}
     </>
   );
 }
@@ -58,11 +106,10 @@ export function SwipeToStep({ children, onStep, enabled, keyId }: { children: Re
   const x = useRef(new Animated.Value(0)).current;
   const from = useRef<0 | -1 | 1>(0);
   useEffect(() => {
-    // A new vehicle: come in from the side it was swiped towards.
     if (from.current === 0) return;
-    x.setValue(from.current * 80);
+    x.setValue(from.current * 60);
     from.current = 0;
-    Animated.spring(x, { toValue: 0, useNativeDriver: true, speed: 18, bounciness: 4 }).start();
+    Animated.spring(x, { toValue: 0, useNativeDriver: true, speed: 20, bounciness: 2 }).start();
   }, [keyId, x]);
   const pan = useMemo(
     () =>
@@ -76,7 +123,7 @@ export function SwipeToStep({ children, onStep, enabled, keyId }: { children: Re
             return;
           }
           haptic.tap();
-          Animated.timing(x, { toValue: by === 1 ? -220 : 220, duration: 140, useNativeDriver: true }).start(() => {
+          Animated.timing(x, { toValue: by === 1 ? -160 : 160, duration: 120, useNativeDriver: true }).start(() => {
             from.current = by === 1 ? 1 : -1;
             onStep(by);
           });
@@ -85,7 +132,7 @@ export function SwipeToStep({ children, onStep, enabled, keyId }: { children: Re
       }),
     [enabled, onStep, x]
   );
-  const opacity = x.interpolate({ inputRange: [-220, 0, 220], outputRange: [0.2, 1, 0.2] });
+  const opacity = x.interpolate({ inputRange: [-160, 0, 160], outputRange: [0.3, 1, 0.3] });
   return (
     <Animated.View {...pan.panHandlers} style={{ transform: [{ translateX: x }], opacity }}>
       {children}
@@ -94,12 +141,10 @@ export function SwipeToStep({ children, onStep, enabled, keyId }: { children: Re
 }
 
 const styles = StyleSheet.create({
-  slot: { position: "absolute" },
-  left: { left: 0 },
-  right: { right: 0 },
-  chip: { flexDirection: "row", alignItems: "center", gap: 4, height: 40, maxWidth: 150, paddingHorizontal: 8, backgroundColor: colors.background, ...elevation.md },
-  chipLeft: { borderTopRightRadius: radius.xl * 2, borderBottomRightRadius: radius.xl * 2, paddingLeft: 4 },
-  chipRight: { borderTopLeftRadius: radius.xl * 2, borderBottomLeftRadius: radius.xl * 2, paddingRight: 4 },
-  icon: { width: 24, height: 26 },
-  name: { flexShrink: 1, fontSize: font.caption, lineHeight: 16, fontWeight: "700", color: colors.foreground }
+  slot: { position: "absolute", width: SIZE, alignItems: "center" },
+  ring: { position: "absolute", left: -6, top: -6, width: SIZE + 12, height: SIZE + 12, alignItems: "center" },
+  arrow: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 8, borderLeftColor: "transparent", borderRightColor: "transparent" },
+  badge: { width: SIZE, height: SIZE, borderRadius: SIZE / 2, borderWidth: 2.5, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", ...elevation.md },
+  icon: { width: 30, height: 32 },
+  name: { position: "absolute", top: SIZE + 3, width: 84, left: (SIZE - 84) / 2, textAlign: "center", fontSize: 11, lineHeight: 14, fontWeight: "700", color: colors.foreground, textShadowColor: colors.background, textShadowRadius: 3 }
 });

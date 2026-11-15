@@ -79,7 +79,7 @@ export function FleetGlance({ offlineSeconds }: { offlineSeconds: number }) {
           <Maximize2 className="size-3.5" aria-hidden="true" /> Open live map
         </Link>
       </CardHeader>
-      <div ref={box} className="relative h-[300px] bg-[#eef2f7] sm:h-[340px]">
+      <div ref={box} className="relative h-[300px] bg-[#eef2f7] dark:bg-muted sm:h-[340px]">
         {visible ? <GlanceMap offlineSeconds={offlineSeconds} /> : <MapPlaceholder />}
         <ul aria-label="Map legend" className="pointer-events-none absolute bottom-2 left-2 m-0 flex list-none flex-wrap gap-x-3 gap-y-1 rounded-lg bg-white/90 px-2.5 py-1.5 p-0 text-[11px] font-medium text-foreground shadow-card backdrop-blur">
           {LEGEND.map(([s, label]) => (

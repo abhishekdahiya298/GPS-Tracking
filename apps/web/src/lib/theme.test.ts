@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { readTheme } from "./theme";
 
 describe("readTheme", () => {
-  it("keeps light and dark, and treats anything else as the browser's choice", () => {
+  it("keeps each choice, and starts light on a first visit", () => {
     expect(readTheme("light")).toBe("light");
     expect(readTheme("dark")).toBe("dark");
-    expect(readTheme("blue")).toBe("system");
-    expect(readTheme(undefined)).toBe("system");
+    expect(readTheme("system")).toBe("system");
+    expect(readTheme("blue")).toBe("light");
+    expect(readTheme(undefined)).toBe("light");
   });
 });
