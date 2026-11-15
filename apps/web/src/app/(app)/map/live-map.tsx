@@ -739,9 +739,9 @@ export function LiveMap({
         onClick={() => focus(r.d.deviceId)}
         aria-label={`${side === "left" ? "Previous" : "Next"} vehicle: ${r.name}`}
         className={cn(
-          "absolute top-[42%] z-[1] flex h-10 max-w-[180px] cursor-pointer items-center gap-1.5 border-0 bg-background px-2 text-xs font-bold text-foreground shadow-pop hover:bg-muted",
+          "absolute top-[26%] z-[1] flex h-10 max-w-[200px] cursor-pointer items-center gap-1.5 border-0 bg-background px-2 text-xs font-bold text-foreground shadow-pop hover:bg-muted",
           side === "left" ? "left-0 animate-slide-in-left rounded-r-full pl-1" : "right-0 animate-in rounded-l-full pr-1",
-          sel && !historyFor && side === "left" && "md:left-[392px]"
+          sel && !historyFor && side === "left" && "md:left-[416px]"
         )}
       >
         {side === "left" && <ChevronLeft className="size-4 shrink-0 text-primary" aria-hidden="true" />}
@@ -757,12 +757,12 @@ export function LiveMap({
       aria-label="Selected vehicle"
       className={cn(
         "absolute inset-x-3 z-[2] grid animate-in grid-cols-[minmax(0,1fr)] gap-3 rounded-xl border border-border bg-background p-4 shadow-pop",
-        "bottom-[160px] md:inset-x-auto md:bottom-6 md:left-4 md:w-[360px]",
+        "bottom-[160px] md:inset-x-auto md:bottom-6 md:left-4 md:w-[384px]",
         sheetOpen && "hidden md:grid"
       )}
     >
       <div className="flex items-start gap-3">
-        <VehiclePicture type={sel.vehicle?.type} className="h-12 w-16" />
+        <VehiclePicture type={sel.vehicle?.type} className="h-11 w-14 shrink-0" />
         <div className="min-w-0 flex-1">
           <h2 className="m-0 flex min-w-0 items-baseline gap-1.5 text-base font-semibold">
             <span className="truncate">{splitName(deviceLabel(sel)).main}</span>
