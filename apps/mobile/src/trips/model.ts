@@ -173,3 +173,21 @@ export function trackSummary(track: Track): { distanceKm: number; durationMs: nu
   return { distanceKm: km, durationMs: track.endT - track.startT, maxSpeedKph: speeds.length ? Math.max(...speeds) : null };
 }
 
+
+/** Below this a vehicle counts as standing (GPS jitter can read a few km/h at rest). */
+const STILL_KPH = 5;
+
+/**
+ * Since when the vehicle has been standing, from its recorded points (oldest first): the time of
+ * the first point after its last movement. Null when the latest point is moving or there are no
+ * points. When it stood still for the whole window, `whole` is true ("here for 12 h+").
+ */
+export function stillSince(points: HistoryPoint[]): { since: number; whole: boolean } | null {
+  if (points.length === 0) return null;
+  const moving = (p: HistoryPoint) => (p.speedKph ?? 0) >= STILL_KPH;
+  if (moving(points[points.length - 1]!)) return null;
+  for (let i = points.length - 1; i >= 0; i--) {
+    if (moving(points[i]!)) return { since: Date.parse(points[i + 1]!.recordedAt), whole: false };
+  }
+  return { since: Date.parse(points[0]!.recordedAt), whole: true };
+}

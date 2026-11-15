@@ -15,8 +15,8 @@ type IconName = keyof typeof Ionicons.glyphMap;
 
 /** Outline icon when idle, filled when active. Keyed by route name. */
 const TAB_ICONS: Record<string, { idle: IconName; active: IconName }> = {
-  index: { idle: "home-outline", active: "home" },
-  map: { idle: "map-outline", active: "map" },
+  index: { idle: "map-outline", active: "map" },
+  overview: { idle: "grid-outline", active: "grid" },
   alerts: { idle: "notifications-outline", active: "notifications" },
   account: { idle: "person-outline", active: "person" }
 };

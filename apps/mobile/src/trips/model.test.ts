@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advance, buildTrack, dayLabel, dayRange, durationText, trackSummary, positionAt, progressOf, shiftDay, timeAtProgress, todayKey, trackBounds, type HistoryPoint } from "./model";
+import { advance, buildTrack, dayLabel, dayRange, durationText, stillSince, trackSummary, positionAt, progressOf, shiftDay, timeAtProgress, todayKey, trackBounds, type HistoryPoint } from "./model";
 
 const TZ = "America/Toronto";
 const pt = (iso: string, lat: number, lng: number, speedKph: number | null = 50): HistoryPoint => ({ recordedAt: iso, latitude: lat, longitude: lng, speedKph, headingDeg: null });
@@ -80,5 +80,17 @@ describe("trackSummary", () => {
     expect(s.distanceKm).toBeCloseTo(22.24, 1);
     expect(s.durationMs).toBe(120000);
     expect(s.maxSpeedKph).toBe(72);
+  });
+});
+
+describe("stillSince", () => {
+  const pt = (t: string, v: number | null) => ({ latitude: 1, longitude: 1, speedKph: v, headingDeg: null, recordedAt: t });
+  it("finds the first standing point after the last movement", () => {
+    expect(stillSince([pt("2026-11-15T08:00:00Z", 60), pt("2026-11-15T08:10:00Z", 2), pt("2026-11-15T09:00:00Z", 0)])).toEqual({ since: Date.parse("2026-11-15T08:10:00Z"), whole: false });
+  });
+  it("is null while moving or without points, and whole when it never moved", () => {
+    expect(stillSince([pt("2026-11-15T08:00:00Z", 0), pt("2026-11-15T08:10:00Z", 40)])).toBeNull();
+    expect(stillSince([])).toBeNull();
+    expect(stillSince([pt("2026-11-15T08:00:00Z", 0), pt("2026-11-15T09:00:00Z", null)])).toEqual({ since: Date.parse("2026-11-15T08:00:00Z"), whole: true });
   });
 });

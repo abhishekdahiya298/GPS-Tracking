@@ -89,7 +89,7 @@ export default function VehicleScreen() {
             <View style={styles.placeActions}>
               {hasMap ? (
                 <View style={styles.flex}>
-                  <Button compact title="Show on map" icon="map-outline" onPress={() => router.navigate({ pathname: "/(tabs)/map", params: { device: device.deviceId } })} />
+                  <Button compact title="Show on map" icon="map-outline" onPress={() => router.navigate({ pathname: "/(tabs)", params: { device: device.deviceId } })} />
                 </View>
               ) : null}
               <View style={styles.flex}>
