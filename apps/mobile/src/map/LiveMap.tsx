@@ -10,7 +10,7 @@ import { api } from "@/api";
 import { AddressCard, Chip, FactRow, SpeedBar, StatusPill, VehiclePicture } from "@/components/kit";
 import { Dots, FadeIn, PressableScale, PulseDot, SlideUp } from "@/components/motion";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { FILTERS, STATE_META, coordsText, countByFilter, displayName, fleetState, freshnessLine, selectDevices, sheetFacts, sheetHeadline, type FleetFilter } from "@/fleet/model";
+import { FILTERS, STATE_META, coordsText, countByFilter, displayName, fleetState, selectDevices, sheetFacts, sheetHeadline, timeAgo, type FleetFilter } from "@/fleet/model";
 import { haptic } from "@/haptics";
 import { colors, elevation, font, ink, isDark, radius, size, softTint, space, type } from "@/theme";
 import { FleetSheet } from "./FleetSheet";
@@ -206,7 +206,7 @@ export default function LiveMap() {
     setSelectedId(next.deviceId);
     setFollowing(false);
     const at = positionOf(next);
-    if (at) camera.current?.flyTo({ center: at, zoom: focusZoom(zoomNow.current), duration: 600, padding: focusPad() });
+    if (at) camera.current?.easeTo({ center: at, zoom: focusZoom(zoomNow.current), duration: 550, padding: focusPad() });
   }
 
   function toggleFollow() {
@@ -238,10 +238,11 @@ export default function LiveMap() {
       : still
         ? `Here for ${durationText((now - still.since) / 60000)}${still.whole ? "+" : ""}`
         : null;
-  const placeLine = selectedState === "moving" ? freshnessLine(selected!, now) : still ? `Since ${fmt.time(still.since)}` : selected ? freshnessLine(selected, now) : "";
+  // Short, so it fits next to the status pill: "just now", "Since 7:42 AM", "Seen 6 h ago".
+  const placeLine = !selected ? "" : selectedState === "moving" ? timeAgo(selected.location?.recordedAt ?? selected.lastSeenAt, now) : still ? `Since ${fmt.time(still.since)}` : selectedState === "offline" || selectedState === "parked" ? `Seen ${timeAgo(selected.lastSeenAt, now)}` : timeAgo(selected.location?.recordedAt ?? selected.lastSeenAt, now);
   const sheetHeights = useMemo(() => {
     const full = Math.max(360, areaHeight - insets.top - 72);
-    return selected ? { peek: 384, half: Math.min(full, 470), full } : { peek: 196, half: Math.min(full, Math.round(areaHeight * 0.5)), full };
+    return selected ? { peek: 206, half: Math.min(full, 430), full } : { peek: 196, half: Math.min(full, Math.round(areaHeight * 0.5)), full };
   }, [areaHeight, insets.top, selected]);
   const speedText = ((): [string, string] => {
     if (!selected || selectedState === "offline" || selectedState === "never_seen") return ["—", ""];
@@ -351,6 +352,15 @@ export default function LiveMap() {
             paint={{ "text-color": labelColor, "text-halo-color": labelHalo, "text-halo-width": 1.6 }}
           />
         </GeoJSONSource>
+        {/* The bubble over the chosen vehicle: how long it has stood there, or how fast it goes. */}
+        {selected && selectedAt && bubble ? (
+          <ViewAnnotation id="selected-bubble" lngLat={selectedAt} anchor="bottom" offset={[0, isPin ? -64 : -34]}>
+            <View style={styles.bubble}>
+              <Ionicons name={selectedState === "moving" ? "speedometer-outline" : "location"} size={13} color={colors.primary} />
+              <Text style={styles.bubbleText}>{bubble}</Text>
+            </View>
+          </ViewAnnotation>
+        ) : null}
       </Map>
 
       {/* Top: search (opens the fleet list) and the status chips. */}
@@ -478,14 +488,14 @@ export default function LiveMap() {
               ) : (
                 <SpeedBar speed={speedText[0]} unit={speedText[1]} title={headline.title} detail={headline.detail} headingDeg={loc?.headingDeg ?? null} state={selectedState} />
               )}
-              <AddressCard title={null} coords={coordsText(selected) ?? "No position yet"} label={selectedState === "offline" || selectedState === "parked" ? "Last known position" : undefined} />
-              <FactRow facts={facts!} />
               <View style={styles.cardActions}>
                 <ActionButton icon={following ? "navigate" : "navigate-outline"} label={following ? "Following" : "Follow"} primary onPress={toggleFollow} selected={following} />
                 <ActionButton icon="git-commit-outline" label="Trips" onPress={() => router.push({ pathname: "/trips/[id]", params: { id: selected.deviceId } })} />
                 <ActionButton icon="map-outline" label="Navigate" onPress={openInMaps} />
                 <ActionButton icon="information-circle-outline" label="Details" onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: selected.deviceId } })} />
               </View>
+              <AddressCard title={null} coords={coordsText(selected) ?? "No position yet"} label={selectedState === "offline" || selectedState === "parked" ? "Last known position" : undefined} />
+              <FactRow facts={facts!} />
               <PressableScale onPress={() => router.push({ pathname: "/trips/[id]", params: { id: selected.deviceId } })} scaleTo={0.985} style={styles.todayCard} accessibilityRole="button">
                 <View style={styles.todayIcon}>
                   <Ionicons name="git-commit-outline" size={20} color={colors.primary} />
@@ -511,15 +521,6 @@ export default function LiveMap() {
         </MapSheet>
       ) : null}
 
-      {/* The bubble over the chosen vehicle: how long it has stood there, or how fast it goes. */}
-      {selected && selectedAt && bubble ? (
-        <ViewAnnotation id="selected-bubble" lngLat={selectedAt} anchor="bottom" offset={[0, isPin ? -64 : -34]}>
-          <View style={styles.bubble}>
-            <Ionicons name={selectedState === "moving" ? "speedometer-outline" : "location"} size={13} color={colors.primary} />
-            <Text style={styles.bubbleText}>{bubble}</Text>
-          </View>
-        </ViewAnnotation>
-      ) : null}
 
       {intro ? <GlobeIntro ready={diveReady} count={devices.length} onDive={dive} onDone={endIntro} /> : null}
 
