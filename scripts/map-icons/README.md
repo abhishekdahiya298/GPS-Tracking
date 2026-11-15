@@ -9,4 +9,4 @@ node -e "const fs=require('fs');eval(fs.readFileSync('scripts/map-icons/icons.js
 for f in /tmp/map-icons/svg/*.svg; do rsvg-convert "$f" -o "/tmp/map-icons/png/$(basename "$f" .svg).png"; done
 ```
 
-Then copy the PNGs to both folders. Names: `{pin|circle|square}-{status|type}-{kind}-{state}.png` and `top-{truck|trailer}-{state}.png`, drawn at 3×.
+Then copy the PNGs to both folders. Names: `{pin|circle|square}-{status|type}-{kind}-{state}.png` and `top-{truck|trailer|car}-{state}.png` (the "Live 3D" style), drawn at 3×.

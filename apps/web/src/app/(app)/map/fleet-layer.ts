@@ -740,7 +740,7 @@ export class FleetLayer {
       features.push({
         type: "Feature",
         geometry: { type: "Point", coordinates: this.display.get(p.id) ?? p.lngLat },
-        properties: { id: p.id, name: p.name, state: p.state, type: p.type, shape: SHAPE_OF[p.type], sub: p.sub ?? "", heading: p.heading ?? 0, pin: iconName(p.type, p.state, this.prefs), rot: p.state === "moving" ? (p.heading ?? 0) : 0 }
+        properties: { id: p.id, name: p.name, state: p.state, type: p.type, shape: SHAPE_OF[p.type], sub: p.sub ?? "", heading: p.heading ?? 0, pin: iconName(p.type, p.state, this.prefs), rot: p.heading ?? 0 }
       });
     }
     return { type: "FeatureCollection", features };

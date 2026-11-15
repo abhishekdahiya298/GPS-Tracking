@@ -27,12 +27,12 @@ export const shapeOf = (type: string | null | undefined): VehicleShape => SHAPES
 const spriteState = (s: FleetState): "moving" | "idle" | "stopped" | "offline" => (s === "parked" ? "stopped" : s === "never_seen" ? "offline" : s);
 /** Name of the map image for a vehicle, e.g. "veh-truck-moving". The files are in assets/map. */
 export const spriteName = (type: string | null | undefined, state: FleetState): string => `veh-${shapeOf(type)}-${spriteState(state)}`;
-/** How vehicles are drawn on the map: a 3D pin, a round or square badge, or the vehicle seen from above. */
+/** How vehicles are drawn on the map: "top" is Live 3D (the vehicle from above, in its status colour, turned to its heading); or a 3D pin, a round or a square badge. */
 export type IconStyle = "pin" | "circle" | "square" | "top";
 /** Badge colour: the vehicle's status (default) or its type. The status badge always shows the status. */
 export type IconColor = "status" | "type";
 export interface IconPrefs { style: IconStyle; color: IconColor }
-export const DEFAULT_ICON_PREFS: IconPrefs = { style: "pin", color: "status" };
+export const DEFAULT_ICON_PREFS: IconPrefs = { style: "top", color: "status" };
 
 /** Backend vehicle type → the picture drawn on the icon. */
 export function iconKind(type: string | null | undefined): "truck" | "trailer" | "van" | "pickup" | "car" | "bus" | "equipment" | "asset" {
@@ -51,6 +51,11 @@ export function iconKind(type: string | null | undefined): "truck" | "trailer" |
       return "asset";
   }
 }
+/** The three "Live 3D" shapes: a tractor-trailer, a trailer alone, or a car for everything smaller. */
+export function liveKind(type: string | null | undefined): "truck" | "trailer" | "car" {
+  const k = iconKind(type);
+  return k === "truck" || k === "bus" || k === "equipment" ? "truck" : k === "trailer" ? "trailer" : "car";
+}
 const iconState = (s: FleetState): "moving" | "idle" | "stopped" | "parked" | "offline" => (s === "never_seen" ? "offline" : s);
 
 /**
@@ -59,7 +64,7 @@ const iconState = (s: FleetState): "moving" | "idle" | "stopped" | "parked" | "o
  */
 export function iconName(type: string | null | undefined, state: FleetState, prefs: IconPrefs = DEFAULT_ICON_PREFS): string {
   const st = iconState(state);
-  if (prefs.style === "top") return `top-${iconKind(type) === "trailer" ? "trailer" : "truck"}-${st}`;
+  if (prefs.style === "top") return `top-${liveKind(type)}-${st}`;
   return `${prefs.style}-${prefs.color}-${iconKind(type)}-${st}`;
 }
 /** The prefix every icon of one style shares, to load only those pictures. */
@@ -81,7 +86,7 @@ export interface VehicleProps {
   icon: string;
   /** The map icon drawn for the vehicle (see iconName). */
   pin: string;
-  /** Degrees the top-down icon turns: the heading while moving, else 0. */
+  /** Degrees the Live 3D icon turns: the last reported heading, so it lines up with the road even when stopped. */
   rot: number;
   /** Second line under the name: "62 mph", "Idling", "Parked" … */
   sub: string;
@@ -121,7 +126,7 @@ export function toFeatures(
           heading: d.location.headingDeg ?? headings?.get(d.deviceId) ?? 0,
           icon: spriteName(d.vehicle?.type, state),
           pin: iconName(d.vehicle?.type, state, prefs),
-          rot: state === "moving" ? (d.location.headingDeg ?? headings?.get(d.deviceId) ?? 0) : 0,
+          rot: d.location.headingDeg ?? headings?.get(d.deviceId) ?? 0,
           sub: state === "moving" && fmtSpeed ? fmtSpeed(d.location.speedKph) : SUB[state]
         }
       };

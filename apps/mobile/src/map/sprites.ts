@@ -2,7 +2,7 @@
 /**
  * The 3D map icon library (assets/map/icons, drawn at 3× from the design canvas's icons.js).
  * Named one by one because the bundler only includes images it can see by name. Shown at icon-size 1/3.
- * Names: {pin|circle|square}-{status|type}-{kind}-{state} and top-{truck|trailer}-{state}.
+ * Names: {pin|circle|square}-{status|type}-{kind}-{state} and top-{truck|trailer|car}-{state}.
  */
 export const MAP_ICONS: Record<string, number> = {
   "circle-status-asset-idle": require("../../assets/map/icons/circle-status-asset-idle.png"),
@@ -245,6 +245,11 @@ export const MAP_ICONS: Record<string, number> = {
   "square-type-van-offline": require("../../assets/map/icons/square-type-van-offline.png"),
   "square-type-van-parked": require("../../assets/map/icons/square-type-van-parked.png"),
   "square-type-van-stopped": require("../../assets/map/icons/square-type-van-stopped.png"),
+  "top-car-idle": require("../../assets/map/icons/top-car-idle.png"),
+  "top-car-moving": require("../../assets/map/icons/top-car-moving.png"),
+  "top-car-offline": require("../../assets/map/icons/top-car-offline.png"),
+  "top-car-parked": require("../../assets/map/icons/top-car-parked.png"),
+  "top-car-stopped": require("../../assets/map/icons/top-car-stopped.png"),
   "top-trailer-idle": require("../../assets/map/icons/top-trailer-idle.png"),
   "top-trailer-moving": require("../../assets/map/icons/top-trailer-moving.png"),
   "top-trailer-offline": require("../../assets/map/icons/top-trailer-offline.png"),

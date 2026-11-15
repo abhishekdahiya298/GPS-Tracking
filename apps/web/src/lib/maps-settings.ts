@@ -31,13 +31,13 @@ export interface MapsSettings {
   mobileMap: (typeof MOBILE_MAPS)[number];
 }
 
-export const DEFAULT_MAPS_SETTINGS: MapsSettings = { addressProvider: "off", mapStyle: "streets", iconStyle: "pin", iconColor: "status", mobileMap: "osm" };
+export const DEFAULT_MAPS_SETTINGS: MapsSettings = { addressProvider: "off", mapStyle: "streets", iconStyle: "top", iconColor: "status", mobileMap: "osm" };
 
 export const MapsSettingsSchema = z.object({
   addressProvider: z.enum(ADDRESS_PROVIDERS),
   mapStyle: z.enum(MAP_STYLES),
   // Saved before these existed: fall back to the defaults instead of losing the rest.
-  iconStyle: z.enum(ICON_STYLES).default("pin"),
+  iconStyle: z.enum(ICON_STYLES).default("top"),
   iconColor: z.enum(ICON_COLORS).default("status"),
   mobileMap: z.enum(MOBILE_MAPS).default("osm")
 });

@@ -142,7 +142,7 @@ export const FALLBACK_VIEW = { center: [-98.6, 39.8] as [number, number], zoom: 
 export type IconStyle = "pin" | "circle" | "square" | "top";
 export type IconColor = "status" | "type";
 export interface IconPrefs { style: IconStyle; color: IconColor }
-export const DEFAULT_ICON_PREFS: IconPrefs = { style: "pin", color: "status" };
+export const DEFAULT_ICON_PREFS: IconPrefs = { style: "top", color: "status" };
 
 /** Backend vehicle type → the picture on the icon (same rule as the phone app). */
 export function iconKind(type: string | null | undefined): string {
@@ -164,7 +164,10 @@ export function iconKind(type: string | null | undefined): string {
 
 /** Map icon name, e.g. "pin-status-truck-idle" or "top-trailer-moving" (files in /fleet-art/map/icons). */
 export function iconName(type: string | null | undefined, state: MapState, prefs: IconPrefs = DEFAULT_ICON_PREFS): string {
-  if (prefs.style === "top") return `top-${iconKind(type) === "trailer" ? "trailer" : "truck"}-${state}`;
+  if (prefs.style === "top") {
+    const k = iconKind(type);
+    return `top-${k === "truck" || k === "bus" || k === "equipment" ? "truck" : k === "trailer" ? "trailer" : "car"}-${state}`;
+  }
   return `${prefs.style}-${prefs.color}-${iconKind(type)}-${state}`;
 }
 
@@ -172,6 +175,6 @@ const KINDS = ["truck", "trailer", "van", "pickup", "car", "bus", "equipment", "
 const STATES: MapState[] = ["moving", "idle", "stopped", "parked", "offline"];
 /** Every icon one style draws, for loading onto the map. */
 export function iconNames(prefs: IconPrefs): string[] {
-  if (prefs.style === "top") return ["truck", "trailer"].flatMap((k) => STATES.map((s) => `top-${k}-${s}`));
+  if (prefs.style === "top") return ["truck", "trailer", "car"].flatMap((k) => STATES.map((s) => `top-${k}-${s}`));
   return KINDS.flatMap((k) => STATES.map((s) => `${prefs.style}-${prefs.color}-${k}-${s}`));
 }
