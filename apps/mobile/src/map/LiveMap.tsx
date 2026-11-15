@@ -29,7 +29,7 @@ import { NeighbourHints, SwipeToStep } from "./NeighbourHints";
 /** Movement trails only once the map is close enough for them to read as roads. */
 const TRAIL_ZOOM = 11;
 /** Zoomed out further than this, vehicles are plain status dots; closer in, the 3D icons. */
-const DOT_ZOOM = 8;
+const DOT_ZOOM = 4;
 import { useGlide } from "./useGlide";
 
 const FIT_PADDING = { top: 190, right: 50, bottom: 240, left: 50 };
@@ -66,6 +66,7 @@ export default function LiveMap() {
   // The selected-vehicle card's height, so the round buttons can sit just above it.
   const [cardHeight, setCardHeight] = useState(0);
   const [areaHeight, setAreaHeight] = useState(0);
+  const [areaWidth, setAreaWidth] = useState(0);
   const [snap, setSnap] = useState<SheetSnap>("peek");
   // Choosing a vehicle (or going back to the fleet) starts the sheet low again, so the map stays big.
   useEffect(() => setSnap("peek"), [selectedId]);
@@ -254,7 +255,10 @@ export default function LiveMap() {
   })();
 
   return (
-    <View style={styles.wrap} onLayout={(e) => setAreaHeight(e.nativeEvent.layout.height)}>
+    <View style={styles.wrap} onLayout={(e) => {
+        setAreaHeight(e.nativeEvent.layout.height);
+        setAreaWidth(e.nativeEvent.layout.width);
+      }}>
       <Map
         style={styles.map}
         mapStyle={styleUrl(style)}
@@ -328,7 +332,7 @@ export default function LiveMap() {
             filter={NOT_CLUSTER}
             layout={{
               "icon-image": ["get", "pin"],
-              "icon-size": ["interpolate", ["linear"], ["zoom"], DOT_ZOOM, 0.27, 12, 0.32, 16, 0.36],
+              "icon-size": ["interpolate", ["linear"], ["zoom"], DOT_ZOOM, 0.22, 8, 0.27, 12, 0.32, 16, 0.36],
               "icon-anchor": isPin ? "bottom" : "center",
               "icon-rotate": prefs.style === "top" ? ["get", "rot"] : 0,
               "icon-rotation-alignment": prefs.style === "top" ? "map" : "viewport",
@@ -416,9 +420,10 @@ export default function LiveMap() {
         <NeighbourHints
           keyId={selected.deviceId}
           prefs={prefs}
+          from={selectedAt ?? null}
           prev={steps.length > 2 || stepIndex === 1 ? steps[(stepIndex - 1 + steps.length) % steps.length] : undefined}
           next={steps.length > 2 || stepIndex === 0 ? steps[(stepIndex + 1) % steps.length] : undefined}
-          top={Math.round(insets.top + 76 + (areaHeight - cardHeight - insets.top - 76) / 2 - 20)}
+          area={{ top: insets.top + 84, bottom: areaHeight - cardHeight - 8, width: areaWidth }}
           onStep={step}
         />
       ) : null}
@@ -441,17 +446,16 @@ export default function LiveMap() {
                     <Text style={styles.cardName} numberOfLines={1}>{displayName(selected)}</Text>
                     <View style={styles.cardNameLine}>
                       <StatusPill state={selectedState} compact />
-                      <Text style={styles.cardSub} numberOfLines={1}>{placeLine}</Text>
+                      <Text style={styles.cardSub} numberOfLines={1}>{steps.length > 1 && stepIndex >= 0 ? `${placeLine} · ${stepIndex + 1} of ${steps.length}` : placeLine}</Text>
                     </View>
                   </View>
                   {steps.length > 1 ? (
                     <View style={styles.stepper}>
-                      <PressableScale onPress={() => step(-1)} scaleTo={0.9} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Previous vehicle">
-                        <Ionicons name="chevron-back" size={18} color={colors.primary} />
+                      <PressableScale onPress={() => step(-1)} scaleTo={0.88} hitSlop={4} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Previous vehicle">
+                        <Ionicons name="chevron-back" size={18} color={colors.foreground} />
                       </PressableScale>
-                      <Text style={styles.stepCountText}>{stepIndex >= 0 ? `${stepIndex + 1}/${steps.length}` : steps.length}</Text>
-                      <PressableScale onPress={() => step(1)} scaleTo={0.9} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel="Next vehicle">
-                        <Ionicons name="chevron-forward" size={18} color={colors.primary} />
+                      <PressableScale onPress={() => step(1)} scaleTo={0.88} hitSlop={4} style={styles.stepBtn} accessibilityRole="button" accessibilityLabel={`Next vehicle (${stepIndex + 1} of ${steps.length})`}>
+                        <Ionicons name="chevron-forward" size={18} color={colors.foreground} />
                       </PressableScale>
                     </View>
                   ) : null}
@@ -594,8 +598,8 @@ const styles = StyleSheet.create({
   todayTitle: { fontSize: 15, lineHeight: 20, fontWeight: "700", color: colors.foreground },
   bubble: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: colors.background, ...elevation.md },
   bubbleText: { fontSize: 13, lineHeight: 17, fontWeight: "700", color: colors.foreground, fontVariant: ["tabular-nums"] },
-  stepper: { flexDirection: "row", alignItems: "center", borderRadius: 18, backgroundColor: colors.primarySoft },
-  stepBtn: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+  stepper: { flexDirection: "row", alignItems: "center", gap: 6 },
+  stepBtn: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: colors.muted, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   close: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   cardHead: { flexDirection: "row", alignItems: "center", gap: space.md },
   cardTitle: { flex: 1, minWidth: 0, gap: 4 },

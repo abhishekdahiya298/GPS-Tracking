@@ -13,6 +13,7 @@ import { Placeholder } from "@/components/Placeholder";
 import { useFleet } from "@/fleet/FleetProvider";
 import { colors, elevation, ink, radius, size, softTint, space, type } from "@/theme";
 import { STATE_META } from "@/fleet/model";
+import { useAddress } from "@/map/useAddress";
 import { SPEEDS, advance, buildTrack, durationText, positionAt, progressOf, timeAtProgress, trackSummary, type HistoryPage, type HistoryPoint, type Track } from "@/trips/model";
 
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
@@ -25,7 +26,8 @@ type Load = { state: "loading" } | { state: "ready"; track: Track } | { state: "
 
 export default function TripScreen() {
   const { id, from, to, name } = useLocalSearchParams<{ id: string; from: string; to: string; name?: string }>();
-  const { units, timeZone, timeFormat } = useFleet();
+  const { units, timeZone, timeFormat, devices } = useFleet();
+  const kind = devices.find((d) => d.deviceId === id)?.vehicle?.type;
   const fmt = useMemo(() => dateFormatter(timeZone, timeFormat), [timeZone, timeFormat]);
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [t, setT] = useState(0);
@@ -120,7 +122,7 @@ export default function TripScreen() {
       <View style={styles.flex}>
         {TripMap ? (
           <Suspense fallback={<Loading text="Opening the map" />}>
-            <TripMap track={track} at={head.at} />
+            <TripMap track={track} at={head.at} index={head.index} kind={kind === "trailer" ? "trailer" : "truck"} />
           </Suspense>
         ) : (
           <Placeholder icon="map-outline" title="Route map" note="The map needs the installed RIO GPS app. It can't run inside Expo Go." />
@@ -184,9 +186,9 @@ export default function TripScreen() {
 
         {/* Start, driving and end, like a short timeline. Positions are coordinates until addresses are switched on. */}
         <View style={styles.timeline}>
-          <Stop color={STOP_START} title="Start" time={fmt.time(track.startT)} detail={where(first)} />
+          <PlaceStop color={STOP_START} title="Start" time={fmt.time(track.startT)} at={first} fallback={where(first)} />
           <Stop color={colors.primary} title="Driving" time={durationText(summary.durationMs / 60000)} detail={`${units.fmtDist(summary.distanceKm)}${summary.maxSpeedKph !== null ? ` · top ${units.fmtSpeed(summary.maxSpeedKph)}` : ""}`} />
-          <Stop color={STOP_END} title="End" time={fmt.time(track.endT)} detail={where(last)} last />
+          <PlaceStop color={STOP_END} title="End" time={fmt.time(track.endT)} at={last} fallback={where(last)} last />
         </View>
       </SlideUp>
     </View>
@@ -213,6 +215,12 @@ function Stop({ color, title, time, detail, last = false }: { color: string; tit
       </View>
     </View>
   );
+}
+
+/** A start or end stop: its street address when addresses are on, else the coordinates. */
+function PlaceStop({ at, fallback, ...rest }: { color: string; title: string; time: string; at: [number, number]; fallback: string; last?: boolean }) {
+  const address = useAddress(at[1], at[0]);
+  return <Stop {...rest} detail={address ? address.label : fallback} />;
 }
 
 function SumCell({ value, label, color, soft }: { value: string; label: string; color: string; soft: string }) {
