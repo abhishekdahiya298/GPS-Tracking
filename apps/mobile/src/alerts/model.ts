@@ -46,7 +46,7 @@ const META: Record<string, { label: string; verb: string; color: string; soft: s
   load_no_signal: { label: "Load: no location", verb: "has no recent location", color: "#b45309", soft: "#fff5e1", icon: "location-outline" },
   load_paused: { label: "Load: driver paused", verb: "driver paused sharing", color: "#b45309", soft: "#fff5e1", icon: "pause-circle-outline" },
   load_arrived: { label: "Load arrived", verb: "arrived", color: "#0369a1", soft: "#e8f4fb", icon: "flag-outline" },
-  load_delivered: { label: "Load delivered", verb: "was delivered", color: "#15803d", soft: "#e9f7ee", icon: "checkmark-done-outline" }
+  load_delivered: { label: "Load delivered", verb: "was delivered", color: "#136c35", soft: "#e9f7ee", icon: "checkmark-done-outline" }
 };
 
 export function alertMeta(type: string) {
@@ -129,7 +129,7 @@ export function alertSeverity(type: string): AlertSeverity {
   return SEVERITY[type] ?? "info";
 }
 export const SEVERITY_META: Record<AlertSeverity, { label: string; color: string; soft: string }> = {
-  high: { label: "High", color: "#c62828", soft: "#fdecec" },
-  medium: { label: "Medium", color: "#c2570c", soft: "#fff1e0" },
+  high: { label: "High", color: "#ad1f1f", soft: "#fdecec" },
+  medium: { label: "Medium", color: "#a3470a", soft: "#fff1e0" },
   info: { label: "Info", color: "#1d4ed8", soft: "#eaf1ff" }
 };

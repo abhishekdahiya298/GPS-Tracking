@@ -439,7 +439,7 @@ export default function LiveMap() {
               <View style={styles.tiles}>
                 <MiniFact icon="key-outline" label="Ignition" value={facts!.ignition} color={facts!.ignition === "Off" ? STATE_META.stopped.color : STATE_META.moving.color} soft={facts!.ignition === "Off" ? STATE_META.stopped.soft : STATE_META.moving.soft} />
                 <MiniFact icon="pulse-outline" label="Motion" value={facts!.motion} color={colors.primary} soft={colors.primarySoft} />
-                <MiniFact icon="locate-outline" label="GPS" value={facts!.gps.value} color={facts!.gps.fresh ? "#7c3aed" : STATE_META.idle.color} soft={facts!.gps.fresh ? "#e8ddfc" : STATE_META.idle.soft} />
+                <MiniFact icon="locate-outline" label="GPS" value={facts!.gps.value} color={facts!.gps.fresh ? "#6526d1" : STATE_META.idle.color} soft={facts!.gps.fresh ? "#dccdfa" : STATE_META.idle.soft} />
                 <MiniFact icon="wifi-outline" label="Tracker" value={facts!.tracker.value} color={facts!.tracker.online ? STATE_META.idle.color : STATE_META.offline.color} soft={facts!.tracker.online ? STATE_META.idle.soft : STATE_META.offline.soft} />
               </View>
               <View style={styles.cardActions}>

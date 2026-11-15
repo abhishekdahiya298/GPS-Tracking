@@ -13,7 +13,7 @@ describe("map features", () => {
     const fc = toFeatures([dev("1", 43.5, -79.6), dev("2", null, null), dev("3", 0, 0), dev("4", 43.6, -79.7, { connectivity: "offline" })]);
     expect(fc.features.map((f) => f.properties.deviceId)).toEqual(["1", "4"]);
     expect(fc.features[0]!.geometry.coordinates).toEqual([-79.6, 43.5]);
-    expect(fc.features[0]!.properties).toMatchObject({ name: "Truck 1", state: "moving", color: "#15803d", heading: 90 });
+    expect(fc.features[0]!.properties).toMatchObject({ name: "Truck 1", state: "moving", color: "#136c35", heading: 90 });
     expect(fc.features[1]!.properties.state).toBe("offline");
   });
   it("gives a position only when there is one", () => {

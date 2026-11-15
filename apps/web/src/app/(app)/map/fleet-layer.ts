@@ -29,7 +29,7 @@ const ANIM_MS = 900;
 const MAX_ANIMATING = 400;
 const MIN_FRAME_MS = 33; // ~30 fps is plenty for smooth marker glides
 
-export const STATE_COLORS: Record<MapState, string> = { moving: "#15803d", idle: "#c2570c", stopped: "#c62828", parked: "#7c3aed", offline: "#6b7280" };
+export const STATE_COLORS: Record<MapState, string> = { moving: "#136c35", idle: "#a3470a", stopped: "#ad1f1f", parked: "#6526d1", offline: "#6b7280" };
 /** Below this zoom nearby vehicles merge into one counted bubble, so a large fleet stays readable. */
 const CLUSTER_MAX_ZOOM = 8;
 const NOT_CLUSTER = ["!", ["has", "point_count"]];

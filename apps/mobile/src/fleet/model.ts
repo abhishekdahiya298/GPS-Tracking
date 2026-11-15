@@ -46,12 +46,12 @@ export function fleetState(d: Pick<FleetDevice, "connectivity" | "location"> & {
 }
 
 export const STATE_META: Record<FleetState, { label: string; color: string; soft: string }> = {
-  moving: { label: "Moving", color: "#15803d", soft: "#dcf1e3" },
-  idle: { label: "Idling", color: "#c2570c", soft: "#fde6cc" },
-  stopped: { label: "Stopped", color: "#c62828", soft: "#f9dcdc" },
-  parked: { label: "Parked (unhooked)", color: "#7c3aed", soft: "#e8ddfc" },
-  offline: { label: "Offline", color: "#6b7280", soft: "#e3e6eb" },
-  never_seen: { label: "No data yet", color: "#6b7280", soft: "#e3e6eb" }
+  moving: { label: "Moving", color: "#136c35", soft: "#c8e8d2" },
+  idle: { label: "Idling", color: "#a3470a", soft: "#fcd9b2" },
+  stopped: { label: "Stopped", color: "#ad1f1f", soft: "#f6cdcd" },
+  parked: { label: "Parked (unhooked)", color: "#6526d1", soft: "#dccdfa" },
+  offline: { label: "Offline", color: "#4b5563", soft: "#d6dbe3" },
+  never_seen: { label: "No data yet", color: "#4b5563", soft: "#d6dbe3" }
 };
 
 /** The four filters on the list. Trackers that never reported are counted with Offline; parked trailers with Stopped. */
