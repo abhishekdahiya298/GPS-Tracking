@@ -22,6 +22,7 @@ import { GlobeIntro } from "./GlobeIntro";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, WORLD_VIEW, FOCUS_ZOOM, MAP_STYLES, focusZoom, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
 import { iconImages } from "./sprites";
 import { useIconPrefs } from "./iconPrefs";
+import { useAddress } from "./useAddress";
 import { iconPrefix } from "./model";
 import { NeighbourHints, SwipeToStep } from "./NeighbourHints";
 
@@ -238,6 +239,7 @@ export default function LiveMap() {
       : still
         ? `Here for ${durationText((now - still.since) / 60000)}${still.whole ? "+" : ""}`
         : null;
+  const address = useAddress(selected?.location?.latitude, selected?.location?.longitude, selectedState === "moving");
   // Short, so it fits next to the status pill: "just now", "Since 7:42 AM", "Seen 6 h ago".
   const placeLine = !selected ? "" : selectedState === "moving" ? timeAgo(selected.location?.recordedAt ?? selected.lastSeenAt, now) : still ? `Since ${fmt.time(still.since)}` : selectedState === "offline" || selectedState === "parked" ? `Seen ${timeAgo(selected.lastSeenAt, now)}` : timeAgo(selected.location?.recordedAt ?? selected.lastSeenAt, now);
   const sheetHeights = useMemo(() => {
@@ -494,7 +496,7 @@ export default function LiveMap() {
                 <ActionButton icon="map-outline" label="Navigate" onPress={openInMaps} />
                 <ActionButton icon="information-circle-outline" label="Details" onPress={() => router.push({ pathname: "/vehicle/[id]", params: { id: selected.deviceId } })} />
               </View>
-              <AddressCard title={null} coords={coordsText(selected) ?? "No position yet"} label={selectedState === "offline" || selectedState === "parked" ? "Last known position" : undefined} />
+              <AddressCard title={address?.line1 ?? null} line={address?.line2} coords={coordsText(selected) ?? "No position yet"} label={selectedState === "offline" || selectedState === "parked" ? "Last known position" : undefined} />
               <FactRow facts={facts!} />
               <PressableScale onPress={() => router.push({ pathname: "/trips/[id]", params: { id: selected.deviceId } })} scaleTo={0.985} style={styles.todayCard} accessibilityRole="button">
                 <View style={styles.todayIcon}>
