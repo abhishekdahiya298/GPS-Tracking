@@ -13,7 +13,8 @@ import { FILTERS, STATE_META, coordsText, countByFilter, displayName, fleetState
 import { haptic } from "@/haptics";
 import { colors, elevation, font, isDark, radius, size, space, type } from "@/theme";
 import { FleetSheet } from "./FleetSheet";
-import { DEFAULT_CENTER, DEFAULT_ZOOM, DETAIL_ZOOM, FOCUS_ZOOM, MAP_STYLES, focusZoom, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
+import { GlobeIntro } from "./GlobeIntro";
+import { DEFAULT_CENTER, DEFAULT_ZOOM, DETAIL_ZOOM, WORLD_VIEW, FOCUS_ZOOM, MAP_STYLES, focusZoom, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
 import { PIN_IMAGES } from "./sprites";
 
 /** Movement trails only once the map is close enough for them to read as roads. */
@@ -24,6 +25,8 @@ const FIT_PADDING = { top: 190, right: 50, bottom: 240, left: 50 };
 const FOLLOW_ZOOM = FOCUS_ZOOM;
 const STYLE_KEY = "rio.map-style";
 const NOT_CLUSTER: ["!", ["has", string]] = ["!", ["has", "point_count"]];
+// The dive from space is shown once each time the app is opened, not on every visit to the tab.
+let introPlayed = false;
 
 /**
  * The live map. Vehicles are drawn by the map engine itself (pictures, dots and labels from one
@@ -51,6 +54,8 @@ export default function LiveMap() {
   // The selected-vehicle card's height, so the round buttons can sit just above it.
   const [cardHeight, setCardHeight] = useState(0);
   const fitted = useRef(false);
+  const [intro, setIntro] = useState(false);
+  const diveTo = useRef<ReturnType<typeof boundsOf>>(null);
   // A tap on a vehicle must not also count as a tap on empty map (which closes the card).
   const vehicleTapAt = useRef(0);
   // How far in the map is right now, and the latest fleet, for use inside tap handlers.
@@ -105,8 +110,20 @@ export default function LiveMap() {
     const bounds = boundsOf(devices);
     if (!bounds) return;
     fitted.current = true;
-    camera.current?.fitBounds(bounds, { padding: FIT_PADDING, duration: 0 });
+    if (introPlayed) {
+      camera.current?.fitBounds(bounds, { padding: FIT_PADDING, duration: 0 });
+      return;
+    }
+    // First visit since the app opened: start from the whole Earth and dive to the fleet.
+    introPlayed = true;
+    diveTo.current = bounds;
+    setIntro(true);
   }, [mapReady, devices, params.device]);
+
+  const dive = useCallback(() => {
+    if (diveTo.current) camera.current?.fitBounds(diveTo.current, { padding: FIT_PADDING, duration: 2200, easing: "fly" });
+  }, []);
+  const endIntro = useCallback(() => setIntro(false), []);
 
   const focus = useCallback(
     (deviceId: string) => {
@@ -215,7 +232,7 @@ export default function LiveMap() {
           if (Date.now() - vehicleTapAt.current > 400) setSelectedId(null);
         }}
       >
-        <Camera ref={camera} initialViewState={{ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }} maxZoom={18} />
+        <Camera ref={camera} initialViewState={introPlayed || params.device ? { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM } : WORLD_VIEW} maxZoom={18} />
         <Images images={PIN_IMAGES} />
 
         <GeoJSONSource id="zones" data={zoneData}>
@@ -397,6 +414,8 @@ export default function LiveMap() {
           </SlideUp>
         </>
       ) : null}
+
+      {intro ? <GlobeIntro onDive={dive} onDone={endIntro} /> : null}
 
       <FleetSheet
         visible={listOpen}
