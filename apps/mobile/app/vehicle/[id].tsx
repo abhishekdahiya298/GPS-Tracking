@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import { AddressCard, Card, EmptyState, FactTile, IconWell, StatusPill, VehiclePicture } from "@/components/kit";
+import { AddressCard, Card, EmptyState, FactTile, IconWell, StatusPill, VehiclePicture, type IconName } from "@/components/kit";
 import { FadeInUp, PressableScale } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
@@ -13,10 +13,11 @@ import { colors, radius, size, space, type } from "@/theme";
 // The map only exists in the installed app (see app/(tabs)/index.tsx).
 const hasMap = Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 
-function Row({ label, value, last }: { label: string; value: string; last?: boolean }) {
+function Row({ icon, color, soft, label, value, last }: { icon: IconName; color?: string; soft?: string; label: string; value: string; last?: boolean }) {
   return (
     <View style={[styles.row, last && styles.rowLast]}>
-      <Text style={styles.label}>{label}</Text>
+      <IconWell icon={icon} color={color} soft={soft} box={34} />
+      <Text style={[styles.label, styles.flex]}>{label}</Text>
       <Text style={styles.value} selectable>{value}</Text>
     </View>
   );
@@ -102,10 +103,10 @@ export default function VehicleScreen() {
 
       <FadeInUp index={2}>
         <Card style={styles.rows}>
-          <Row label="Last position" value={loc ? new Date(loc.recordedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "None yet"} />
-          <Row label="Tracker last heard" value={device.lastSeenAt ? timeAgo(device.lastSeenAt, now) : "Never"} last={!kind && !device.model} />
-          {kind ? <Row label="Type" value={kind.charAt(0).toUpperCase() + kind.slice(1)} last={!device.model} /> : null}
-          {device.model ? <Row label="Tracker" value={device.model} last /> : null}
+          <Row icon="location-outline" label="Last position" value={loc ? new Date(loc.recordedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "None yet"} />
+          <Row icon="pulse-outline" color={STATE_META.moving.color} soft={STATE_META.moving.soft} label="Tracker last heard" value={device.lastSeenAt ? timeAgo(device.lastSeenAt, now) : "Never"} last={!kind && !device.model} />
+          {kind ? <Row icon="car-outline" color={STATE_META.parked.color} soft={STATE_META.parked.soft} label="Type" value={kind.charAt(0).toUpperCase() + kind.slice(1)} last={!device.model} /> : null}
+          {device.model ? <Row icon="hardware-chip-outline" color={STATE_META.offline.color} soft={STATE_META.offline.soft} label="Tracker" value={device.model} last /> : null}
         </Card>
       </FadeInUp>
 
@@ -134,9 +135,9 @@ const styles = StyleSheet.create({
   place: { padding: space.sm, gap: space.sm },
   placeActions: { flexDirection: "row", gap: space.sm },
   rows: { paddingVertical: 0, paddingHorizontal: 14 },
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.lg, minHeight: size.control, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  row: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: size.control, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   rowLast: { borderBottomWidth: 0 },
   label: { fontSize: 14, lineHeight: 20, color: colors.mutedForeground },
-  value: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground, textAlign: "right", fontVariant: ["tabular-nums"] },
+  value: { flexShrink: 1, maxWidth: "60%", fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground, textAlign: "right", fontVariant: ["tabular-nums"] },
   linkCard: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 56, paddingLeft: space.md, paddingRight: 10, backgroundColor: colors.background, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border }
 });
