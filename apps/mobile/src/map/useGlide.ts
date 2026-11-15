@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FleetDevice } from "@/fleet/model";
-import { bearing, lerpLngLat, nextTrails, positionOf, shouldAnimate, toFeatures, trailFeatures } from "./model";
+import { bearing, lerpLngLat, nextTrails, positionOf, shouldAnimate, toFeatures, trailFeatures, type IconPrefs } from "./model";
 
 /** How long a vehicle takes to slide to its new position. */
 const GLIDE_MS = 900;
@@ -19,7 +19,7 @@ interface Glide {
  * Turns the fleet into what the map draws: vehicles that slide between reports instead of
  * jumping, and a short trail behind each moving one. Display only; GPS data is not changed.
  */
-export function useGlide(devices: FleetDevice[], fmtSpeed: (kph: number | null) => string) {
+export function useGlide(devices: FleetDevice[], fmtSpeed: (kph: number | null) => string, prefs?: IconPrefs) {
   const shown = useRef(new Map<string, [number, number]>());
   const glides = useRef(new Map<string, Glide>());
   const headings = useRef(new Map<string, number>());
@@ -73,8 +73,8 @@ export function useGlide(devices: FleetDevice[], fmtSpeed: (kph: number | null) 
   return useMemo(
     () => {
       void frame; // changes on every step of a slide: that is what redraws the map
-      return { vehicles: toFeatures(devices, fmtSpeed, shown.current, headings.current), trails: trailFeatures(trails.current, shown.current) };
+      return { vehicles: toFeatures(devices, fmtSpeed, shown.current, headings.current, prefs), trails: trailFeatures(trails.current, shown.current) };
     },
-    [devices, fmtSpeed, frame]
+    [devices, fmtSpeed, frame, prefs]
   );
 }

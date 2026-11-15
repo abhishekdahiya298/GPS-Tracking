@@ -27,19 +27,44 @@ export const shapeOf = (type: string | null | undefined): VehicleShape => SHAPES
 const spriteState = (s: FleetState): "moving" | "idle" | "stopped" | "offline" => (s === "parked" ? "stopped" : s === "never_seen" ? "offline" : s);
 /** Name of the map image for a vehicle, e.g. "veh-truck-moving". The files are in assets/map. */
 export const spriteName = (type: string | null | undefined, state: FleetState): string => `veh-${shapeOf(type)}-${spriteState(state)}`;
-/**
- * Name of the 3D map pin for a vehicle, e.g. "pin-truck-idle" or "pin-truck-moving-2".
- * Trailers get a trailer pin, every other kind a truck pin. A moving pin carries its heading
- * as one of eight arrows (0 = north, 2 = east …), so no picture ever turns on the map.
- */
-export function pinName(type: string | null | undefined, state: FleetState, headingDeg: number | null): string {
-  const kind = shapeOf(type) === "trailer" ? "trailer" : "truck";
-  if (state === "parked") return `pin-${kind}-parked`;
-  const s = spriteState(state);
-  if (s !== "moving") return `pin-${kind}-${s}`;
-  const h = headingDeg !== null && Number.isFinite(headingDeg) ? (((headingDeg % 360) + 360) % 360) : 0;
-  return `pin-${kind}-moving-${Math.round(h / 45) % 8}`;
+/** How vehicles are drawn on the map: a 3D pin, a round or square badge, or the vehicle seen from above. */
+export type IconStyle = "pin" | "circle" | "square" | "top";
+/** Badge colour: the vehicle's status (default) or its type. The status badge always shows the status. */
+export type IconColor = "status" | "type";
+export interface IconPrefs { style: IconStyle; color: IconColor }
+export const DEFAULT_ICON_PREFS: IconPrefs = { style: "pin", color: "status" };
+
+/** Backend vehicle type → the picture drawn on the icon. */
+export function iconKind(type: string | null | undefined): "truck" | "trailer" | "van" | "pickup" | "car" | "bus" | "equipment" | "asset" {
+  switch (type) {
+    case "truck":
+    case "semi":
+      return "truck";
+    case "trailer":
+    case "van":
+    case "pickup":
+    case "car":
+    case "bus":
+    case "equipment":
+      return type;
+    default:
+      return "asset";
+  }
 }
+const iconState = (s: FleetState): "moving" | "idle" | "stopped" | "parked" | "offline" => (s === "never_seen" ? "offline" : s);
+
+/**
+ * Name of the map icon for a vehicle, e.g. "pin-status-truck-idle" or "top-trailer-moving".
+ * Top-down icons are turned by the map with the heading; the others always stand upright.
+ */
+export function iconName(type: string | null | undefined, state: FleetState, prefs: IconPrefs = DEFAULT_ICON_PREFS): string {
+  const st = iconState(state);
+  if (prefs.style === "top") return `top-${iconKind(type) === "trailer" ? "trailer" : "truck"}-${st}`;
+  return `${prefs.style}-${prefs.color}-${iconKind(type)}-${st}`;
+}
+/** The prefix every icon of one style shares, to load only those pictures. */
+export const iconPrefix = (prefs: IconPrefs): string => (prefs.style === "top" ? "top-" : `${prefs.style}-${prefs.color}-`);
+
 /** The whole of North America from space: where the opening dive starts. */
 export const WORLD_VIEW: { center: [number, number]; zoom: number } = { center: [-96, 42], zoom: 1.2 };
 /** Southern Ontario, shown until the first positions arrive. */
@@ -54,8 +79,10 @@ export interface VehicleProps {
   heading: number;
   /** Map image to draw at close zoom. */
   icon: string;
-  /** The 3D pin drawn for the vehicle (see pinName). */
+  /** The map icon drawn for the vehicle (see iconName). */
   pin: string;
+  /** Degrees the top-down icon turns: the heading while moving, else 0. */
+  rot: number;
   /** Second line under the name: "62 mph", "Idling", "Parked" … */
   sub: string;
 }
@@ -75,7 +102,8 @@ export function toFeatures(
   devices: FleetDevice[],
   fmtSpeed?: (kph: number | null) => string,
   shown?: ReadonlyMap<string, [number, number]>,
-  headings?: ReadonlyMap<string, number>
+  headings?: ReadonlyMap<string, number>,
+  prefs: IconPrefs = DEFAULT_ICON_PREFS
 ): GeoJSON.FeatureCollection<GeoJSON.Point, VehicleProps> {
   return {
     type: "FeatureCollection",
@@ -92,7 +120,8 @@ export function toFeatures(
           color: STATE_META[state].color,
           heading: d.location.headingDeg ?? headings?.get(d.deviceId) ?? 0,
           icon: spriteName(d.vehicle?.type, state),
-          pin: pinName(d.vehicle?.type, state, d.location.headingDeg ?? headings?.get(d.deviceId) ?? null),
+          pin: iconName(d.vehicle?.type, state, prefs),
+          rot: state === "moving" ? (d.location.headingDeg ?? headings?.get(d.deviceId) ?? 0) : 0,
           sub: state === "moving" && fmtSpeed ? fmtSpeed(d.location.speedKph) : SUB[state]
         }
       };

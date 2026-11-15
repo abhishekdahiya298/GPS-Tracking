@@ -7,6 +7,7 @@ import { useSession } from "@/auth/SessionProvider";
 import { Ionicons } from "@expo/vector-icons";
 import { reloadAppAsync } from "expo";
 import { Card, IconWell, ScreenHeader, SectionLabel, Segmented } from "@/components/kit";
+import { MapIconPicker } from "@/map/MapIconPicker";
 import { FadeInUp, PressableScale, PulseDot } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { API_BASE_URL } from "@/config";
@@ -165,6 +166,11 @@ export default function AccountScreen() {
               { value: "dark", label: "Dark", icon: "moon-outline" }
             ]}
           />
+        </FadeInUp>
+
+        <FadeInUp index={2}>
+          <SectionLabel text="Map icons" />
+          <MapIconPicker />
         </FadeInUp>
 
         <FadeInUp index={3}>

@@ -20,10 +20,15 @@ import { VehicleRow } from "@/fleet/VehicleRow";
 import { durationText } from "@/trips/model";
 import { GlobeIntro } from "./GlobeIntro";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, WORLD_VIEW, FOCUS_ZOOM, MAP_STYLES, focusZoom, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
-import { PIN_IMAGES } from "./sprites";
+import { iconImages } from "./sprites";
+import { useIconPrefs } from "./iconPrefs";
+import { iconPrefix } from "./model";
+import { NeighbourHints, SwipeToStep } from "./NeighbourHints";
 
 /** Movement trails only once the map is close enough for them to read as roads. */
 const TRAIL_ZOOM = 11;
+/** Zoomed out further than this, vehicles are plain status dots; closer in, the 3D icons. */
+const DOT_ZOOM = 8;
 import { useGlide } from "./useGlide";
 
 const FIT_PADDING = { top: 190, right: 50, bottom: 240, left: 50 };
@@ -77,7 +82,10 @@ export default function LiveMap() {
 
   // The status filter narrows the map exactly as it narrows the list.
   const visible = useMemo(() => (filter === "all" ? devices : selectDevices(devices, filter, "")), [devices, filter]);
-  const { vehicles, trails } = useGlide(visible, units.fmtSpeed);
+  const prefs = useIconPrefs();
+  const images = useMemo(() => iconImages(iconPrefix(prefs)), [prefs]);
+  const isPin = prefs.style === "pin";
+  const { vehicles, trails } = useGlide(visible, units.fmtSpeed, prefs);
   const zoneData = useMemo(() => zoneFeatures(zones), [zones]);
   const counts = useMemo(() => countByFilter(devices), [devices]);
   const selected = devices.find((d) => d.deviceId === selectedId);
@@ -266,7 +274,7 @@ export default function LiveMap() {
         }}
       >
         <Camera ref={camera} initialViewState={introPlayed || params.device ? { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM } : WORLD_VIEW} maxZoom={18} />
-        <Images images={PIN_IMAGES} />
+        <Images images={images} />
 
         <GeoJSONSource id="zones" data={zoneData}>
           <Layer id="zone-fill" type="fill" paint={{ "fill-color": ["get", "color"], "fill-opacity": 0.12 }} />
@@ -298,18 +306,29 @@ export default function LiveMap() {
             type="circle"
             filter={["all", NOT_CLUSTER, ["==", ["get", "deviceId"], selectedId ?? ""]]}
             // A soft blue glow behind the pin's head (the pin stands on the point, so its head is ~28 px up).
-            paint={{ "circle-radius": 32, "circle-color": colors.primary, "circle-opacity": 0.22, "circle-blur": 0.35, "circle-translate": [0, -34] }}
+            paint={{ "circle-radius": ["step", ["zoom"], 14, DOT_ZOOM, 30], "circle-color": colors.primary, "circle-opacity": 0.24, "circle-blur": 0.35, "circle-translate": isPin ? ["step", ["zoom"], ["literal", [0, 0]], DOT_ZOOM, ["literal", [0, -32]]] : [0, 0] }}
           />
           {/* Every vehicle is a 3D pin in its status colour at every zoom (groups still merge into bubbles).
               A moving pin's badge points the way it drives. */}
+          {/* Zoomed out: a status dot per vehicle, so the map stays readable. */}
+          <Layer
+            id="vehicle-dots"
+            type="circle"
+            maxzoom={DOT_ZOOM}
+            filter={NOT_CLUSTER}
+            paint={{ "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 5, DOT_ZOOM, 7], "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 }}
+          />
           <Layer
             id="vehicle-pictures"
             type="symbol"
+            minzoom={DOT_ZOOM}
             filter={NOT_CLUSTER}
             layout={{
               "icon-image": ["get", "pin"],
-              "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.32, 8, 0.36, 12, 0.4, 16, 0.44],
-              "icon-anchor": "bottom",
+              "icon-size": ["interpolate", ["linear"], ["zoom"], DOT_ZOOM, 0.27, 12, 0.32, 16, 0.36],
+              "icon-anchor": isPin ? "bottom" : "center",
+              "icon-rotate": prefs.style === "top" ? ["get", "rot"] : 0,
+              "icon-rotation-alignment": prefs.style === "top" ? "map" : "viewport",
               "icon-allow-overlap": true,
               "icon-ignore-placement": true,
               "symbol-sort-key": ["case", ["==", ["get", "deviceId"], selectedId ?? ""], 10, ["==", ["get", "state"], "moving"], 3, 1]
@@ -325,7 +344,7 @@ export default function LiveMap() {
               "text-font": ["Noto Sans Regular"],
               "text-size": 11,
               "text-line-height": 1.2,
-              "text-offset": [0, 0.6],
+              "text-offset": isPin ? [0, 0.6] : [0, 2],
               "text-anchor": "top",
               "text-optional": true
             }}
@@ -380,6 +399,18 @@ export default function LiveMap() {
         </PressableScale>
       </View>
 
+      {/* The vehicles either side of the open one, at the map's edges: tap (or swipe the card) to move. */}
+      {selected && steps.length > 1 && stepIndex >= 0 && areaHeight > 0 ? (
+        <NeighbourHints
+          keyId={selected.deviceId}
+          prefs={prefs}
+          prev={steps.length > 2 || stepIndex === 1 ? steps[(stepIndex - 1 + steps.length) % steps.length] : undefined}
+          next={steps.length > 2 || stepIndex === 0 ? steps[(stepIndex + 1) % steps.length] : undefined}
+          top={Math.round(insets.top + 76 + (areaHeight - cardHeight - insets.top - 76) / 2 - 20)}
+          onStep={step}
+        />
+      ) : null}
+
       {/* Life360-style sheet: the fleet when nothing is chosen, the vehicle when one is.
           It rests low so the map stays big; drag the handle up for more. */}
       {areaHeight > 0 ? (
@@ -391,6 +422,7 @@ export default function LiveMap() {
           header={
             selected && selectedState ? (
               <FadeIn key={selected.deviceId} style={styles.sheetHead}>
+                <SwipeToStep enabled={steps.length > 1} onStep={step} keyId={selected.deviceId}>
                 <View style={styles.cardHead}>
                   <VehiclePicture type={selected.vehicle?.type} width={60} height={44} />
                   <View style={styles.cardTitle}>
@@ -415,6 +447,7 @@ export default function LiveMap() {
                     <Ionicons name="close" size={20} color={colors.mutedForeground} />
                   </PressableScale>
                 </View>
+                </SwipeToStep>
               </FadeIn>
             ) : (
               <View style={styles.sheetHead}>
@@ -469,7 +502,7 @@ export default function LiveMap() {
 
       {/* The bubble over the chosen vehicle: how long it has stood there, or how fast it goes. */}
       {selected && selectedAt && bubble ? (
-        <ViewAnnotation id="selected-bubble" lngLat={selectedAt} anchor="bottom" offset={[0, -62]}>
+        <ViewAnnotation id="selected-bubble" lngLat={selectedAt} anchor="bottom" offset={[0, isPin ? -64 : -34]}>
           <View style={styles.bubble}>
             <Ionicons name={selectedState === "moving" ? "speedometer-outline" : "location"} size={13} color={colors.primary} />
             <Text style={styles.bubbleText}>{bubble}</Text>
