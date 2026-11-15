@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   brandOrg: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground },
   pill: { flexDirection: "row", alignItems: "center", gap: 5, paddingLeft: 8, paddingRight: 9, paddingVertical: 3, borderRadius: 999 },
   pillText: { fontSize: font.caption, lineHeight: 16, fontWeight: "700" },
-  picture: { borderRadius: radius.lg, borderWidth: 1, borderColor: isDark ? colors.border : "#d3ddeb", backgroundColor: isDark ? "#1c2636" : "#e2eaf7", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  picture: { borderRadius: radius.lg, borderWidth: 1, borderColor: isDark ? colors.border : "#c6d2e4", backgroundColor: isDark ? "#1c2636" : "#d6e0f1", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   fact: { flex: 1, minWidth: 0, alignItems: "center", gap: 2, paddingTop: 10, paddingBottom: 9, paddingHorizontal: 4, borderRadius: radius.xl, borderWidth: 1 },
   factValue: { fontSize: 15, lineHeight: 20, fontWeight: "800" },
   factLabel: { ...type.caption, color: colors.foreground, marginTop: 2 },

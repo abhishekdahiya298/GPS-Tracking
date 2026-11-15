@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
 export function VehiclePicture({ type, className }: { type: string | null | undefined; className?: string }) {
   const src = type === "trailer" ? "/fleet-art/vehicles/vehicle-trailer@2x.png" : "/fleet-art/vehicles/vehicle-truck@2x.png";
   return (
-    <span aria-hidden="true" className={cn("grid h-10 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-[#d3ddeb] bg-[#e2eaf7] dark:border-border dark:bg-muted", className)}>
+    <span aria-hidden="true" className={cn("grid h-10 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-[#c6d2e4] bg-[#d6e0f1] dark:border-border dark:bg-muted", className)}>
       {/* A plain <img>: a small fixed file from /public, no resizing needed. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={src} alt="" className="h-[86%] w-[90%] object-contain" />
