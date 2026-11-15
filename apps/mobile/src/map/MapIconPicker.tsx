@@ -8,10 +8,10 @@ import { iconName, type IconStyle } from "./model";
 import { MAP_ICONS } from "./sprites";
 
 const STYLES: ReadonlyArray<{ value: IconStyle; label: string }> = [
+  { value: "top", label: "Live 3D" },
   { value: "pin", label: "3D pin" },
   { value: "circle", label: "Circle" },
-  { value: "square", label: "Square" },
-  { value: "top", label: "From above" }
+  { value: "square", label: "Square" }
 ];
 
 /** Account → Map icons: how vehicles look on the maps. Kept on this phone; the map redraws at once. */

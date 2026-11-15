@@ -74,7 +74,7 @@ export function VehicleCarousel({
       <View style={styles.card}>
         <View style={[styles.edge, { backgroundColor: meta.color }]} />
         <View style={styles.head}>
-          <VehiclePicture type={device.vehicle?.type} width={52} height={38} />
+          <VehiclePicture type={device.vehicle?.type} state={state} width={52} height={38} />
           <View style={styles.title}>
             <Text style={styles.name} numberOfLines={1}>{displayName(device)}</Text>
             <View style={styles.subLine}>
@@ -102,7 +102,7 @@ export function VehicleCarousel({
         <View style={styles.addr}>
           <Ionicons name="location-outline" size={15} color={colors.primary} />
           {addressLabel ? <Text style={styles.addrLabel}>{addressLabel}</Text> : null}
-          <Text style={styles.addrText} numberOfLines={1}>{address}</Text>
+          <Text style={styles.addrText} numberOfLines={2}>{address}</Text>
         </View>
       </View>
       {next ? <SidePeek side="right" device={next} onPress={() => onStep(1)} /> : <View style={styles.gap} />}
@@ -215,9 +215,9 @@ const styles = themed(() => ({
   cellTop: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, maxWidth: "100%" },
   cellValue: { fontSize: 15, lineHeight: 18, fontWeight: "800", flexShrink: 1, fontVariant: ["tabular-nums"] },
   cellLabel: { fontSize: 11, lineHeight: 13, fontWeight: "600", color: colors.mutedForeground },
-  addr: { flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 },
+  addr: { flexDirection: "row", alignItems: "flex-start", gap: 6, minWidth: 0 },
   addrLabel: { fontSize: 12, lineHeight: 16, fontWeight: "700", color: colors.mutedForeground },
-  addrText: { flex: 1, minWidth: 0, fontSize: 13, lineHeight: 18, fontWeight: "600", color: colors.foreground },
+  addrText: { flex: 1, minWidth: 0, fontSize: 13, lineHeight: 17, fontWeight: "600", color: colors.foreground },
   peek: { width: PEEK_W, alignItems: "center", justifyContent: "space-between", paddingVertical: 10, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
   peekLeft: { borderTopRightRadius: 14, borderBottomRightRadius: 14, borderLeftWidth: 0, borderRightWidth: 3 },
   peekRight: { borderTopLeftRadius: 14, borderBottomLeftRadius: 14, borderRightWidth: 0, borderLeftWidth: 3 },

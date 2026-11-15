@@ -27,7 +27,7 @@ const ICON_CHOICES: ReadonlyArray<{ value: MapsSettings["iconStyle"]; label: str
   { value: "pin", label: "3D pin" },
   { value: "circle", label: "Circle" },
   { value: "square", label: "Square" },
-  { value: "top", label: "From above" }
+  { value: "top", label: "Live 3D" }
 ];
 
 const STYLES: ReadonlyArray<{ value: MapStyleChoice; name: string; icon: typeof Sun }> = [

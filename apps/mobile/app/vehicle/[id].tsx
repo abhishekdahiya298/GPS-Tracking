@@ -73,7 +73,7 @@ export default function VehicleScreen() {
       <FadeInUp index={0}>
         <Card style={styles.hero}>
           <View style={styles.head}>
-            <VehiclePicture type={kind} width={104} height={76} />
+            <VehiclePicture type={kind} state={state} width={104} height={76} />
             <View style={styles.flex}>
               <Text style={styles.name} numberOfLines={2}>{name}</Text>
               <Text style={type.small} numberOfLines={1}>

@@ -22,11 +22,11 @@ import { GlobeIntro } from "./GlobeIntro";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, WORLD_VIEW, FOCUS_ZOOM, MAP_STYLES, focusZoom, boundsOf, isMapStyleId, positionOf, readTap, styleUrl, zoneFeatures, type MapStyleId, type Zone } from "./model";
 import { iconImages } from "./sprites";
 import { useMapEngine } from "./mapEngine";
-import { NativeLiveMap, type CameraLike } from "./NativeLiveMap";
+import { NativeLiveMap, type CameraLike, type NativeMapType } from "./NativeLiveMap";
 import { useIconPrefs } from "./iconPrefs";
 import { useAddress } from "./useAddress";
 import { iconPrefix } from "./model";
-import { SwipeToStep } from "./NeighbourHints";
+import { EdgeChips, SwipeToStep } from "./NeighbourHints";
 import { ActionRow, VehicleCarousel, factCellsFor, type FactCell } from "./VehicleCard";
 
 /** Movement trails only once the map is close enough for them to read as roads. */
@@ -38,6 +38,15 @@ import { useGlide } from "./useGlide";
 const FIT_PADDING = { top: 190, right: 50, bottom: 240, left: 50 };
 const FOLLOW_ZOOM = FOCUS_ZOOM;
 const STYLE_KEY = "rio.map-style";
+const MAP_TYPE_KEY = "rio.map-type";
+/** The opening: how long the whole Earth is held, and how long the descent to the fleet takes. */
+const GLOBE_HOLD_MS = 1100;
+const DIVE_MS = 2800;
+const MAP_TYPES: ReadonlyArray<{ id: NativeMapType; label: string }> = [
+  { id: "auto", label: "Auto" },
+  { id: "street", label: "Street" },
+  { id: "satellite", label: "Satellite" }
+];
 const NOT_CLUSTER: ["!", ["has", string]] = ["!", ["has", "point_count"]];
 // The dive from space is shown once each time the app is opened, not on every visit to the tab.
 let introPlayed = false;
@@ -64,6 +73,9 @@ export default function LiveMap() {
   const [listOpen, setListOpen] = useState(false);
   const [style, setStyle] = useState<MapStyleId>(isDark ? "dark" : "streets");
   const [styleMenu, setStyleMenu] = useState(false);
+  const [mapType, setMapType] = useState<NativeMapType>("auto");
+  // What the map shows now, [west, south, east, north]: tells which vehicles are just off screen.
+  const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
   const insets = useSafeAreaInsets();
   // The selected-vehicle card's height, so the round buttons can sit just above it.
@@ -108,6 +120,11 @@ export default function LiveMap() {
         if (isMapStyleId(saved)) setStyle(saved);
       })
       .catch(() => undefined);
+    SecureStore.getItemAsync(MAP_TYPE_KEY)
+      .then((saved) => {
+        if (saved === "auto" || saved === "street" || saved === "satellite") setMapType(saved);
+      })
+      .catch(() => undefined);
     api
       .get<{ geofences?: Zone[] }>("geofences")
       .then((body) => {
@@ -116,6 +133,12 @@ export default function LiveMap() {
       .catch(() => undefined);
   }, []);
 
+  function pickMapType(id: NativeMapType) {
+    haptic.tap();
+    setStyleMenu(false);
+    setMapType(id);
+    SecureStore.setItemAsync(MAP_TYPE_KEY, id).catch(() => undefined);
+  }
   function pickStyle(id: MapStyleId) {
     haptic.tap();
     setStyleMenu(false);
@@ -146,7 +169,7 @@ export default function LiveMap() {
   }, [mapReady, devices, params.device]);
 
   const dive = useCallback(() => {
-    if (diveTo.current) camera.current?.fitBounds(diveTo.current, { padding: FIT_PADDING, duration: 2200, easing: "fly" });
+    if (diveTo.current) camera.current?.fitBounds(diveTo.current, { padding: FIT_PADDING, duration: DIVE_MS, easing: "fly" });
   }, []);
   const endIntro = useCallback(() => {
     introPlayed = true;
@@ -162,8 +185,9 @@ export default function LiveMap() {
       const giveUp = setTimeout(endIntro, 9000);
       return () => clearTimeout(giveUp);
     }
-    const start = setTimeout(dive, 700);
-    const done = setTimeout(endIntro, 700 + 3000);
+    // Hold on the whole Earth for a moment, then descend; the street map takes over as it lands.
+    const start = setTimeout(dive, GLOBE_HOLD_MS);
+    const done = setTimeout(endIntro, GLOBE_HOLD_MS + DIVE_MS + 400);
     return () => {
       clearTimeout(start);
       clearTimeout(done);
@@ -291,6 +315,9 @@ export default function LiveMap() {
           bottomInset={cardHeight}
           initial={{ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }}
           globe={appleGlobe && intro}
+          mapType={mapType}
+          bubble={bubble}
+          onBounds={setBounds}
           onReady={() => setMapReady(true)}
           onZoom={(z) => {
             zoomNow.current = z;
@@ -322,6 +349,8 @@ export default function LiveMap() {
         // Dragging the map by hand ends follow mode, as on the website.
         onRegionDidChange={(e) => {
           zoomNow.current = e.nativeEvent.zoom;
+          const b = e.nativeEvent.bounds;
+          if (Array.isArray(b) && b.length === 4) setBounds([b[0], b[1], b[2], b[3]]);
         }}
         onRegionWillChange={(e) => {
           if (e.nativeEvent.userInteraction) setFollowing(false);
@@ -376,6 +405,9 @@ export default function LiveMap() {
             filter={NOT_CLUSTER}
             paint={{ "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 5, DOT_ZOOM, 7], "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 }}
           />
+          {prefs.style === "top" ? (
+            <Layer id="vehicle-glow" type="circle" minzoom={DOT_ZOOM} filter={NOT_CLUSTER} paint={{ "circle-radius": ["interpolate", ["linear"], ["zoom"], DOT_ZOOM, 14, 12, 22, 16, 28], "circle-color": ["get", "color"], "circle-opacity": 0.16, "circle-blur": 0.5 }} />
+          ) : null}
           <Layer
             id="vehicle-pictures"
             type="symbol"
@@ -383,7 +415,7 @@ export default function LiveMap() {
             filter={NOT_CLUSTER}
             layout={{
               "icon-image": ["get", "pin"],
-              "icon-size": ["interpolate", ["linear"], ["zoom"], DOT_ZOOM, 0.22, 8, 0.27, 12, 0.32, 16, 0.36],
+              "icon-size": prefs.style === "top" ? ["interpolate", ["linear"], ["zoom"], DOT_ZOOM, 0.2, 8, 0.25, 12, 0.3, 16, 0.36] : ["interpolate", ["linear"], ["zoom"], DOT_ZOOM, 0.22, 8, 0.27, 12, 0.32, 16, 0.36],
               "icon-anchor": isPin ? "bottom" : "center",
               "icon-rotate": prefs.style === "top" ? ["get", "rot"] : 0,
               "icon-rotation-alignment": prefs.style === "top" ? "map" : "viewport",
@@ -447,26 +479,36 @@ export default function LiveMap() {
         </View>
       ) : null}
 
+      {/* Vehicles just off the screen, as round chips on the left and right edges (like Life360). */}
+      {mapReady && !intro && areaHeight > 0 ? (
+        <EdgeChips devices={steps} bounds={bounds} area={{ top: insets.top + 122, bottom: areaHeight - cardHeight - 8, width: 1 }} skipId={selectedId} onPick={focus} />
+      ) : null}
+
       {/* Round buttons on the right, just above the card (or the bottom edge when no vehicle is picked). */}
       <View style={[styles.fabs, { bottom: cardHeight + space.md }]} pointerEvents="box-none">
         {styleMenu ? (
           <SlideUp style={styles.styleMenu}>
-            {MAP_STYLES.map((m) => (
-              <Pressable key={m.id} onPress={() => pickStyle(m.id)} style={styles.styleItem} accessibilityRole="button" accessibilityState={{ selected: m.id === style }}>
-                <Text style={[styles.styleText, m.id === style && styles.styleTextOn]}>{m.label}</Text>
-                {m.id === style ? <Ionicons name="checkmark" size={16} color={colors.primary} /> : null}
-              </Pressable>
-            ))}
+            {engine === "native"
+              ? MAP_TYPES.map((m) => (
+                  <Pressable key={m.id} onPress={() => pickMapType(m.id)} style={styles.styleItem} accessibilityRole="button" accessibilityState={{ selected: m.id === mapType }}>
+                    <Text style={[styles.styleText, m.id === mapType && styles.styleTextOn]}>{m.label}</Text>
+                    {m.id === mapType ? <Ionicons name="checkmark" size={16} color={colors.primary} /> : null}
+                  </Pressable>
+                ))
+              : MAP_STYLES.map((m) => (
+                  <Pressable key={m.id} onPress={() => pickStyle(m.id)} style={styles.styleItem} accessibilityRole="button" accessibilityState={{ selected: m.id === style }}>
+                    <Text style={[styles.styleText, m.id === style && styles.styleTextOn]}>{m.label}</Text>
+                    {m.id === style ? <Ionicons name="checkmark" size={16} color={colors.primary} /> : null}
+                  </Pressable>
+                ))}
           </SlideUp>
         ) : null}
         <PressableScale onPress={fitAll} scaleTo={0.9} style={styles.fab} accessibilityRole="button" accessibilityLabel="Show all vehicles">
           <Ionicons name="scan-outline" size={size.icon} color={colors.foreground} />
         </PressableScale>
-{engine === "osm" ? (
-        <PressableScale onPress={() => setStyleMenu((open) => !open)} scaleTo={0.9} style={styles.fab} accessibilityRole="button" accessibilityLabel="Change the map style">
+        <PressableScale onPress={() => setStyleMenu((open) => !open)} scaleTo={0.9} style={styles.fab} accessibilityRole="button" accessibilityLabel="Change the map type">
           <Ionicons name="layers-outline" size={size.icon} color={colors.foreground} />
         </PressableScale>
-        ) : null}
       </View>
 
 

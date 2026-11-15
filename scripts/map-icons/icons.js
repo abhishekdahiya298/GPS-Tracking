@@ -93,3 +93,52 @@ const topIcon = (kind, st) => {
     : `<circle cx="20" cy="20.5" r="2.6" fill="${c}"/>`}
 </svg>`;
 };
+
+/**
+ * "Live 3D" vehicle, seen from above with the nose up, the whole body in its status colour so the
+ * state reads at a glance. The map turns it to the heading, so it lines up with the road.
+ * Kinds: truck (tractor + trailer), trailer (trailer alone), car (van, pickup, car, others).
+ * viewBox 0 0 48 76.
+ */
+const liveIcon = (kind, st) => {
+  const id = `l${++ICON_UID}`, c = ICON_STATUS[st][0];
+  const dk = mixc(c, '#000000', 0.38), md = mixc(c, '#000000', 0.14), lt = mixc(c, '#ffffff', 0.32), roof = mixc(c, '#ffffff', 0.16), rib = mixc(c, '#000000', 0.16), top = mixc(c, '#ffffff', 0.46);
+  const glass = '#0b1730';
+  const defs = `<defs>
+    <linearGradient id="b${id}" x1="0" x2="1"><stop offset="0" stop-color="${dk}"/><stop offset="0.22" stop-color="${c}"/><stop offset="0.5" stop-color="${lt}"/><stop offset="0.78" stop-color="${c}"/><stop offset="1" stop-color="${dk}"/></linearGradient>
+    <linearGradient id="r${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${roof}"/></linearGradient>
+    <linearGradient id="g${id}" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#3b5278"/><stop offset="0.55" stop-color="${glass}"/></linearGradient>
+    <filter id="s${id}" x="-40%" y="-20%" width="180%" height="150%"><feGaussianBlur stdDeviation="1.6"/></filter>
+  </defs>`;
+  let sil, body;
+  if (kind === 'car') {
+    sil = `<rect x="13" y="16" width="22" height="44" rx="9"/>`;
+    body = `<rect x="13" y="16" width="22" height="44" rx="9" fill="url(#b${id})" stroke="${dk}" stroke-width="0.7"/>
+    <path d="M16.5 28 q7.5 -4 15 0 l-1.4 7 h-12.2z" fill="url(#g${id})"/>
+    <rect x="17" y="35.5" width="14" height="13" rx="2.5" fill="url(#r${id})" opacity="0.92"/>
+    <path d="M17.6 49.5 h12.8 l1 5 q-7.4 2.6 -14.8 0z" fill="url(#g${id})"/>
+    <rect x="10.6" y="29.5" width="2.8" height="4" rx="1.4" fill="${dk}"/><rect x="34.6" y="29.5" width="2.8" height="4" rx="1.4" fill="${dk}"/>
+    <rect x="16" y="16.6" width="5" height="2" rx="1" fill="#fff6c9"/><rect x="27" y="16.6" width="5" height="2" rx="1" fill="#fff6c9"/>
+    <rect x="16" y="57.6" width="5" height="1.8" rx="0.9" fill="#ff5a5a"/><rect x="27" y="57.6" width="5" height="1.8" rx="0.9" fill="#ff5a5a"/>`;
+  } else {
+    const rig = kind !== 'trailer', ty = rig ? 27 : 12, th = rig ? 44 : 54;
+    const ribs = Array.from({ length: Math.floor((th - 8) / 6) }, (_, i) => `<path d="M16 ${ty + 7 + i * 6}h16" stroke="${rib}" stroke-width="0.8"/>`).join('');
+    sil = `<rect x="13" y="${ty}" width="22" height="${th}" rx="3"/>${rig ? `<path d="M15 25 v-12 q0 -8 9 -8 q9 0 9 8 v12z"/>` : `<rect x="21" y="6" width="6" height="8" rx="2"/>`}`;
+    body = `<rect x="13" y="${ty}" width="22" height="${th}" rx="3" fill="url(#b${id})" stroke="${dk}" stroke-width="0.7"/>
+    <rect x="15.5" y="${ty + 2.5}" width="17" height="${th - 5}" rx="1.6" fill="url(#r${id})"/>${ribs}
+    <rect x="15" y="${ty + th - 2.4}" width="5" height="1.7" rx="0.8" fill="#ff5a5a"/><rect x="28" y="${ty + th - 2.4}" width="5" height="1.7" rx="0.8" fill="#ff5a5a"/>
+    ${rig ? `<rect x="19" y="23.5" width="10" height="5" fill="${dk}"/>
+    <path d="M15 25 v-12 q0 -8 9 -8 q9 0 9 8 v12z" fill="url(#b${id})" stroke="${dk}" stroke-width="0.7"/>
+    <path d="M17 12.6 q7 -3.4 14 0 l-1 5 h-12z" fill="url(#g${id})"/>
+    <rect x="17.6" y="18.4" width="12.8" height="5.6" rx="1.8" fill="url(#r${id})" opacity="0.9"/>
+    <rect x="11.4" y="12" width="3.2" height="4.4" rx="1.4" fill="${dk}"/><rect x="33.4" y="12" width="3.2" height="4.4" rx="1.4" fill="${dk}"/>
+    <rect x="16.4" y="6.6" width="4.4" height="1.9" rx="0.9" fill="#fff6c9"/><rect x="27.2" y="6.6" width="4.4" height="1.9" rx="0.9" fill="#fff6c9"/>`
+      : `<rect x="21" y="6" width="6" height="8" rx="2" fill="${md}" stroke="${dk}" stroke-width="0.7"/><circle cx="24" cy="9.5" r="1.5" fill="#ffffff"/>
+    <rect x="15.5" y="${ty + 12}" width="2" height="5" rx="1" fill="${dk}"/><rect x="30.5" y="${ty + 12}" width="2" height="5" rx="1" fill="${dk}"/>`}`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="228" viewBox="0 0 48 76">${defs}
+  <g transform="translate(1.6 2.6)" fill="#0f172a" opacity="0.34" filter="url(#s${id})">${sil}</g>
+  <g fill="#ffffff" stroke="#ffffff" stroke-width="3.4" stroke-linejoin="round">${sil}</g>
+  ${body}
+</svg>`;
+};

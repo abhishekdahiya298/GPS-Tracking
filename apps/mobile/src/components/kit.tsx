@@ -99,10 +99,38 @@ const PICTURES = { truck: require("../../assets/vehicles/vehicle-truck.png") as 
  * The vehicle picture on cards and sheets: one white tractor-trailer for every powered vehicle
  * and one trailer for trailers, on a soft blue tile. The same two pictures everywhere.
  */
-export const VehiclePicture = memo(function VehiclePicture({ type: kind, width = 72, height = 56 }: { type: string | undefined; width?: number; height?: number }) {
+/* eslint-disable @typescript-eslint/no-require-imports -- React Native loads images with require() */
+const PICTURES_3D: Record<string, number> = {
+  "truck-moving": require("../../assets/vehicles/3d-truck-moving.png") as number,
+  "truck-idle": require("../../assets/vehicles/3d-truck-idle.png") as number,
+  "truck-stopped": require("../../assets/vehicles/3d-truck-stopped.png") as number,
+  "truck-parked": require("../../assets/vehicles/3d-truck-parked.png") as number,
+  "truck-offline": require("../../assets/vehicles/3d-truck-offline.png") as number,
+  "trailer-moving": require("../../assets/vehicles/3d-trailer-moving.png") as number,
+  "trailer-idle": require("../../assets/vehicles/3d-trailer-idle.png") as number,
+  "trailer-stopped": require("../../assets/vehicles/3d-trailer-stopped.png") as number,
+  "trailer-parked": require("../../assets/vehicles/3d-trailer-parked.png") as number,
+  "trailer-offline": require("../../assets/vehicles/3d-trailer-offline.png") as number,
+  "car-moving": require("../../assets/vehicles/3d-car-moving.png") as number,
+  "car-idle": require("../../assets/vehicles/3d-car-idle.png") as number,
+  "car-stopped": require("../../assets/vehicles/3d-car-stopped.png") as number,
+  "car-parked": require("../../assets/vehicles/3d-car-parked.png") as number,
+  "car-offline": require("../../assets/vehicles/3d-car-offline.png") as number
+};
+/* eslint-enable @typescript-eslint/no-require-imports */
+
+/**
+ * The vehicle's 3D picture: a truck, a trailer or a car, in its status colour (green moving,
+ * orange idling, red stopped, purple parked, grey not reporting) on a soft tile of that colour.
+ * Without a state it is the plain truck or trailer picture.
+ */
+export const VehiclePicture = memo(function VehiclePicture({ type: kind, state, width = 72, height = 56 }: { type: string | undefined; state?: FleetState; width?: number; height?: number }) {
+  const st = state === "never_seen" ? "offline" : state;
+  const shape = kind === "trailer" ? "trailer" : kind === "truck" || kind === "semi" || kind === "bus" || kind === "equipment" || !kind ? "truck" : "car";
+  const source = st ? PICTURES_3D[`${shape}-${st}`] : undefined;
   return (
-    <View style={[styles.picture, { width, height }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Image source={kind === "trailer" ? PICTURES.trailer : PICTURES.truck} style={{ width: width - 6, height: height - 6 }} resizeMode="contain" />
+    <View style={[styles.picture, { width, height }, source && st ? { backgroundColor: softTint(STATE_META[st].color, STATE_META[st].soft), borderColor: colors.border } : null]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <Image source={source ?? (kind === "trailer" ? PICTURES.trailer : PICTURES.truck)} style={{ width: width - 6, height: height - 4 }} resizeMode="contain" />
     </View>
   );
 });

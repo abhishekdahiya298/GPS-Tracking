@@ -60,12 +60,14 @@ describe("vehicle pictures and labels", () => {
   });
 
   it("picks a 3D pin by kind, state and heading", () => {
-    expect(iconName("trailer", "parked")).toBe("pin-status-trailer-parked");
-    expect(iconName("van", "never_seen")).toBe("pin-status-van-offline");
+    expect(iconName("trailer", "parked")).toBe("top-trailer-parked");
+    expect(iconName("trailer", "parked", { style: "pin", color: "status" })).toBe("pin-status-trailer-parked");
+    expect(iconName("van", "never_seen", { style: "pin", color: "status" })).toBe("pin-status-van-offline");
     expect(iconName("semi", "idle", { style: "circle", color: "type" })).toBe("circle-type-truck-idle");
     expect(iconName("forklift", "moving", { style: "square", color: "status" })).toBe("square-status-asset-moving");
     expect(iconName("bus", "moving", { style: "top", color: "status" })).toBe("top-truck-moving");
     expect(iconName("trailer", "stopped", { style: "top", color: "type" })).toBe("top-trailer-stopped");
+    expect(iconName("van", "idle", { style: "top", color: "status" })).toBe("top-car-idle");
     expect(iconPrefix({ style: "top", color: "type" })).toBe("top-");
     expect(iconPrefix({ style: "pin", color: "type" })).toBe("pin-type-");
     const f = toFeatures([dev("1", 43.5, -79.6)], (k) => `${Math.round(k ?? 0)} km/h`).features[0]!;

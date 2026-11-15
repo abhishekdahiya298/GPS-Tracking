@@ -9,7 +9,7 @@ const STYLES: ReadonlyArray<{ value: IconStyle; label: string }> = [
   { value: "pin", label: "3D pin" },
   { value: "circle", label: "Circle" },
   { value: "square", label: "Square" },
-  { value: "top", label: "From above" }
+  { value: "top", label: "Live 3D" }
 ];
 
 /** How vehicles look on the maps: the same icon library as the phone app. Saved in this browser. */
