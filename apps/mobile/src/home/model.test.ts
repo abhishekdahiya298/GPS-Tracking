@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FleetDevice } from "../fleet/model";
-import { firstName, fleetSummary, greeting, onTheMove } from "./model";
+import { firstName, fleetSummary, greeting, needsAttention, onTheMove } from "./model";
 
 const NOW = new Date().toISOString();
 const dev = (id: string, speedKph: number, over: Partial<FleetDevice> = {}): FleetDevice => ({
@@ -37,5 +37,17 @@ describe("home screen", () => {
   it("lists moving vehicles fastest first, up to the limit", () => {
     const list = onTheMove([dev("slow", 40), dev("parked", 0), dev("fast", 110), dev("mid", 70)], 2);
     expect(list.map((d) => d.deviceId)).toEqual(["fast", "mid"]);
+  });
+});
+
+describe("needsAttention", () => {
+  const mk = (id: string, connectivity: "online" | "offline" | "never_seen", hasLoc = true) =>
+    ({ deviceId: id, model: null, name: id, deviceStatus: "active", connectivity, lastSeenAt: hasLoc ? "2026-11-14T10:00:00Z" : null, vehicle: null, location: hasLoc ? { latitude: 1, longitude: 1, speedKph: 0, headingDeg: null, altitudeM: null, ignition: null, motion: null, recordedAt: "2026-11-14T10:00:00Z", receivedAt: "2026-11-14T10:00:00Z" } : null }) as FleetDevice;
+  it("lists silent trackers by name", () => {
+    const items = needsAttention([mk("A", "offline"), mk("B", "offline"), mk("C", "offline"), mk("D", "online")], (d) => d.deviceId);
+    expect(items).toEqual([{ key: "offline", title: "3 vehicles not reporting", detail: "A, B and 1 more", count: 3 }]);
+  });
+  it("is empty when every tracker reports", () => {
+    expect(needsAttention([mk("D", "online")], (d) => d.deviceId)).toEqual([]);
   });
 });

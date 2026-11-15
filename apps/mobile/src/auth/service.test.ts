@@ -147,3 +147,14 @@ describe("session lookup and sign-out", () => {
     expect(offline.tokens.value).toBeNull();
   });
 });
+
+describe("requestPasswordReset", () => {
+  it("posts the trimmed email with the website's reset page, without a session", async () => {
+    const { auth, calls } = setup([json({ status: true })]);
+    await auth.requestPasswordReset("  ann@a.test ");
+    expect(calls[0]!.url).toBe("https://gps.test/api/auth/request-password-reset");
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual({ email: "ann@a.test", redirectTo: "/reset-password" });
+    expect(headersOf(calls[0]!).Authorization).toBeUndefined();
+    expect(headersOf(calls[0]!).Origin).toBe("https://gps.test");
+  });
+});

@@ -1,19 +1,41 @@
 import { useEffect, useRef, useState } from "react";
-import { Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import {
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import Constants from "expo-constants";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { codeFailure, signInMessage, type CodeKind } from "@/auth/service";
 import { useSession } from "@/auth/SessionProvider";
 import { FadeInUp } from "@/components/motion";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { useBottomInset, useScreen } from "@/layout";
-import { colors, space, type } from "@/theme";
+import { colors, elevation, isDark, radius, space, type } from "@/theme";
 
-const ROUTE = require("../assets/signin-route.png"); // eslint-disable-line @typescript-eslint/no-require-imports -- React Native loads images with require()
-const LOGO = require("../assets/logo.png"); // eslint-disable-line @typescript-eslint/no-require-imports -- React Native loads images with require()
+/* eslint-disable @typescript-eslint/no-require-imports -- React Native loads images with require() */
+const LOGO = require("../assets/logo.png");
+/** Navy band with a dusk fleet scene (drawn from assets/art/hero-signin.svg). 390×404 at 1×. */
+const HERO = require("../assets/hero-signin.png");
+/** The same band without the scene, for short phones. 390×300. */
+const HERO_SHORT = require("../assets/hero-reset.png");
+const WAVES = require("../assets/waves.png");
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 export default function LoginScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { signIn, verifyCode } = useSession();
+  const [brandHeight, setBrandHeight] = useState(0);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -23,21 +45,29 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const passwordRef = useRef<TextInput>(null);
-  const { compact, scale, height } = useScreen();
+  const { compact, width, height } = useScreen();
   // The picture along the bottom shows only when there is room for it: a tall phone, keyboard closed.
   const [typing, setTyping] = useState(false);
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", () => setTyping(true));
-    const hide = Keyboard.addListener("keyboardDidHide", () => setTyping(false));
+    const hide = Keyboard.addListener("keyboardDidHide", () =>
+      setTyping(false),
+    );
     return () => {
       show.remove();
       hide.remove();
     };
   }, []);
-  const roomy = height >= 780 && !typing;
   const bottom = useBottomInset();
-  // A short phone gets a smaller logo and tighter spacing so the whole form fits above the keyboard.
-  const logoWidth = compact ? scale(140) : scale(172);
+  // The band scales with the phone's width. A short phone gets the band without the scene,
+  // so the whole form still fits above the keyboard.
+  const short = compact || height < 720;
+  const heroHeight = Math.round((short ? 300 : 404) * (width / 390));
+  // The form card overlaps the bottom of the band by 18 pt.
+  const gap = Math.max(
+    space.lg,
+    heroHeight - 18 - (insets.top + space.lg + brandHeight),
+  );
 
   function startAgain(message: string | null = null) {
     setPending(null);
@@ -71,7 +101,9 @@ export default function LoginScreen() {
   async function onVerify() {
     if (busy || !pending) return;
     if (!code.trim()) {
-      setError(kind === "backup" ? "Enter a backup code." : "Enter the 6-digit code.");
+      setError(
+        kind === "backup" ? "Enter a backup code." : "Enter the 6-digit code.",
+      );
       return;
     }
     setError(null);
@@ -88,31 +120,75 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
-      {/* A quiet picture along the bottom edge. Hidden on a short phone, where the form needs the room. */}
-      {!roomy ? null : <Image source={ROUTE} style={styles.route} resizeMode="stretch" accessibilityElementsHidden importantForAccessibility="no" />}
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: space.lg + bottom }]} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
-          <FadeInUp style={[styles.brand, compact && { marginBottom: space.lg }]} distance={16}>
-            <Image source={LOGO} style={{ width: logoWidth, height: Math.round(logoWidth * (352 / 720)) }} resizeMode="contain" accessibilityLabel="RIO GPS" />
-            <View style={styles.heading}>
-              <Text style={type.largeTitle} accessibilityRole="header">{pending ? "Two-step verification" : "Sign in"}</Text>
-              <Text style={styles.help}>
+    <View style={styles.screen}>
+      <Image
+        source={short ? HERO_SHORT : HERO}
+        style={[styles.hero, { height: heroHeight }]}
+        resizeMode="cover"
+        accessibilityElementsHidden
+        importantForAccessibility="no"
+      />
+      {typing ? null : (
+        <Image
+          source={WAVES}
+          style={[styles.waves, isDark && styles.wavesDark]}
+          resizeMode="stretch"
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+        />
+      )}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scroll,
+            {
+              paddingTop: insets.top + space.lg,
+              paddingBottom: space.lg + bottom,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets
+        >
+          <View onLayout={(e) => setBrandHeight(e.nativeEvent.layout.height)}>
+            <FadeInUp style={styles.brand} distance={16}>
+              <View style={styles.badge}>
+                <Image
+                  source={LOGO}
+                  style={styles.logo}
+                  resizeMode="contain"
+                  accessibilityLabel="RIO GPS"
+                />
+              </View>
+              <Text style={styles.title} accessibilityRole="header">
+                {pending ? "Two-step verification" : "Welcome back"}
+              </Text>
+              <Text style={styles.tagline}>
                 {pending
                   ? kind === "backup"
                     ? "Enter one of the backup codes you saved when you turned on two-step verification."
                     : "Enter the 6-digit code from your authenticator app."
-                  : "Track your fleet live, from anywhere."}
+                  : "Track your trucks, trailers and assets, live, in one place."}
               </Text>
-            </View>
-          </FadeInUp>
+            </FadeInUp>
+          </View>
 
-          <FadeInUp key={pending ? "code" : "password"} index={1} distance={16} style={styles.form}>
+          <FadeInUp
+            key={pending ? "code" : "password"}
+            index={1}
+            distance={16}
+            style={[styles.card, { marginTop: gap }]}
+          >
             {pending ? (
               <>
                 <Field
                   key={kind}
-                  label={kind === "backup" ? "Backup code" : "Verification code"}
+                  label={
+                    kind === "backup" ? "Backup code" : "Verification code"
+                  }
                   icon="shield-checkmark-outline"
                   value={code}
                   onChangeText={setCode}
@@ -128,11 +204,20 @@ export default function LoginScreen() {
                   style={styles.code}
                 />
                 {error && <ErrorNote text={error} />}
-                <Button title="Verify" onPress={onVerify} loading={busy} />
+                <Button
+                  title="Verify"
+                  onPress={onVerify}
+                  loading={busy}
+                  icon="shield-checkmark-outline"
+                />
                 <View style={styles.links}>
                   <Button
                     variant="ghost"
-                    title={kind === "backup" ? "Use the authenticator app" : "Use a backup code"}
+                    title={
+                      kind === "backup"
+                        ? "Use the authenticator app"
+                        : "Use a backup code"
+                    }
                     onPress={() => {
                       setError(null);
                       setCode("");
@@ -140,13 +225,20 @@ export default function LoginScreen() {
                     }}
                     disabled={busy}
                   />
-                  <Button variant="ghost" title="Start again" onPress={() => startAgain()} disabled={busy} />
+                  <Button
+                    variant="ghost"
+                    title="Start again"
+                    onPress={() => startAgain()}
+                    disabled={busy}
+                  />
                 </View>
               </>
             ) : (
               <>
+                <Text style={styles.cardTitle}>Sign in to your account</Text>
                 <Field
                   label="Email"
+                  hideLabel
                   icon="mail-outline"
                   placeholder="you@company.com"
                   value={email}
@@ -162,6 +254,7 @@ export default function LoginScreen() {
                 <Field
                   ref={passwordRef}
                   label="Password"
+                  hideLabel
                   icon="lock-closed-outline"
                   placeholder="Your password"
                   value={password}
@@ -172,33 +265,169 @@ export default function LoginScreen() {
                   returnKeyType="go"
                   onSubmitEditing={onSignIn}
                 />
+                <Pressable
+                  onPress={() => router.push("/forgot")}
+                  hitSlop={8}
+                  style={styles.forgot}
+                  accessibilityRole="link"
+                >
+                  <Text style={styles.forgotText}>Forgot password?</Text>
+                </Pressable>
                 {error && <ErrorNote text={error} />}
-                <View style={styles.submit}>
-                  <Button title="Sign in" onPress={onSignIn} loading={busy} />
-                </View>
-                <Text style={styles.footnote}>Accounts are created by your administrator. To reset a password, use the website.</Text>
+                <Button
+                  title="Sign in"
+                  onPress={onSignIn}
+                  loading={busy}
+                  icon="arrow-forward"
+                />
               </>
             )}
           </FadeInUp>
+
+          {pending || compact ? null : (
+            <View
+              style={styles.features}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              <Feature icon="location-outline" text="Live map" />
+              <View style={styles.featureRule} />
+              <Feature icon="git-commit-outline" text="Trips" />
+              <View style={styles.featureRule} />
+              <Feature icon="notifications-outline" text="Alerts" />
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
-      {!roomy ? null : <Text style={[styles.version, { bottom: bottom + space.lg }]}>Version {Constants.expoConfig?.version ?? ""}</Text>}
-    </SafeAreaView>
+      {typing ? null : (
+        <Text style={[styles.version, { bottom: bottom + space.md }]}>
+          Version {Constants.expoConfig?.version ?? ""} · app.riogps.com
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function Feature({
+  icon,
+  text,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  text: string;
+}) {
+  return (
+    <View style={styles.feature}>
+      <Ionicons name={icon} size={18} color={colors.primary} />
+      <Text style={styles.featureText}>{text}</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
+  screen: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
-  scroll: { flexGrow: 1, justifyContent: "center", paddingHorizontal: space.xl, paddingTop: space.lg },
-  brand: { alignItems: "center", gap: space.lg, marginBottom: space.xxl },
-  heading: { alignItems: "center", gap: space.xs },
-  help: { ...type.body, color: colors.mutedForeground, textAlign: "center" },
-  form: { gap: space.lg },
-  submit: { marginTop: space.sm },
+  hero: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    width: "100%",
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+  },
+  waves: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: 150,
+  },
+  wavesDark: { opacity: 0.08 },
+  scroll: { flexGrow: 1, paddingHorizontal: space.xl - 4 },
+  brand: { alignItems: "center", gap: space.sm },
+  badge: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: radius.lg,
+    backgroundColor: "#ffffff",
+    ...elevation.md,
+  },
+  logo: { width: 104, height: 48 },
+  title: {
+    marginTop: space.xs,
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: "700",
+    color: "#ffffff",
+    textAlign: "center",
+  },
+  tagline: {
+    maxWidth: 290,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "rgba(255,255,255,0.82)",
+    textAlign: "center",
+  },
+  card: {
+    gap: space.md,
+    paddingHorizontal: 18,
+    paddingTop: 22,
+    paddingBottom: 20,
+    borderRadius: 20,
+    backgroundColor: colors.background,
+    ...elevation.lg,
+  },
+  cardTitle: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: "700",
+    color: colors.foreground,
+  },
+  forgot: {
+    alignSelf: "flex-end",
+    minHeight: 24,
+    justifyContent: "center",
+    marginTop: -space.xs,
+  },
+  forgotText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600",
+    color: colors.primary,
+  },
   code: { letterSpacing: 4, fontSize: 20 },
-  links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: -space.sm },
-  footnote: { ...type.small, textAlign: "center" },
-  route: { position: "absolute", left: 0, right: 0, bottom: 0, width: "100%", height: 150 },
-  version: { ...type.caption, position: "absolute", left: 0, right: 0, textAlign: "center" }
+  links: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginTop: -space.sm,
+  },
+  features: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: space.lg,
+  },
+  feature: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+  },
+  featureText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+    color: colors.foreground,
+  },
+  featureRule: { width: 1, height: 18, backgroundColor: colors.border },
+  version: {
+    ...type.caption,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    textAlign: "center",
+    color: isDark ? colors.mutedForeground : "#3d4a63",
+  },
 });

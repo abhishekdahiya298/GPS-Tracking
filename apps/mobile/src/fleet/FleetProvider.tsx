@@ -31,6 +31,8 @@ interface FleetValue {
   /** The organization's time zone and clock style, used for trip days and times. */
   timeZone: string;
   timeFormat: "12h" | "24h";
+  /** The organization's name, shown in screen headers. Empty until it has loaded. */
+  orgName: string;
   refresh(): Promise<void>;
   /** Called when the live stream reports a new alert. Returns a function that stops listening. */
   onLiveAlert(listener: () => void): () => void;
@@ -48,6 +50,7 @@ export function FleetProvider({ children }: { children: ReactNode }) {
   const [system, setSystem] = useState<UnitSystem>("imperial");
   const [timeZone, setTimeZone] = useState("America/Toronto");
   const [timeFormat, setTimeFormat] = useState<"12h" | "24h">("12h");
+  const [orgName, setOrgName] = useState("");
   const inFlight = useRef<Promise<void> | null>(null);
   // The truth between redraws: live positions land here first and reach the screen once a second.
   const fleet = useRef(new Map<string, FleetDevice>());
@@ -105,8 +108,9 @@ export function FleetProvider({ children }: { children: ReactNode }) {
   // Display units follow the organization's setting, as on the website.
   useEffect(() => {
     api
-      .get<{ unitSystem?: string; timeZone?: string; timeFormat?: string }>("organization")
+      .get<{ name?: string; unitSystem?: string; timeZone?: string; timeFormat?: string }>("organization")
       .then((org) => {
+        if (typeof org.name === "string") setOrgName(org.name);
         if (org.unitSystem === "metric" || org.unitSystem === "imperial") setSystem(org.unitSystem);
         if (typeof org.timeZone === "string" && org.timeZone) setTimeZone(org.timeZone);
         if (org.timeFormat === "12h" || org.timeFormat === "24h") setTimeFormat(org.timeFormat);
@@ -218,8 +222,8 @@ export function FleetProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<FleetValue>(
-    () => ({ devices, loading, error, updatedAt, connection, units: units(system), timeZone, timeFormat, refresh, onLiveAlert }),
-    [devices, loading, error, updatedAt, connection, system, timeZone, timeFormat, refresh, onLiveAlert]
+    () => ({ devices, loading, error, updatedAt, connection, units: units(system), timeZone, timeFormat, orgName, refresh, onLiveAlert }),
+    [devices, loading, error, updatedAt, connection, system, timeZone, timeFormat, orgName, refresh, onLiveAlert]
   );
   return <FleetContext.Provider value={value}>{children}</FleetContext.Provider>;
 }
