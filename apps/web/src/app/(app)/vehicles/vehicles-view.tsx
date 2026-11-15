@@ -35,6 +35,9 @@ const GroupsDialog = dynamic(() => import("./groups-dialog").then((m) => m.Group
 const VehicleFormDialog = dynamic(() => import("../_fleet/vehicle-form-dialog").then((m) => m.VehicleFormDialog));
 import { VehicleStateBadge } from "../_fleet/vehicle-state";
 
+/** States whose last reading is old: no live speed is shown for them. */
+const SILENT = new Set<string>(["offline", "never_seen", "inactive", "parked"]);
+
 type Can = { create: boolean; update: boolean; remove: boolean; assign: boolean; unassign: boolean; map: boolean };
 
 export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleRow, VehicleState>; query: VehicleListQuery; can: Can; groups: GroupDto[] }) {
@@ -136,7 +139,8 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         id: "speed",
         header: "Speed",
         meta: { sortKey: "speed", hideable: true, label: "Speed", className: "text-right tabular-nums" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) => (v.location ? u.fmtSpeed(v.location.speedKph) : "—")
+        // A silent tracker's last speed is history, not now: show a dash, never "65 mph" for a truck that stopped reporting days ago.
+        cell: ({ row: { original: v } }) => (v.location && !SILENT.has(v.state) ? u.fmtSpeed(v.location.speedKph) : "—")
       },
       {
         id: "ignition",
@@ -235,7 +239,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
               <div className="min-w-0 flex-1">
                 <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
                 <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground">
-                  {[v.licensePlate, v.device ? (v.device.name ?? v.device.model) : "No device", v.location ? u.fmtSpeed(v.location.speedKph) : null, v.device ? relativeTime(v.lastSeenAt, Date.now(), t.timeZone) : null].filter(Boolean).join(" · ")}
+                  {[v.licensePlate, v.device ? (v.device.name ?? v.device.model) : "No device", v.location && !SILENT.has(v.state) ? u.fmtSpeed(v.location.speedKph) : null, v.device ? relativeTime(v.lastSeenAt, Date.now(), t.timeZone) : null].filter(Boolean).join(" · ")}
                 </p>
                 <div className="mt-1.5">
                   <VehicleStateBadge state={v.state} />

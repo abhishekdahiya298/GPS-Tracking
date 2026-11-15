@@ -240,8 +240,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? d.name ?? d.model ?? "Device"}</span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {d.location ? `${u.fmtSpeed(d.location.speedKph)} · engine ${d.location.ignition === true ? "on" : d.location.ignition === false ? "off" : "unknown"} · ` : ""}
-                        last update {relativeTime(d.lastSeenAt, now.getTime(), rc.timeZone)}
+                        {d.location && s !== "offline" && s !== "parked" ? `${u.fmtSpeed(d.location.speedKph)} · engine ${d.location.ignition === true ? "on" : d.location.ignition === false ? "off" : "unknown"} · last update ` : "last seen "}
+                        {relativeTime(d.lastSeenAt, now.getTime(), rc.timeZone)}
                       </span>
                     </span>
                     <StatusBadge tone={FLEET_STATE_META[s].tone} label={FLEET_STATE_META[s].label} pulse={s === "moving"} />

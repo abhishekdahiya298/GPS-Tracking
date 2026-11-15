@@ -1,4 +1,5 @@
 "use client";
+import { deviceName } from "@/lib/device-name";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Cpu, Link2, Link2Off, MoreHorizontal, Pencil, Power, PowerOff, RefreshCw } from "lucide-react";
 import Link from "next/link";
@@ -35,7 +36,7 @@ const STATE: Record<DeviceState, { label: string; tone: StatusTone }> = {
   inactive: { label: "Deactivated", tone: "warning" },
   retired: { label: "Retired", tone: "neutral" }
 };
-const label = (d: DeviceRow) => d.name ?? d.model ?? "Device";
+const label = (d: DeviceRow) => deviceName(d.name, d.model) ?? d.model ?? "Device";
 
 export function DevicesView({ data, query, can }: { data: Page<DeviceRow, DeviceState | "unassigned">; query: DeviceListQuery; can: Can }) {
   const t = useTime();
@@ -99,7 +100,7 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
         cell: ({ row: { original: d } }) => (
           <div className="min-w-0">
             <p className="m-0 truncate font-medium text-foreground">{label(d)}</p>
-            <p className="m-0 truncate text-xs text-muted-foreground">{[d.name && d.model ? d.model : null, d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null].filter(Boolean).join(" · ") || " "}</p>
+            <p className="m-0 truncate text-xs text-muted-foreground">{[deviceName(d.name, d.model) && d.model ? d.model : null, d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null].filter(Boolean).join(" · ") || " "}</p>
           </div>
         )
       },

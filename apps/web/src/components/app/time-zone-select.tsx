@@ -1,5 +1,5 @@
 "use client";
-import { NORTH_AMERICA_ZONES, allTimeZones, zoneOptionLabel } from "@rio-gps/core/timezones";
+import { NORTH_AMERICA_ZONES, allTimeZones, zoneLabel, zoneOptionLabel } from "@rio-gps/core/timezones";
 import { forwardRef, useEffect, useMemo, useState, type SelectHTMLAttributes } from "react";
 import { Select } from "@/components/ui/input";
 import { cn } from "@/lib/cn";
@@ -23,7 +23,9 @@ export const TimeZoneSelect = forwardRef<HTMLSelectElement, Omit<SelectHTMLAttri
   useEffect(() => setMounted(true), []);
   const groups = useMemo(() => {
     const now = Date.now();
-    const label = (id: string) => zoneOptionLabel(id, now);
+    // Abbreviations ("PST" vs "GMT-8") come from ICU data that differs between Node and the
+    // browser, so the first render shows plain names and the abbreviations arrive after hydration.
+    const label = (id: string) => (mounted ? zoneOptionLabel(id, now) : zoneLabel(id));
     return {
       canada: NORTH_AMERICA_ZONES.filter((z) => z.region === "Canada").map((z) => ({ id: z.id, label: label(z.id) })),
       us: NORTH_AMERICA_ZONES.filter((z) => z.region === "United States").map((z) => ({ id: z.id, label: label(z.id) })),
@@ -36,7 +38,12 @@ export const TimeZoneSelect = forwardRef<HTMLSelectElement, Omit<SelectHTMLAttri
   return (
     // w-full + min-w-0: a native select is as wide as its longest option; don't let it push the layout.
     <Select ref={ref} value={value} defaultValue={defaultValue} className={cn("w-full min-w-0", className)} {...props}>
-      {defaultOption !== undefined && <option value="">{defaultOption}</option>}
+      {/* The default names its zone abbreviation, which can differ server/browser (see above). */}
+      {defaultOption !== undefined && (
+        <option value="" suppressHydrationWarning>
+          {defaultOption}
+        </option>
+      )}
       {!known && <option value={current}>{current.replace(/_/g, " ")}</option>}
       <optgroup label="Canada">
         {groups.canada.map((o) => (
