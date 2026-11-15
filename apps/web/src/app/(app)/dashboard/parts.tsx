@@ -55,7 +55,7 @@ export const TILE_LOOK = {
   alert: "bg-[linear-gradient(135deg,#c81e2b,#991b1b)]",
   calm: "bg-[linear-gradient(135deg,#0a2463,#12357f)]",
   waiting: "bg-[linear-gradient(135deg,#526079,#3b4558)]",
-  pickup: "bg-[linear-gradient(135deg,#5b3fd6,#4527b8)]"
+  pickup: "bg-[linear-gradient(135deg,#6526d1,#4527b8)]"
 } as const;
 
 export function Tile({ label, value, total, icon: Icon, look, hint, href, className, totalNoun = "fleet" }: { label: string; value: number; total?: number; icon: typeof Truck; look: keyof typeof TILE_LOOK; hint?: string; href: string; className?: string; /** "34% of fleet" / "34% of active loads". */ totalNoun?: string }) {
@@ -81,7 +81,7 @@ export function Tile({ label, value, total, icon: Icon, look, hint, href, classN
 export const QA_TONE = {
   navy: "bg-primary-soft text-primary group-hover:bg-primary group-hover:text-white",
   green: "bg-success-soft text-success group-hover:bg-success group-hover:text-white",
-  purple: "bg-[#f1edff] text-[#5b3fd6] group-hover:bg-[#5b3fd6] group-hover:text-white",
+  purple: "bg-[#e3d6fb] text-[#6526d1] dark:bg-white/10 dark:text-foreground group-hover:bg-[#6526d1] group-hover:text-white",
   amber: "bg-warning-soft text-warning group-hover:bg-warning group-hover:text-white",
   red: "bg-danger-soft text-danger group-hover:bg-danger group-hover:text-white"
 } as const;

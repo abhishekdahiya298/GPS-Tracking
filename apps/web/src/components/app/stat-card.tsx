@@ -4,19 +4,19 @@ import { cn } from "@/lib/cn";
 
 /** One look per kind of number, so the same measure has the same icon and tint on every page. */
 const LOOKS: { match: RegExp; icon: LucideIcon; tint: string }[] = [
-  { match: /distance|mileage/i, icon: Route, tint: "bg-[#e9eefb] text-[#133a8f]" },
-  { match: /speed/i, icon: Gauge, tint: "bg-[#fdecec] text-[#c42b2b]" },
-  { match: /idling/i, icon: Activity, tint: "bg-[#fff1e0] text-[#a3470a]" },
-  { match: /stop|parked/i, icon: CircleParking, tint: "bg-[#fdecec] text-[#ad1f1f]" },
-  { match: /longest|over limit/i, icon: Timer, tint: "bg-[#f1edff] text-[#5b3fd6]" },
-  { match: /time/i, icon: Clock, tint: "bg-[#e9f7ee] text-[#136c35]" },
-  { match: /vehicle/i, icon: Truck, tint: "bg-[#e8f8f5] text-[#0f766e]" },
-  { match: /customer/i, icon: Building2, tint: "bg-[#e9eefb] text-[#133a8f]" },
-  { match: /tracker/i, icon: Cpu, tint: "bg-[#e8f4fb] text-[#0369a1]" },
-  { match: /load/i, icon: Package, tint: "bg-[#e9f7ee] text-[#136c35]" },
-  { match: /total|amount/i, icon: ReceiptText, tint: "bg-[#fff5e1] text-[#b45309]" }
+  { match: /distance|mileage/i, icon: Route, tint: "bg-[#dbe4f8] text-[#133a8f] dark:bg-white/10 dark:text-foreground" },
+  { match: /speed/i, icon: Gauge, tint: "bg-[#f6cdcd] text-[#ad1f1f] dark:bg-white/10 dark:text-foreground" },
+  { match: /idling/i, icon: Activity, tint: "bg-[#fcd9b2] text-[#a3470a] dark:bg-white/10 dark:text-foreground" },
+  { match: /stop|parked/i, icon: CircleParking, tint: "bg-[#f6cdcd] text-[#ad1f1f] dark:bg-white/10 dark:text-foreground" },
+  { match: /longest|over limit/i, icon: Timer, tint: "bg-[#e3d6fb] text-[#6526d1] dark:bg-white/10 dark:text-foreground" },
+  { match: /time/i, icon: Clock, tint: "bg-[#c8e8d2] text-[#136c35] dark:bg-white/10 dark:text-foreground" },
+  { match: /vehicle/i, icon: Truck, tint: "bg-[#ccede6] text-[#0f766e] dark:bg-white/10 dark:text-foreground" },
+  { match: /customer/i, icon: Building2, tint: "bg-[#dbe4f8] text-[#133a8f] dark:bg-white/10 dark:text-foreground" },
+  { match: /tracker/i, icon: Cpu, tint: "bg-[#d6eaf7] text-[#0369a1] dark:bg-white/10 dark:text-foreground" },
+  { match: /load/i, icon: Package, tint: "bg-[#c8e8d2] text-[#136c35] dark:bg-white/10 dark:text-foreground" },
+  { match: /total|amount/i, icon: ReceiptText, tint: "bg-[#fde4c0] text-[#a3470a] dark:bg-white/10 dark:text-foreground" }
 ];
-const FALLBACK = { icon: Hash, tint: "bg-[#e9eefb] text-[#133a8f]" };
+const FALLBACK = { icon: Hash, tint: "bg-[#dbe4f8] text-[#133a8f] dark:bg-white/10 dark:text-foreground" };
 
 /** Summary number with a tinted icon. Used above report tables and anywhere a page leads with totals. */
 export function StatCard({ label, value, className }: { label: string; value: ReactNode; className?: string }) {
