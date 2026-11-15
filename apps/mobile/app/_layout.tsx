@@ -1,9 +1,8 @@
 import * as Notifications from "expo-notifications";
 import { Stack, useRouter } from "expo-router";
-import { reloadAppAsync } from "expo";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { Appearance } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AlertsProvider } from "@/alerts/AlertsProvider";
@@ -12,7 +11,7 @@ import { FleetProvider } from "@/fleet/FleetProvider";
 import { routeForNotification } from "@/push/model";
 import { refreshPushRegistration } from "@/push/service";
 import { UpdateGate } from "@/updates/UpdateGate";
-import { colors, isDark, themeChoice } from "@/theme";
+import { applyLook, colors, isDark, lookVersion, onLookChange, themeChoice } from "@/theme";
 
 // Keep the splash screen up until we know whether someone is signed in,
 // so the login screen never flashes for a signed-in person.
@@ -22,7 +21,7 @@ void SplashScreen.preventAutoHideAsync();
 if (themeChoice !== "system") Appearance.setColorScheme(themeChoice);
 
 /** Screens opened on top of the tabs share one plain header: back arrow, centred title, no shadow. */
-const pushed = {
+const pushedOptions = () => ({
   headerShown: true,
   headerBackButtonDisplayMode: "minimal" as const,
   headerTitleAlign: "center" as const,
@@ -31,7 +30,7 @@ const pushed = {
   headerTitleStyle: { fontWeight: "600" as const, fontSize: 17 },
   headerShadowVisible: false,
   contentStyle: { backgroundColor: colors.canvas }
-};
+});
 
 function Screens() {
   const { state } = useSession();
@@ -57,9 +56,14 @@ function Screens() {
     void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
   }, [signedIn, tapped, router]);
 
+  // The look changed (Account, or the phone went dark): draw every screen again in the new
+  // colours, at once and without restarting the app. Session and fleet data stay as they are.
+  const look = useSyncExternalStore(onLookChange, lookVersion);
+
   if (!ready) return null;
+  const pushed = pushedOptions();
   const stack = (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}>
+    <Stack key={look} screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }}>
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="vehicle/[id]" options={{ ...pushed, title: "Vehicle" }} />
@@ -86,14 +90,14 @@ function Screens() {
 
 export default function RootLayout() {
   // "Same as phone": when the phone switches between light and dark while the app is open,
-  // restart quickly so every screen (and the map) changes together instead of half-way.
+  // every screen (and the map) changes together, straight away.
   useEffect(() => {
-    if (themeChoice !== "system") return;
     const sub = Appearance.addChangeListener(({ colorScheme }) => {
-      if ((colorScheme === "dark") !== isDark) void reloadAppAsync("Phone switched light/dark").catch(() => undefined);
+      if (themeChoice === "system") applyLook("system", colorScheme);
     });
     return () => sub.remove();
   }, []);
+  useSyncExternalStore(onLookChange, lookVersion);
   return (
     <SafeAreaProvider>
       <StatusBar style={isDark ? "light" : "dark"} />

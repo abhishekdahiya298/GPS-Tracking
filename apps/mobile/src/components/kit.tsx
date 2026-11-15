@@ -9,7 +9,7 @@ import { Animated, Image, Pressable, StyleSheet, Text, TextInput, View, type Sty
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { STATE_META, type FleetState, type sheetFacts } from "../fleet/model";
 import { haptic } from "../haptics";
-import { colors, elevation, font, ink, isDark, radius, size, softTint, space, type } from "../theme";
+import { colors, elevation, font, ink, isDark, radius, size, softTint, space, type, themed } from "../theme";
 import { Dots, FadeInUp, PopIn, PressableScale, Skeleton } from "./motion";
 
 export type IconName = keyof typeof Ionicons.glyphMap;
@@ -373,7 +373,7 @@ export function Banner({ text }: { text: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   flex: { flex: 1 },
   header: { paddingHorizontal: space.lg, paddingBottom: space.sm, gap: space.md, backgroundColor: colors.canvas },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: size.controlSm },
@@ -440,4 +440,4 @@ const styles = StyleSheet.create({
   banner: { flexDirection: "row", alignItems: "center", gap: space.sm, marginHorizontal: space.lg, marginBottom: space.sm, padding: space.sm, borderRadius: radius.lg, borderWidth: 1, borderColor: isDark ? colors.border : "#f6d7ae", backgroundColor: colors.warningSoft },
   bannerIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: isDark ? colors.muted : "#fde4c4", alignItems: "center", justifyContent: "center" },
   bannerText: { flex: 1, color: colors.foreground, fontSize: font.small, lineHeight: 18, fontWeight: "600" }
-});
+}));

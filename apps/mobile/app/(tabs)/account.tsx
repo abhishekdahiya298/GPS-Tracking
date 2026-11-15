@@ -1,11 +1,10 @@
 import Constants from "expo-constants";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { ActivityIndicator, Alert, Linking, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Appearance, Linking, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { ApiError, api, type ReadyResponse } from "@/api";
 import { useSession } from "@/auth/SessionProvider";
 import { Ionicons } from "@expo/vector-icons";
-import { reloadAppAsync } from "expo";
 import { Card, IconWell, ScreenHeader, SectionLabel, Segmented } from "@/components/kit";
 import { MapIconPicker } from "@/map/MapIconPicker";
 import { FadeInUp, PressableScale, PulseDot } from "@/components/motion";
@@ -15,7 +14,7 @@ import { haptic } from "@/haptics";
 import { useFleet } from "@/fleet/FleetProvider";
 import { DEFAULT_PREFS, PROBLEM_TEXT, PUSH_KINDS, clockText, wrapMinutes, type PushPrefs } from "@/push/model";
 import { disablePush, enablePush, loadPrefs } from "@/push/service";
-import { colors, font, ink, radius, saveThemeChoice, size, space, themeChoice, type, type ThemeChoice } from "@/theme";
+import { colors, font, ink, radius, applyLook, saveThemeChoice, size, space, themeChoice, type ThemeChoice, themed, type } from "@/theme";
 
 type Check = { state: "checking" } | { state: "ok"; at: string } | { state: "failed"; reason: string };
 
@@ -80,13 +79,14 @@ export default function AccountScreen() {
     ]);
   }
 
-  /** Saves the look and restarts the app, so every screen is drawn in it. Takes well under a second. */
+  /** Changes the look at once (no restart) and remembers it for next time. */
   function changeLook(next: ThemeChoice) {
     if (next === look) return;
     setLook(next);
     saveThemeChoice(next);
-    // Let the switch finish sliding before the restart.
-    setTimeout(() => void reloadAppAsync("Look changed").catch(() => Alert.alert("Close and reopen the app", "The new look applies the next time RIO GPS opens.")), 250);
+    // The phone's own pieces (keyboard, alerts, pickers) follow too; "unspecified" means "same as phone".
+    Appearance.setColorScheme(next === "system" ? "unspecified" : next);
+    applyLook(next);
   }
 
   const initials = (user?.name || user?.email || "?")
@@ -235,7 +235,7 @@ function LinkRow({ icon, label, onPress, last, color = colors.primary, soft = co
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1, minWidth: 0 },
   content: { paddingHorizontal: space.lg, paddingTop: space.xs, paddingBottom: space.xl, gap: space.lg },
@@ -258,4 +258,4 @@ const styles = StyleSheet.create({
   checkIcon: { width: size.icon, alignItems: "center" },
   end: { gap: space.md },
   footer: { ...type.caption, textAlign: "center" }
-});
+}));

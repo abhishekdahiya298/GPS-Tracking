@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useRef } from "react";
-import { Animated, PanResponder, StyleSheet, View, type LayoutChangeEvent } from "react-native";
-import { colors, elevation } from "@/theme";
+import { Animated, PanResponder, View, type LayoutChangeEvent } from "react-native";
+import { colors, elevation, themed } from "@/theme";
 
 export type SheetSnap = "peek" | "half" | "full";
 
@@ -64,9 +64,9 @@ export function measure(set: (h: number) => void) {
   return (e: LayoutChangeEvent) => set(e.nativeEvent.layout.height);
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   sheet: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, ...elevation.lg },
   drag: { paddingTop: 8 },
   grab: { alignSelf: "center", width: 40, height: 5, borderRadius: 3, backgroundColor: colors.borderStrong, marginBottom: 8 },
   body: { flex: 1, minHeight: 0 }
-});
+}));

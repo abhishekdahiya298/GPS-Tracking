@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { Animated, Image, PanResponder, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, PanResponder, Text, View } from "react-native";
 import { PressableScale } from "@/components/motion";
 import { displayName, fleetState, STATE_META, type FleetDevice } from "@/fleet/model";
 import { haptic } from "@/haptics";
-import { colors, elevation } from "@/theme";
+import { colors, elevation, themed } from "@/theme";
 import { bearing, iconName, type IconPrefs } from "./model";
 import { MAP_ICONS } from "./sprites";
 
@@ -138,11 +138,11 @@ export function SwipeToStep({ children, onStep, enabled, keyId }: { children: Re
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   slot: { position: "absolute", width: SIZE, alignItems: "center" },
   ring: { position: "absolute", left: -6, top: -6, width: SIZE + 12, height: SIZE + 12, alignItems: "center" },
   arrow: { width: 0, height: 0, borderLeftWidth: 6, borderRightWidth: 6, borderBottomWidth: 8, borderLeftColor: "transparent", borderRightColor: "transparent" },
   badge: { width: SIZE, height: SIZE, borderRadius: SIZE / 2, borderWidth: 2.5, backgroundColor: colors.background, alignItems: "center", justifyContent: "center", ...elevation.md },
   icon: { width: 30, height: 32 },
   name: { position: "absolute", top: SIZE + 3, width: 84, left: (SIZE - 84) / 2, textAlign: "center", fontSize: 11, lineHeight: 14, fontWeight: "700", color: colors.foreground, textShadowColor: colors.background, textShadowRadius: 3 }
-});
+}));

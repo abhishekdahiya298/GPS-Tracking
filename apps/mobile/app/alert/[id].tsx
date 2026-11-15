@@ -12,7 +12,7 @@ import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { STATE_META, timeAgo } from "@/fleet/model";
 import { haptic } from "@/haptics";
 import { useBottomInset } from "@/layout";
-import { colors, ink, radius, softTint, space, type } from "@/theme";
+import { colors, ink, radius, softTint, space, themed, type } from "@/theme";
 
 /**
  * One alert in full: what happened, how urgent it is, when and where, the rule that raised it,
@@ -111,7 +111,7 @@ function Row({ icon, label, value, color, soft, last = false }: { icon: keyof ty
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   content: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.md },
   hero: { alignItems: "center", gap: space.sm, paddingVertical: space.xl, paddingHorizontal: space.lg },
@@ -126,4 +126,4 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: 14, lineHeight: 20, color: colors.mutedForeground, width: 72 },
   rowValue: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground, textAlign: "right" },
   actions: { gap: space.sm, borderRadius: radius.lg }
-});
+}));

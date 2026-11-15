@@ -192,3 +192,26 @@ export function stillSince(points: HistoryPoint[]): { since: number; whole: bool
   }
   return { since: Date.parse(points[0]!.recordedAt), whole: true };
 }
+
+/**
+ * Stops inside a trip, read from its own points: places where the vehicle stayed within about
+ * 40 m for at least `minMinutes`. The start and end are left out (they are A and B already).
+ */
+export function trackStops(track: Track, minMinutes = 5): { at: [number, number]; from: number; to: number }[] {
+  const out: { at: [number, number]; from: number; to: number }[] = [];
+  const near = (a: [number, number], b: [number, number]) => {
+    const dy = (a[1] - b[1]) * 111_320;
+    const dx = (a[0] - b[0]) * 111_320 * Math.cos((a[1] * Math.PI) / 180);
+    return Math.hypot(dx, dy) <= 40;
+  };
+  const n = track.at.length;
+  let i = 0;
+  while (i < n) {
+    let j = i;
+    while (j + 1 < n && near(track.at[i]!, track.at[j + 1]!)) j++;
+    const minutes = (track.t[j]! - track.t[i]!) / 60000;
+    if (j > i && minutes >= minMinutes && i > 0 && j < n - 1) out.push({ at: track.at[i]!, from: track.t[i]!, to: track.t[j]! });
+    i = j + 1;
+  }
+  return out;
+}

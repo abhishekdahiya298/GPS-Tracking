@@ -3,7 +3,7 @@ import { dateFormatter } from "@rio-gps/core/timezones";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
+import { Text, View, type GestureResponderEvent } from "react-native";
 import { ApiError, api } from "@/api";
 import { EmptyState, Loading, Segmented } from "@/components/kit";
 import { PressableScale, SlideUp } from "@/components/motion";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui";
 import { useBottomInset } from "@/layout";
 import { Placeholder } from "@/components/Placeholder";
 import { useFleet } from "@/fleet/FleetProvider";
-import { colors, elevation, ink, radius, size, softTint, space, type } from "@/theme";
+import { colors, elevation, ink, radius, size, softTint, space, themed, type } from "@/theme";
 import { STATE_META } from "@/fleet/model";
 import { useAddress } from "@/map/useAddress";
 import { SPEEDS, advance, buildTrack, durationText, positionAt, progressOf, timeAtProgress, trackSummary, type HistoryPage, type HistoryPoint, type Track } from "@/trips/model";
@@ -232,7 +232,7 @@ function SumCell({ value, label, color, soft }: { value: string; label: string; 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   center: { flex: 1, backgroundColor: colors.canvas },
@@ -268,4 +268,4 @@ const styles = StyleSheet.create({
   controls: { flexDirection: "row", alignItems: "center", gap: space.lg, marginTop: space.md },
   play: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center", ...elevation.md },
   speeds: { flex: 1 }
-});
+}));

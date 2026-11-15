@@ -1,8 +1,8 @@
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image, Text, View } from "react-native";
 import { Card, Segmented } from "@/components/kit";
 import { PressableScale } from "@/components/motion";
 import { haptic } from "@/haptics";
-import { colors, radius, space, type } from "@/theme";
+import { colors, radius, space, themed, type } from "@/theme";
 import { hasOwnIconPrefs, resetIconPrefs, setIconPrefs, useIconPrefs } from "./iconPrefs";
 import { iconName, type IconStyle } from "./model";
 import { MAP_ICONS } from "./sprites";
@@ -67,7 +67,7 @@ export function MapIconPicker() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   card: { gap: space.md },
   row: { flexDirection: "row", gap: space.sm },
   slot: { flex: 1 },
@@ -81,4 +81,4 @@ const styles = StyleSheet.create({
   labelOn: { color: colors.primary, fontWeight: "700" },
   reset: { alignSelf: "flex-start", minHeight: 32, justifyContent: "center" },
   resetText: { fontSize: 14, fontWeight: "700", color: colors.primary }
-});
+}));

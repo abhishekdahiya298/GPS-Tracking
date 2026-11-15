@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, Easing, Image, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { themed } from "@/theme";
 
 /* eslint-disable-next-line @typescript-eslint/no-require-imports -- React Native loads images with require() */
 const GLOBE = require("../../assets/globe.png");
@@ -90,11 +91,11 @@ export function GlobeIntro({ ready, count, onDive, onDone }: { ready: boolean; c
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   space: { backgroundColor: "#040a18", alignItems: "center", justifyContent: "center" },
   star: { position: "absolute", backgroundColor: "#ffffff" },
   glow: { position: "absolute", backgroundColor: "#1d4ed8" },
   caption: { position: "absolute", bottom: "18%", alignItems: "center", gap: 4 },
   title: { fontSize: 18, lineHeight: 24, fontWeight: "700", color: "#ffffff" },
   sub: { fontSize: 13, lineHeight: 18, color: "rgba(255,255,255,0.7)" }
-});
+}));

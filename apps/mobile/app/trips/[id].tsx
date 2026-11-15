@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { dateFormatter } from "@rio-gps/core/timezones";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { ApiError, api } from "@/api";
 import { EmptyState, ListSkeleton } from "@/components/kit";
 import { FadeInUp, LoadingBar, PressableScale } from "@/components/motion";
@@ -11,7 +11,7 @@ import { haptic } from "@/haptics";
 import { useBottomInset } from "@/layout";
 import { useFleet } from "@/fleet/FleetProvider";
 import { displayName } from "@/fleet/model";
-import { colors, font, ink, radius, size, space, type } from "@/theme";
+import { colors, font, ink, radius, size, space, themed, type } from "@/theme";
 import { dayLabel, dayRange, durationText, shiftDay, todayKey, type TripDto, type TripReport } from "@/trips/model";
 
 type Load = { state: "loading" } | { state: "ready"; report: TripReport } | { state: "failed"; message: string };
@@ -175,7 +175,7 @@ function TripFact({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   tabular: { fontVariant: ["tabular-nums"] },
   dim: { opacity: 0.3 },
@@ -197,4 +197,4 @@ const styles = StyleSheet.create({
   times: { flex: 1, fontSize: font.body, lineHeight: 20, fontWeight: "600", color: colors.foreground, fontVariant: ["tabular-nums"] },
   tripFacts: { flexDirection: "row", flexWrap: "wrap", columnGap: space.lg, rowGap: 4, paddingLeft: 24 + space.sm },
   tripFact: { flexDirection: "row", alignItems: "center", gap: 5 }
-});
+}));

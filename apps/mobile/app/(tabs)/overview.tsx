@@ -15,11 +15,12 @@ import { VehicleRow } from "@/fleet/VehicleRow";
 import { MiniFleetMap } from "@/map/MiniFleetMap";
 import { firstName, fleetSummary, greeting, needsAttention, onTheMove, type SummaryKey } from "@/home/model";
 import { Welcome } from "@/home/Welcome";
-import { colors, elevation, font, ink, isDark, radius, size, softTint, space, type } from "@/theme";
+import { colors, elevation, font, ink, isDark, radius, size, softTint, space, themed, type } from "@/theme";
 
 /* eslint-disable @typescript-eslint/no-require-imports -- React Native loads images with require() */
 const LOGO = require("../../assets/logo.png");
-const MAP_PREVIEW = isDark ? require("../../assets/map-preview-dark.png") : require("../../assets/map-preview.png");
+const MAP_PREVIEW_LIGHT = require("../../assets/map-preview.png");
+const MAP_PREVIEW_DARK = require("../../assets/map-preview-dark.png");
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 /** Each status tile shows the same shape as the status badges: play, pause, square, no signal. */
@@ -92,7 +93,7 @@ export default function HomeScreen() {
         {/* One card: the fleet on a live map, then the share of each status and a tile per status. */}
         <FadeInUp index={1} style={styles.fleetCard}>
           <PressableScale onPress={() => openMap()} feedback="press" scaleTo={0.99} style={styles.mapArea} accessibilityRole="button" accessibilityLabel="Open the live map">
-            {loading ? <Image source={MAP_PREVIEW} style={styles.mapImage} resizeMode="cover" /> : <MiniFleetMap devices={devices} />}
+            {loading ? <Image source={(isDark ? MAP_PREVIEW_DARK : MAP_PREVIEW_LIGHT)} style={styles.mapImage} resizeMode="cover" /> : <MiniFleetMap devices={devices} />}
             <View style={styles.mapChip}>
               <Ionicons name="bus-outline" size={15} color={colors.foreground} />
               <Text style={styles.mapChipText}>{loading ? "Your fleet" : `${summary.total} vehicle${summary.total === 1 ? "" : "s"}`}</Text>
@@ -219,7 +220,7 @@ function SectionHead({ title, action, onAction }: { title: string; action?: stri
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   // Vehicle cards bring their own side margins, so this list runs edge to edge.
   cardList: { marginHorizontal: -space.lg },
   wrap: { flex: 1, backgroundColor: colors.canvas },
@@ -273,4 +274,4 @@ const styles = StyleSheet.create({
   sectionActionText: { fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.primary },
   quiet: { ...type.body, padding: space.lg, color: colors.mutedForeground },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary }
-});
+}));

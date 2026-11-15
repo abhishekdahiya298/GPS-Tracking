@@ -1,7 +1,7 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
 import { Image, Platform, StyleSheet, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline, type Region } from "react-native-maps";
-import { colors, isDark } from "@/theme";
+import { colors, isDark, themed } from "@/theme";
 import type { IconPrefs } from "./model";
 import { MAP_ICONS } from "./sprites";
 
@@ -128,9 +128,9 @@ export const NativeLiveMap = forwardRef<
   );
 });
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   pin: { width: 42, height: 52 },
   round: { width: 44, height: 48 },
   top: { width: 34, height: 54 },
   on: { transform: [{ scale: 1.15 }], shadowColor: colors.primary, shadowOpacity: 0.6, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } }
-});
+}));

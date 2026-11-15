@@ -10,7 +10,7 @@ import { useBottomInset } from "@/layout";
 import { MiniFleetMap } from "@/map/MiniFleetMap";
 import { useAddress } from "@/map/useAddress";
 import { TodayCard } from "@/trips/TodayCard";
-import { colors, radius, size, space, type } from "@/theme";
+import { colors, radius, size, space, themed, type } from "@/theme";
 
 // The map only exists in the installed app (see app/(tabs)/index.tsx).
 const hasMap = Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
@@ -127,7 +127,7 @@ export default function VehicleScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   wrap: { flex: 1, backgroundColor: colors.canvas },
   content: { paddingHorizontal: space.lg, paddingTop: space.sm, gap: space.md },
   flex: { flex: 1, minWidth: 0 },
@@ -147,4 +147,4 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, lineHeight: 20, color: colors.mutedForeground },
   value: { flexShrink: 1, maxWidth: "60%", fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground, textAlign: "right", fontVariant: ["tabular-nums"] },
   linkCard: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 56, paddingLeft: space.md, paddingRight: 10, backgroundColor: colors.background, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border }
-});
+}));

@@ -1,9 +1,9 @@
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Suspense, lazy } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Loading } from "@/components/kit";
 import { Placeholder } from "@/components/Placeholder";
-import { colors } from "@/theme";
+import { colors, themed } from "@/theme";
 
 // The map engine is native code that Expo Go does not contain. Loading it there would crash the
 // whole app, so it is only loaded in the installed app.
@@ -22,4 +22,4 @@ export default function MapScreen() {
   );
 }
 
-const styles = StyleSheet.create({ wrap: { flex: 1, backgroundColor: colors.canvas } });
+const styles = themed(() => ({ wrap: { flex: 1, backgroundColor: colors.canvas } }));

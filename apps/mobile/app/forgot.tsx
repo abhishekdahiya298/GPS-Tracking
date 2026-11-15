@@ -1,14 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { signInMessage } from "@/auth/service";
 import { useSession } from "@/auth/SessionProvider";
 import { FadeInUp } from "@/components/motion";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { useBottomInset, useScreen } from "@/layout";
-import { colors, elevation, isDark, radius, space, type } from "@/theme";
+import { colors, elevation, isDark, radius, space, themed, type } from "@/theme";
 
 /* eslint-disable @typescript-eslint/no-require-imports -- React Native loads images with require() */
 const HERO = require("../assets/hero-reset.png");
@@ -98,7 +98,7 @@ export default function ForgotScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => ({
   screen: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1, minWidth: 0 },
   hero: { position: "absolute", left: 0, right: 0, top: 0, width: "100%", borderBottomLeftRadius: 28, borderBottomRightRadius: 28 },
@@ -118,4 +118,4 @@ const styles = StyleSheet.create({
   helpText: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground },
   backLink: { alignSelf: "center", flexDirection: "row", alignItems: "center", gap: space.sm, minHeight: 44 },
   backText: { fontSize: 15, fontWeight: "700", color: colors.primary }
-});
+}));
