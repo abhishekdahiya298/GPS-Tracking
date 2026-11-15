@@ -99,6 +99,7 @@ const PICTURES = { truck: require("../../assets/vehicles/vehicle-truck.png") as 
  * The vehicle picture on cards and sheets: one white tractor-trailer for every powered vehicle
  * and one trailer for trailers, on a soft blue tile. The same two pictures everywhere.
  */
+/* eslint-disable @typescript-eslint/no-require-imports -- React Native loads images with require() */
 const PICTURES_3D: Record<string, number> = {
   "truck-moving": require("../../assets/vehicles/3d-truck-moving.png") as number,
   "truck-idle": require("../../assets/vehicles/3d-truck-idle.png") as number,
@@ -116,6 +117,7 @@ const PICTURES_3D: Record<string, number> = {
   "car-parked": require("../../assets/vehicles/3d-car-parked.png") as number,
   "car-offline": require("../../assets/vehicles/3d-car-offline.png") as number
 };
+/* eslint-enable @typescript-eslint/no-require-imports */
 
 /**
  * The vehicle's 3D picture: a truck, a trailer or a car, in its status colour (green moving,
