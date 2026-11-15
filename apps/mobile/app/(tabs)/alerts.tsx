@@ -10,7 +10,7 @@ import { Button } from "@/components/ui";
 import { haptic } from "@/haptics";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { timeAgo } from "@/fleet/model";
-import { colors, font, size, space, type } from "@/theme";
+import { colors, font, ink, size, softTint, space, type } from "@/theme";
 
 export default function AlertsScreen() {
   const { events, unread, unreadOnly, loading, loadingMore, hasMore, error, setUnreadOnly, refresh, loadMore, acknowledge } = useAlerts();
@@ -54,8 +54,8 @@ export default function AlertsScreen() {
         <View style={styles.flex}>
           <Text style={[styles.title, isUnread && styles.titleUnread]} numberOfLines={2}>{alertTitle(item)}</Text>
           <View style={styles.tagLine}>
-            <View style={[styles.tag, { backgroundColor: SEVERITY_META[alertSeverity(item.type)].soft }]}>
-              <Text style={[styles.tagText, { color: SEVERITY_META[alertSeverity(item.type)].color }]}>{SEVERITY_META[alertSeverity(item.type)].label}</Text>
+            <View style={[styles.tag, { backgroundColor: softTint(SEVERITY_META[alertSeverity(item.type)].color, SEVERITY_META[alertSeverity(item.type)].soft) }]}>
+              <Text style={[styles.tagText, { color: ink(SEVERITY_META[alertSeverity(item.type)].color) }]}>{SEVERITY_META[alertSeverity(item.type)].label}</Text>
             </View>
             <Text style={styles.typeText} numberOfLines={1}>{meta.label}</Text>
           </View>
