@@ -11,7 +11,7 @@ import { iconImages } from "./sprites";
  * A small, still map of the real fleet for the Overview card: the same 3D pins as the Live Map,
  * framed on every vehicle. It doesn't move under a finger; tapping the card opens the Live Map.
  */
-export const MiniFleetMap = memo(function MiniFleetMap({ devices }: { devices: FleetDevice[] }) {
+export const MiniFleetMap = memo(function MiniFleetMap({ devices, focus }: { devices: FleetDevice[]; focus?: [number, number] | null }) {
   const camera = useRef<CameraRef>(null);
   const [ready, setReady] = useState(false);
   const prefs = useIconPrefs();
@@ -20,8 +20,11 @@ export const MiniFleetMap = memo(function MiniFleetMap({ devices }: { devices: F
   const bounds = useMemo(() => boundsOf(devices), [devices]);
 
   useEffect(() => {
-    if (ready && bounds) camera.current?.fitBounds(bounds, { padding: { top: 40, right: 40, bottom: 56, left: 40 }, duration: 0 });
-  }, [ready, bounds]);
+    if (!ready) return;
+    // One vehicle: centre on it close enough to read the road. A fleet: frame them all.
+    if (focus) camera.current?.jumpTo({ center: focus, zoom: 13 });
+    else if (bounds) camera.current?.fitBounds(bounds, { padding: { top: 40, right: 40, bottom: 56, left: 40 }, duration: 0 });
+  }, [ready, bounds, focus]);
 
   return (
     <Map

@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Linking, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -8,6 +7,8 @@ import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { STATE_META, coordsText, displayName, fleetState, freshnessLine, sheetFacts, sheetHeadline, statusLine, timeAgo } from "@/fleet/model";
 import { useBottomInset } from "@/layout";
+import { MiniFleetMap } from "@/map/MiniFleetMap";
+import { TodayCard } from "@/trips/TodayCard";
 import { colors, radius, size, space, type } from "@/theme";
 
 // The map only exists in the installed app (see app/(tabs)/index.tsx).
@@ -87,6 +88,11 @@ export default function VehicleScreen() {
 
       <FadeInUp index={1}>
         <Card style={styles.place}>
+          {loc && hasMap ? (
+            <PressableScale onPress={() => router.navigate({ pathname: "/(tabs)", params: { device: device.deviceId } })} scaleTo={0.99} style={styles.miniMap} accessibilityRole="button" accessibilityLabel="Show on the live map">
+              <MiniFleetMap devices={[device]} focus={[loc.longitude, loc.latitude]} />
+            </PressableScale>
+          ) : null}
           <AddressCard title={null} coords={coordsText(device) ?? "No position yet"} label={loc ? (silent ? `Last known position · ${freshnessLine(device, now)}` : freshnessLine(device, now)) : undefined} />
           {loc ? (
             <View style={styles.placeActions}>
@@ -113,11 +119,7 @@ export default function VehicleScreen() {
       </FadeInUp>
 
       <FadeInUp index={3}>
-        <PressableScale onPress={() => router.push({ pathname: "/trips/[id]", params: { id: device.deviceId } })} scaleTo={0.985} style={styles.linkCard} accessibilityRole="button" accessibilityLabel="Trip history">
-          <IconWell icon="git-commit-outline" box={36} />
-          <Text style={[type.rowTitle, styles.flex]}>Trip history</Text>
-          <Ionicons name="chevron-forward" size={18} color={colors.borderStrong} />
-        </PressableScale>
+        <TodayCard deviceId={device.deviceId} name={name} />
       </FadeInUp>
     </ScrollView>
   );
@@ -136,6 +138,7 @@ const styles = StyleSheet.create({
   stats: { flexDirection: "row", gap: 6 },
   place: { padding: space.sm, gap: space.sm },
   placeActions: { flexDirection: "row", gap: space.sm },
+  miniMap: { height: 150, borderRadius: radius.lg, overflow: "hidden", backgroundColor: colors.muted },
   rows: { paddingVertical: 0, paddingHorizontal: 14 },
   row: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: size.control, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   rowLast: { borderBottomWidth: 0 },

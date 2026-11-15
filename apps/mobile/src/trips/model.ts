@@ -60,10 +60,11 @@ export function dayLabel(day: string, today: string): string {
   return new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric" }).format(new Date(`${day}T12:00:00Z`));
 }
 
-/** "45 min", "2 h 05 min". */
+/** "45 min", "2 h 05 min", "2 d 8 h". */
 export function durationText(minutes: number): string {
   const m = Math.max(0, Math.round(minutes));
   if (m < 60) return `${m} min`;
+  if (m >= 1440) return `${Math.floor(m / 1440)} d ${Math.floor((m % 1440) / 60)} h`;
   return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
 }
 

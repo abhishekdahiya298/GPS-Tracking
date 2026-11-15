@@ -29,6 +29,7 @@ describe("days in the organization's time zone", () => {
   });
   it("writes durations", () => {
     expect([0, 45, 60, 125, 59.6].map(durationText)).toEqual(["0 min", "45 min", "1 h 00 min", "2 h 05 min", "1 h 00 min"]);
+    expect(durationText(3360)).toBe("2 d 8 h");
   });
 });
 

@@ -12,7 +12,7 @@ import { Dots, FadeIn, PressableScale, PulseDot, SlideUp } from "@/components/mo
 import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { FILTERS, STATE_META, coordsText, countByFilter, displayName, fleetState, freshnessLine, selectDevices, sheetFacts, sheetHeadline, type FleetFilter } from "@/fleet/model";
 import { haptic } from "@/haptics";
-import { colors, elevation, font, isDark, radius, size, space, type } from "@/theme";
+import { colors, elevation, font, ink, isDark, radius, size, softTint, space, type } from "@/theme";
 import { FleetSheet } from "./FleetSheet";
 import { MapSheet, type SheetSnap } from "./MapSheet";
 import { useStillSince } from "./useStillSince";
@@ -236,7 +236,7 @@ export default function LiveMap() {
     : selectedState === "moving"
       ? `${units.fmtSpeed(loc?.speedKph ?? null)}${headline.title.startsWith("Driving ") ? ` · ${headline.title.replace("Driving ", "")}` : ""}`
       : still
-        ? `Here for ${durationText(now - still.since)}${still.whole ? "+" : ""}`
+        ? `Here for ${durationText((now - still.since) / 60000)}${still.whole ? "+" : ""}`
         : null;
   const placeLine = selectedState === "moving" ? freshnessLine(selected!, now) : still ? `Since ${fmt.time(still.since)}` : selected ? freshnessLine(selected, now) : "";
   const sheetHeights = useMemo(() => {
@@ -466,7 +466,18 @@ export default function LiveMap() {
         >
           {selected && selectedState ? (
             <ScrollView contentContainerStyle={styles.sheetBody} scrollEnabled={snap === "full"} showsVerticalScrollIndicator={false}>
-              <SpeedBar speed={speedText[0]} unit={speedText[1]} title={headline.title} detail={headline.detail} headingDeg={loc?.headingDeg ?? null} state={selectedState === "never_seen" ? "offline" : selectedState} />
+              {selectedState === "offline" || selectedState === "parked" || selectedState === "never_seen" ? (
+                // Not reporting: say so plainly instead of showing a speed that is no longer true.
+                <View style={[styles.silent, { backgroundColor: softTint(STATE_META.idle.color, STATE_META.idle.soft) }]}>
+                  <Ionicons name={selectedState === "parked" ? "unlink-outline" : "cloud-offline-outline"} size={22} color={ink(STATE_META.idle.color)} />
+                  <View style={styles.flexFill}>
+                    <Text style={styles.silentTitle}>{selected.lastSeenAt ? `Not reporting for ${durationText((now - Date.parse(selected.lastSeenAt)) / 60000)}` : "No report yet"}</Text>
+                    <Text style={styles.silentNote}>{selectedState === "parked" ? "Unhooked trailer: it reports only on its own battery." : "Usually no power or no mobile signal."}</Text>
+                  </View>
+                </View>
+              ) : (
+                <SpeedBar speed={speedText[0]} unit={speedText[1]} title={headline.title} detail={headline.detail} headingDeg={loc?.headingDeg ?? null} state={selectedState} />
+              )}
               <AddressCard title={null} coords={coordsText(selected) ?? "No position yet"} label={selectedState === "offline" || selectedState === "parked" ? "Last known position" : undefined} />
               <FactRow facts={facts!} />
               <View style={styles.cardActions}>
@@ -540,6 +551,10 @@ function ActionButton({ icon, label, onPress, primary = false, selected = false 
 }
 
 const styles = StyleSheet.create({
+  silent: { flexDirection: "row", alignItems: "center", gap: space.md, paddingVertical: 10, paddingHorizontal: space.md, borderRadius: radius.lg + 2 },
+  silentTitle: { fontSize: 15, lineHeight: 20, fontWeight: "700", color: colors.foreground },
+  silentNote: { ...type.small },
+  flexFill: { flex: 1, minWidth: 0 },
   wrap: { flex: 1, backgroundColor: colors.canvas },
   map: { flex: 1 },
   flex: { flex: 1 },
