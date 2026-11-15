@@ -190,7 +190,7 @@ export default function HomeScreen() {
           <SectionHead title="Latest vehicle activity" action={activity.length > 0 ? "View all" : undefined} onAction={() => router.navigate("/(tabs)/vehicles")} />
           <View style={styles.cardList}>
             {loading ? (
-              [0, 1].map((i) => <Skeleton key={i} width="100%" height={110} round={radius.xl} style={styles.cardSkeleton} />)
+              [0, 1].map((i) => <Skeleton key={i} width="100%" height={92} round={radius.xl} style={styles.cardSkeleton} />)
             ) : activity.length === 0 ? (
               <Text style={styles.quiet}>No positions yet. Vehicles appear here once their trackers report.</Text>
             ) : (
