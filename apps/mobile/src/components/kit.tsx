@@ -122,6 +122,19 @@ export function FactTile({ icon, label, value, color = colors.primary, soft = co
   );
 }
 
+/** A compact fact for a row of four: icon, a tiny label and the value, on its own soft colour. */
+export function MiniFact({ icon, label, value, color = colors.primary, soft = colors.primarySoft }: { icon: IconName; label: string; value: string; color?: string; soft?: string }) {
+  return (
+    <View style={[styles.mini, { backgroundColor: softTint(color, soft), borderColor: isDark ? colors.border : `${color}3d` }]} accessible accessibilityLabel={`${label}: ${value}`}>
+      <Ionicons name={icon} size={14} color={ink(color)} />
+      <View style={styles.flex}>
+        <Text style={styles.miniLabel} numberOfLines={1}>{label}</Text>
+        <Text style={[styles.miniValue, { color: ink(color) }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
 /** The speed band on a vehicle sheet: deep blue with white figures, speed on the left, what it is doing on the right. */
 export function SpeedBar({ speed, unit, title, detail, headingDeg }: { speed: string; unit: string; title: string; detail: string; headingDeg?: number | null }) {
   return (
@@ -357,6 +370,9 @@ const styles = StyleSheet.create({
   fact: { flex: 1, minWidth: 0, alignItems: "center", gap: 2, paddingTop: 10, paddingBottom: 9, paddingHorizontal: 4, borderRadius: radius.xl, borderWidth: 1 },
   factValue: { fontSize: 15, lineHeight: 20, fontWeight: "800" },
   factLabel: { ...type.caption, color: colors.foreground, marginTop: 2 },
+  mini: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 5, height: 40, paddingHorizontal: 6, borderRadius: radius.lg, borderWidth: 1 },
+  miniLabel: { fontSize: 10, lineHeight: 12, color: colors.mutedForeground },
+  miniValue: { fontSize: 12, lineHeight: 16, fontWeight: "800" },
   speedBar: { flexDirection: "row", alignItems: "center", paddingVertical: 10, paddingHorizontal: 14, borderRadius: radius.xl + 2, ...elevation.md },
   speedSide: { flexDirection: "row", alignItems: "center", gap: 8 },
   speedRight: { flex: 1, minWidth: 0 },
