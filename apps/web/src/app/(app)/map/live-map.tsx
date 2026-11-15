@@ -45,6 +45,8 @@ const STATE_HINT: Record<MapState, string> = {
 const tint = (c: string, pct = 20) => `color-mix(in srgb, ${c} ${pct}%, var(--color-background))`;
 const STATE_TINT: Record<MapState, string> = { moving: tint("#136c35"), idle: tint("#a3470a"), stopped: tint("#ad1f1f"), parked: tint("#6526d1"), offline: tint("#6b7280") };
 const PRIMARY = "#1d4ed8";
+/** A status colour used as text or an icon: a touch darker on light pages, brighter in dark mode, so it always reads. */
+const ink = (c: string) => `color-mix(in srgb, ${c} 62%, var(--color-foreground))`;
 /** "45 min", "2 h 05 min", "2 d 8 h" (same as the phone app). */
 function durationText(minutes: number): string {
   const m = Math.max(0, Math.round(minutes));
@@ -55,11 +57,11 @@ function durationText(minutes: number): string {
 /** One of the four live facts under the speed: coloured like the phone app. */
 function Fact({ icon: Icon, label, value, color }: { icon: typeof Truck; label: string; value: string; color: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-1.5 rounded-lg border px-2 py-1.5" style={{ background: tint(color, 16), borderColor: tint(color, 35) }}>
-      <Icon className="size-3.5 shrink-0" style={{ color }} aria-hidden="true" />
+    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden rounded-lg border px-2 py-1.5" style={{ background: tint(color, 16), borderColor: tint(color, 35) }}>
+      <Icon className="size-3.5 shrink-0" style={{ color: ink(color) }} aria-hidden="true" />
       <span className="flex min-w-0 flex-col">
         <span className="text-[10px] font-semibold leading-3 text-muted-foreground">{label}</span>
-        <span className="truncate text-xs font-bold leading-4" style={{ color }}>{value}</span>
+        <span className="truncate text-xs font-bold leading-4" style={{ color: ink(color) }}>{value}</span>
       </span>
     </div>
   );
@@ -105,7 +107,7 @@ function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, 
 
 function StatusBadge({ state }: { state: MapState }) {
   return (
-    <span className="inline-flex shrink-0 items-center rounded-full px-2 text-xs font-semibold leading-[18px]" style={{ background: STATE_TINT[state], color: STATE_COLORS[state] }}>
+    <span className="inline-flex shrink-0 items-center rounded-full px-2 text-xs font-semibold leading-[18px]" style={{ background: STATE_TINT[state], color: ink(STATE_COLORS[state]) }}>
       {STATE_BADGE[state]}
     </span>
   );
@@ -607,7 +609,7 @@ export function LiveMap({
                 <option value="speed">Sort: speed</option>
               </Select>
             </div>
-            <div role="group" aria-label="Filter by status" className="-mx-1 flex gap-1 overflow-x-auto px-1 [scrollbar-width:none]">
+            <div role="group" aria-label="Filter by status" className="-mx-1 flex flex-wrap gap-1 px-1">
               {(["all", ...MAP_STATES] as Filter[]).map((f) => {
                 const on = filter === f;
                 const n = counts[f];
@@ -754,7 +756,7 @@ export function LiveMap({
       key={sel.deviceId}
       aria-label="Selected vehicle"
       className={cn(
-        "absolute inset-x-3 z-[2] grid animate-in gap-3 rounded-xl border border-border bg-background p-4 shadow-pop",
+        "absolute inset-x-3 z-[2] grid animate-in grid-cols-[minmax(0,1fr)] gap-3 rounded-xl border border-border bg-background p-4 shadow-pop",
         "bottom-[160px] md:inset-x-auto md:bottom-6 md:left-4 md:w-[360px]",
         sheetOpen && "hidden md:grid"
       )}
@@ -796,18 +798,18 @@ export function LiveMap({
           {selState === "offline" || selState === "parked" ? (
             // Not reporting: say so plainly instead of showing a speed that is no longer true.
             <div className="flex items-center gap-3 rounded-lg px-3 py-2.5" style={{ background: tint(STATE_COLORS.idle) }}>
-              <Radio className="size-5 shrink-0" style={{ color: STATE_COLORS.idle }} aria-hidden="true" />
+              <Radio className="size-5 shrink-0" style={{ color: ink(STATE_COLORS.idle) }} aria-hidden="true" />
               <div className="min-w-0">
                 <p className="m-0 text-sm font-bold">{sel.lastSeenAt ? `Not reporting for ${durationText((now - Date.parse(sel.lastSeenAt)) / 60000)}` : "No report yet"}</p>
                 <p className="m-0 text-xs text-muted-foreground">{selState === "parked" ? "Unhooked trailer: it reports only on its own battery." : "Usually no power or no mobile signal."}</p>
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2">
               <div className="relative flex items-center gap-2.5 overflow-hidden rounded-lg border border-border px-3 py-2 shadow-card">
                 <span aria-hidden="true" className="absolute inset-y-2 left-0 w-1 rounded-r" style={{ background: STATE_COLORS[selState] }} />
                 <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: tint(STATE_COLORS[selState]) }}>
-                  <Gauge className="size-5" style={{ color: STATE_COLORS[selState] }} aria-hidden="true" />
+                  <Gauge className="size-5" style={{ color: ink(STATE_COLORS[selState]) }} aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
                   <span className="block text-[11px] font-semibold text-muted-foreground">Speed</span>
@@ -817,7 +819,7 @@ export function LiveMap({
               <div className="relative flex items-center gap-2.5 overflow-hidden rounded-lg border border-border px-3 py-2 shadow-card">
                 <span aria-hidden="true" className="absolute inset-y-2 left-0 w-1 rounded-r" style={{ background: PRIMARY }} />
                 <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: tint(PRIMARY) }}>
-                  <Navigation2 className="size-5" style={{ color: PRIMARY, transform: `rotate(${selState === "moving" ? (sel.location.headingDeg ?? 0) : 0}deg)` }} aria-hidden="true" />
+                  <Navigation2 className="size-5" style={{ color: ink(PRIMARY), transform: `rotate(${selState === "moving" ? (sel.location.headingDeg ?? 0) : 0}deg)` }} aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
                   <span className="block text-[11px] font-semibold text-muted-foreground">{selState === "moving" && sel.location.headingDeg !== null ? `Heading ${Math.round(sel.location.headingDeg)}°` : "Heading"}</span>
@@ -827,7 +829,7 @@ export function LiveMap({
             </div>
           )}
           <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: tint(PRIMARY, 14) }}>
-            <MapPin className="size-4 shrink-0" style={{ color: PRIMARY }} aria-hidden="true" />
+            <MapPin className="size-4 shrink-0" style={{ color: ink(PRIMARY) }} aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <span className="sr-only">Last location: </span>
               <p className="m-0 truncate text-sm font-semibold tabular-nums">
@@ -862,7 +864,7 @@ export function LiveMap({
               <ExternalLink className="size-3.5" aria-hidden="true" />
             </a>
           </div>
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-[repeat(4,minmax(0,1fr))] gap-1.5">
             <Fact icon={KeyRound} label="Ignition" value={sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} color={sel.location.ignition === false ? STATE_COLORS.stopped : sel.location.ignition ? STATE_COLORS.moving : STATE_COLORS.offline} />
             <Fact icon={Activity} label="Motion" value={STATE_BADGE[selState]} color={PRIMARY} />
             <Fact icon={Satellite} label="GPS" value={now - Date.parse(sel.location.recordedAt) < 120_000 ? "Live" : ago(sel.location.recordedAt, now)} color={now - Date.parse(sel.location.recordedAt) < 120_000 ? STATE_COLORS.parked : STATE_COLORS.idle} />

@@ -199,7 +199,7 @@ function Brand({ large }: { large?: boolean }) {
 function SidebarDecor({ theme }: { theme: NavTheme }) {
   if (theme === "light")
     return (
-      <svg aria-hidden="true" viewBox="0 0 240 120" preserveAspectRatio="none" className="pointer-events-none absolute inset-x-0 bottom-0 h-40 w-full">
+      <svg aria-hidden="true" viewBox="0 0 240 120" preserveAspectRatio="none" className="pointer-events-none absolute inset-x-0 bottom-0 h-40 w-full dark:opacity-10">
         <path d="M0 60 C 60 30, 120 90, 240 40 L240 120 L0 120 Z" fill="#dbe7fb" opacity="0.7" />
         <path d="M0 85 C 70 60, 150 110, 240 70 L240 120 L0 120 Z" fill="#c7d9f7" opacity="0.6" />
       </svg>
