@@ -8,6 +8,7 @@ import { useFleet, useNow } from "@/fleet/FleetProvider";
 import { STATE_META, coordsText, displayName, fleetState, freshnessLine, sheetFacts, sheetHeadline, statusLine, timeAgo } from "@/fleet/model";
 import { useBottomInset } from "@/layout";
 import { MiniFleetMap } from "@/map/MiniFleetMap";
+import { useAddress } from "@/map/useAddress";
 import { TodayCard } from "@/trips/TodayCard";
 import { colors, radius, size, space, type } from "@/theme";
 
@@ -57,6 +58,7 @@ export default function VehicleScreen() {
   const facts = sheetFacts(device, now);
   const silent = state === "offline" || state === "parked" || state === "never_seen";
   const headline = sheetHeadline(device, now);
+  const address = useAddress(loc?.latitude, loc?.longitude, state === "moving");
   const speedParts = ((): [string, string] => {
     if (!loc || state === "offline" || state === "never_seen") return ["—", ""];
     const t = units.fmtSpeed(state === "moving" ? loc.speedKph : 0);
@@ -93,7 +95,7 @@ export default function VehicleScreen() {
               <MiniFleetMap devices={[device]} focus={[loc.longitude, loc.latitude]} />
             </PressableScale>
           ) : null}
-          <AddressCard title={null} coords={coordsText(device) ?? "No position yet"} label={loc ? (silent ? `Last known position · ${freshnessLine(device, now)}` : freshnessLine(device, now)) : undefined} />
+          <AddressCard title={address?.line1 ?? null} line={address?.line2} coords={coordsText(device) ?? "No position yet"} label={loc ? (silent ? `Last known position · ${freshnessLine(device, now)}` : freshnessLine(device, now)) : undefined} />
           {loc ? (
             <View style={styles.placeActions}>
               {hasMap ? (

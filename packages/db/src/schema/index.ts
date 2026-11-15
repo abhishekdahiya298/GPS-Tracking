@@ -22,3 +22,4 @@ export * from "./loads";
 export * from "./simCards";
 export * from "./billing";
 export * from "./appReleases";
+export * from "./platformSettings";

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib/authz";
 import { getServerEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
+import { getMapsSettings } from "@/lib/maps-settings";
 import { listGroups } from "@/lib/vehicle-groups";
 import { LiveMap } from "./live-map";
 
@@ -25,5 +26,6 @@ export default async function MapPage() {
   // Groups are only names and vehicle ids of the caller's own organization.
   const groups = contextHasPermission(ctx, "vehicles.read") ? await listGroups(ctx.organizationId) : [];
   const canShare = contextHasPermission(ctx, "vehicles.update") && contextHasPermission(ctx, "locations.read");
-  return <LiveMap offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} groups={groups} canShare={canShare} />;
+  const maps = await getMapsSettings();
+  return <LiveMap offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} groups={groups} canShare={canShare} defaultStyle={maps.mapStyle} addresses={maps.addressProvider !== "off"} />;
 }

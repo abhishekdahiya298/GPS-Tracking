@@ -1,6 +1,7 @@
 "use client";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { readMapIcons, useMapIcons } from "@/lib/map-icons";
+import { useAddress } from "@/lib/use-address";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Activity, Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Crosshair, Download, Expand, ExternalLink, Gauge, History, KeyRound, Layers, Locate, LocateFixed, MapPin, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Satellite, Share2, Shrink, Truck, Wifi, X } from "lucide-react";
@@ -116,9 +117,15 @@ function StatusBadge({ state }: { state: MapState }) {
 export function LiveMap({
   offlineSeconds,
   groups = [],
-  canShare = false
+  canShare = false,
+  defaultStyle = "streets",
+  addresses = false
 }: {
   offlineSeconds: number;
+  /** The map look chosen in the platform console (Maps & addresses). */
+  defaultStyle?: MapStyleId;
+  /** Whether an address service is on: then the selected vehicle shows its street address. */
+  addresses?: boolean;
   groups?: { id: string; name: string; vehicleIds: string[] }[];
   /** Whether this user may create public share links (the server enforces it regardless). */
   canShare?: boolean;
@@ -153,7 +160,7 @@ export function LiveMap({
   showZonesRef.current = showZones;
   const [follow, setFollow] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [mapStyle, setMapStyle] = useState<MapStyleId>("streets");
+  const [mapStyle, setMapStyle] = useState<MapStyleId>(defaultStyle);
   const [bearing, setBearing] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [is3d, setIs3d] = useState(false);
@@ -751,6 +758,8 @@ export function LiveMap({
       </button>
     );
 
+  const address = useAddress(addresses && sel?.location ? sel.location.latitude : null, addresses && sel?.location ? sel.location.longitude : null, selState === "moving");
+
   const vehicleCard = sel && !historyFor && (
     <section
       key={sel.deviceId}
@@ -832,9 +841,19 @@ export function LiveMap({
             <MapPin className="size-4 shrink-0" style={{ color: ink(PRIMARY) }} aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <span className="sr-only">Last location: </span>
-              <p className="m-0 truncate text-sm font-semibold tabular-nums">
-                {sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)}
-              </p>
+              {address ? (
+                <>
+                  <p className="m-0 truncate text-sm font-semibold" title={address.label}>{address.line1}</p>
+                  <p className="m-0 truncate text-xs text-muted-foreground">
+                    {address.line2 ? `${address.line2} · ` : ""}
+                    <span className="tabular-nums">{sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)}</span>
+                  </p>
+                </>
+              ) : (
+                <p className="m-0 truncate text-sm font-semibold tabular-nums">
+                  {sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)}
+                </p>
+              )}
               <p className="m-0 text-xs text-muted-foreground">
                 Updated <span className="font-medium text-foreground">{ago(sel.location.recordedAt, now)}</span> · {time.dateTimeSec(sel.location.recordedAt)} {time.abbr(sel.location.recordedAt)}
               </p>
