@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
-import { Image, StyleSheet, useWindowDimensions } from "react-native";
+import { Image, Platform, StyleSheet, useWindowDimensions } from "react-native";
 import MapView, { Marker, Polyline, type Region } from "react-native-maps";
 import { colors, isDark } from "@/theme";
 import type { IconPrefs } from "./model";
@@ -31,17 +31,21 @@ export const NativeLiveMap = forwardRef<
     bottomInset: number;
     topInset: number;
     initial: { center: [number, number]; zoom: number };
+    /** iPhone only: start as the 3D Earth (Apple's satellite globe) until the fleet dive ends. */
+    globe?: boolean;
     onSelect: (deviceId: string) => void;
     onMapPress: () => void;
     onReady: () => void;
     onZoom: (zoom: number) => void;
     onUserMove: () => void;
   }
->(function NativeLiveMap({ vehicles, trails, selectedId, prefs, bottomInset, topInset, initial, onSelect, onMapPress, onReady, onZoom, onUserMove }, ref) {
+>(function NativeLiveMap({ vehicles, trails, selectedId, prefs, bottomInset, topInset, initial, globe = false, onSelect, onMapPress, onReady, onZoom, onUserMove }, ref) {
   const map = useRef<MapView>(null);
   const { width, height } = useWindowDimensions();
   const isPin = prefs.style === "pin";
   const top = prefs.style === "top";
+  // Started as the globe? Fixed at first render so the camera props never reset the view.
+  const startedAsGlobe = useRef(globe && Platform.OS === "ios").current;
 
   const region = (center: [number, number], zoom: number): Region => {
     const lngDelta = (360 / 2 ** zoom) * (width / 256);
@@ -76,7 +80,10 @@ export const NativeLiveMap = forwardRef<
     <MapView
       ref={map}
       style={StyleSheet.absoluteFill}
-      initialRegion={region(initial.center, initial.zoom)}
+      {...(startedAsGlobe
+        ? { initialCamera: { center: { latitude: initial.center[1], longitude: initial.center[0] }, altitude: 22_000_000, pitch: 0, heading: 0, zoom: 1 } }
+        : { initialRegion: region(initial.center, initial.zoom) })}
+      mapType={globe && Platform.OS === "ios" ? "hybridFlyover" : "standard"}
       mapPadding={{ top: topInset, right: 0, bottom: bottomInset, left: 0 }}
       userInterfaceStyle={isDark ? "dark" : "light"}
       showsPointsOfInterests={false}

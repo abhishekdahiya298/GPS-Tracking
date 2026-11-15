@@ -153,6 +153,23 @@ export default function LiveMap() {
     setIntro(false);
   }, []);
 
+  // On iPhone with Apple Maps the opening is the real 3D Earth: the map starts as the globe and
+  // flies down to the fleet once it is known, like Life360. Other maps use the drawn GlobeIntro.
+  const appleGlobe = engine === "native" && Platform.OS === "ios";
+  useEffect(() => {
+    if (!appleGlobe || !intro) return;
+    if (!diveReady) {
+      const giveUp = setTimeout(endIntro, 9000);
+      return () => clearTimeout(giveUp);
+    }
+    const start = setTimeout(dive, 700);
+    const done = setTimeout(endIntro, 700 + 3000);
+    return () => {
+      clearTimeout(start);
+      clearTimeout(done);
+    };
+  }, [appleGlobe, intro, diveReady, dive, endIntro]);
+
   // Where the camera centres a chosen vehicle: in the open map above the sheet, not under it.
   const cardH = useRef(0);
   cardH.current = cardHeight;
@@ -272,6 +289,7 @@ export default function LiveMap() {
           topInset={insets.top + 70}
           bottomInset={cardHeight}
           initial={{ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM }}
+          globe={appleGlobe && intro}
           onReady={() => setMapReady(true)}
           onZoom={(z) => {
             zoomNow.current = z;
@@ -563,7 +581,7 @@ export default function LiveMap() {
       ) : null}
 
 
-      {intro ? <GlobeIntro ready={diveReady} count={devices.length} onDive={dive} onDone={endIntro} /> : null}
+      {intro && !appleGlobe ? <GlobeIntro ready={diveReady} count={devices.length} onDive={dive} onDone={endIntro} /> : null}
 
       <FleetSheet
         visible={listOpen}
