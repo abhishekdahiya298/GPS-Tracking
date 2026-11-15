@@ -99,7 +99,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const loadsSection = loadsDash ? (
     <section aria-label="Loads" className="mt-5">
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[#0a2463]">
+        <h2 className="m-0 flex items-center gap-2 text-lg font-semibold text-[#0a2463] dark:text-foreground">
           <Package className="size-5" aria-hidden="true" /> Loads
           <span className="text-sm font-normal text-muted-foreground">{loadsSummary}</span>
         </h2>
@@ -303,7 +303,7 @@ function RecentAlertsCard({ alerts, now, timeZone, canWrite, emptyHint }: { aler
                     <span aria-hidden="true" className="absolute inset-0 animate-ping rounded-full bg-success/15 [animation-duration:2.6s] motion-reduce:hidden" />
                     <CheckCircle2 className="relative size-7" aria-hidden="true" />
                   </span>
-                  <p className="m-0 mt-3 text-base font-semibold text-[#0a2463]">You&apos;re all caught up</p>
+                  <p className="m-0 mt-3 text-base font-semibold text-[#0a2463] dark:text-foreground">You&apos;re all caught up</p>
                   <p className="m-0 mt-1 max-w-xs text-sm text-muted-foreground">No new alerts. {emptyHint}</p>
                   {canWrite && (
                     <Link href="/alerts" className="mt-3 text-sm font-medium text-primary no-underline hover:underline">

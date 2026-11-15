@@ -1,6 +1,6 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { BellOff, BellRing, CheckCheck, Check, MapPinned, RefreshCw, ShieldAlert } from "lucide-react";
+import { BellOff, BellRing, CheckCheck, Check, Gauge, LogIn, LogOut, MapPinned, Package, Power, RefreshCw, ShieldAlert, WifiOff } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
@@ -22,7 +22,19 @@ import { toast } from "@/components/ui/toaster";
 import type { AlertEventDto, AlertRuleDto } from "@/lib/alerts";
 import type { AlertListQuery, AlertPage } from "@/lib/alerts-list";
 import { api, errorMessage } from "@/lib/client/api";
-import { alertMapHref, describeAlert, SEVERITY, TYPE_LABEL } from "./alert-meta";
+import { alertMapHref, describeAlert, SEVERITY, SEVERITY_COLOR, TYPE_LABEL } from "./alert-meta";
+
+const TYPE_ICON: Record<string, typeof Gauge> = { speeding: Gauge, device_offline: WifiOff, geofence_enter: LogIn, geofence_exit: LogOut, ignition_on: Power, ignition_off: Power };
+const tint = (c: string, pct = 18) => `color-mix(in srgb, ${c} ${pct}%, var(--color-background))`;
+/** The alert's icon in a tile of its severity colour, like the phone app. */
+function AlertTile({ type, color }: { type: string; color: string }) {
+  const Icon = TYPE_ICON[type] ?? (type.startsWith("load_") ? Package : BellRing);
+  return (
+    <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: tint(color) }}>
+      <Icon className="size-[18px]" style={{ color }} aria-hidden="true" />
+    </span>
+  );
+}
 import { RulesPanel } from "./rules-panel";
 
 type Ref = { id: string; name: string };
@@ -78,11 +90,14 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
           const e = row.original;
           const sev = SEVERITY[e.type] ?? SEVERITY.ignition_on!;
           return (
-            <div className="min-w-0">
-              <div className={e.acknowledgedAt ? "font-normal" : "font-medium"}>{describeAlert(e, u)}</div>
+            <div className="flex min-w-0 items-center gap-3">
+              <AlertTile type={e.type} color={SEVERITY_COLOR[sev.tone]} />
+              <div className="min-w-0">
+              <div className={e.acknowledgedAt ? "font-normal" : "font-semibold"}>{describeAlert(e, u)}</div>
               <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <StatusBadge tone={sev.tone} label={sev.label} />
                 {TYPE_LABEL[e.type]} · {e.ruleName}
+              </div>
               </div>
             </div>
           );
@@ -204,8 +219,10 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
                 </div>
               }
               mobileRow={(e) => (
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 text-sm">
+                <div className="relative -mx-1 flex items-start gap-3 overflow-hidden rounded-lg py-1 pl-3 pr-1" style={{ backgroundImage: `linear-gradient(110deg, transparent 45%, ${tint(SEVERITY_COLOR[(SEVERITY[e.type] ?? SEVERITY.ignition_on!).tone], 16)} 100%)` }}>
+                  <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1" style={{ background: SEVERITY_COLOR[(SEVERITY[e.type] ?? SEVERITY.ignition_on!).tone] }} />
+                  <AlertTile type={e.type} color={SEVERITY_COLOR[(SEVERITY[e.type] ?? SEVERITY.ignition_on!).tone]} />
+                  <div className="min-w-0 flex-1 text-sm">
                     <div className={e.acknowledgedAt ? "" : "font-medium"}>{describeAlert(e, u)}</div>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       {e.acknowledgedAt ? <StatusBadge tone="neutral" label="Acknowledged" /> : <StatusBadge tone="primary" label="New" />}

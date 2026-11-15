@@ -137,7 +137,7 @@ function StopFields({ id, title, color, stop, onChange, error }: { id: string; t
 
   return (
     <fieldset className="m-0 grid min-w-0 gap-3 border-0 p-0">
-      <legend className="mb-1 flex items-center gap-2 p-0 text-sm font-semibold text-[#0a2463]">
+      <legend className="mb-1 flex items-center gap-2 p-0 text-sm font-semibold text-[#0a2463] dark:text-foreground">
         <span aria-hidden="true" className="inline-block size-2.5 rounded-full" style={{ background: color }} />
         {title}
       </legend>

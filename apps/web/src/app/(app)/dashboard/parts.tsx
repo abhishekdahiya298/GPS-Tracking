@@ -93,7 +93,7 @@ export function QuickAction({ href, icon: Icon, label, hint, tone }: { href: str
         <Icon className="size-[18px]" aria-hidden="true" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-[#0a2463]">{label}</span>
+        <span className="block truncate text-sm font-semibold text-[#0a2463] dark:text-foreground">{label}</span>
         <span className="block truncate text-xs text-muted-foreground">{hint}</span>
       </span>
       <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />

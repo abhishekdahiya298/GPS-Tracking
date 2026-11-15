@@ -19,7 +19,7 @@ export function IconTitle({ icon: Icon, tone = "navy", children, sub }: { icon: 
         <Icon className="size-4" aria-hidden="true" />
       </span>
       <div className="min-w-0">
-        <h2 className="m-0 text-[15px] font-semibold leading-6 text-[#0a2463]">{children}</h2>
+        <h2 className="m-0 text-[15px] font-semibold leading-6 text-[#0a2463] dark:text-foreground">{children}</h2>
         {sub && <div className="m-0 text-xs text-muted-foreground">{sub}</div>}
       </div>
     </div>

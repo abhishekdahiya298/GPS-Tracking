@@ -31,6 +31,9 @@ export const SEVERITY: Record<string, { tone: StatusTone; label: string }> = {
   load_delivered: { tone: "info", label: "Info" }
 };
 
+/** Severity colour (same table as the phone app): the edge and icon tile of each alert. */
+export const SEVERITY_COLOR: Record<StatusTone, string> = { danger: "#ad1f1f", warning: "#a3470a", info: "#1d4ed8", neutral: "#6b7280", success: "#136c35", primary: "#1d4ed8", parked: "#6526d1" };
+
 export function describeAlert(e: AlertEventDto, u: Units): string {
   const d = e.details ?? {};
   const load = typeof d.reference === "string" ? `Load ${d.reference}` : null;
