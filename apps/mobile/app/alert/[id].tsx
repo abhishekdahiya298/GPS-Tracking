@@ -9,7 +9,7 @@ import { AddressCard, Card, EmptyState, IconWell } from "@/components/kit";
 import { FadeInUp } from "@/components/motion";
 import { Button } from "@/components/ui";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { timeAgo } from "@/fleet/model";
+import { STATE_META, timeAgo } from "@/fleet/model";
 import { haptic } from "@/haptics";
 import { useBottomInset } from "@/layout";
 import { colors, ink, radius, softTint, space, type } from "@/theme";
@@ -87,9 +87,9 @@ export default function AlertScreen() {
       <FadeInUp index={2}>
         <Card style={styles.rows}>
           <Row icon="pricetag-outline" label="Type" value={meta.label} />
-          <Row icon="options-outline" label="Rule" value={event.ruleName || "—"} />
-          <Row icon="car-outline" label="Vehicle" value={event.vehicleName ?? "—"} />
-          <Row icon="checkmark-done-outline" label="Status" value={event.acknowledgedAt ? `Read ${timeAgo(event.acknowledgedAt, now)}` : "Unread"} last />
+          <Row icon="options-outline" color={STATE_META.idle.color} soft={STATE_META.idle.soft} label="Rule" value={event.ruleName || "—"} />
+          <Row icon="car-outline" color={STATE_META.parked.color} soft={STATE_META.parked.soft} label="Vehicle" value={event.vehicleName ?? "—"} />
+          <Row icon="checkmark-done-outline" color={event.acknowledgedAt ? STATE_META.moving.color : colors.primary} soft={event.acknowledgedAt ? STATE_META.moving.soft : colors.primarySoft} label="Status" value={event.acknowledgedAt ? `Read ${timeAgo(event.acknowledgedAt, now)}` : "Unread"} last />
         </Card>
       </FadeInUp>
 
@@ -101,10 +101,10 @@ export default function AlertScreen() {
   );
 }
 
-function Row({ icon, label, value, last = false }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; last?: boolean }) {
+function Row({ icon, label, value, color, soft, last = false }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string; color?: string; soft?: string; last?: boolean }) {
   return (
     <View style={[styles.row, last && styles.rowLast]}>
-      <Ionicons name={icon} size={18} color={colors.mutedForeground} />
+      <IconWell icon={icon} color={color} soft={soft} box={34} />
       <Text style={styles.rowLabel}>{label}</Text>
       <Text style={styles.rowValue} numberOfLines={2} selectable>{value}</Text>
     </View>
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   detail: { fontSize: 15, lineHeight: 20, fontWeight: "600", color: colors.foreground, textAlign: "center", fontVariant: ["tabular-nums"] },
   place: { padding: space.sm, gap: space.sm },
   rows: { paddingVertical: 0, paddingHorizontal: 14 },
-  row: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 50, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  row: { flexDirection: "row", alignItems: "center", gap: space.md, minHeight: 56, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   rowLast: { borderBottomWidth: 0 },
   rowLabel: { fontSize: 14, lineHeight: 20, color: colors.mutedForeground, width: 72 },
   rowValue: { flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground, textAlign: "right" },
