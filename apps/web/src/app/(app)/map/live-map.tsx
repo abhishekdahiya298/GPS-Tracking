@@ -759,7 +759,7 @@ export function LiveMap({
   }, [selected]);
   /**
    * Life360-style hint for the previous / next vehicle when it is off screen: a small round icon on
-   * the map's edge, in the real direction of that vehicle, with an arrow pointing to it. A vehicle
+   * the left edge (previous) or right edge (next), with an arrow pointing to where it really is. A vehicle
    * already on screen needs no hint: its own icon is there to click.
    */
   const edgeChip = (r: (typeof rows)[number] | undefined, by: -1 | 1) => {
@@ -774,15 +774,15 @@ export function LiveMap({
     const pad = { left: 30, right: 96, top: 92, bottom: 40 };
     const inside = p.x > pad.left && p.x < w - pad.right && p.y > pad.top && p.y < h - pad.bottom && !(card && p.x < card.right && p.y > card.top);
     if (inside) return null;
+    // Previous on the left edge, next on the right; up or down that edge by where it really is.
     const cx = w / 2;
     const cy = h / 2;
     const dx = p.x - cx;
     const dy = p.y - cy;
-    const k = Math.min(dx > 0 ? (w - pad.right - cx) / dx : dx < 0 ? (pad.left - cx) / dx : Infinity, dy > 0 ? (h - pad.bottom - cy) / dy : dy < 0 ? (pad.top - cy) / dy : Infinity);
-    let x = cx + dx * k;
-    let y = cy + dy * k;
+    const reach = Math.max(Math.abs(dx), Math.abs(dy)) || 1;
+    const x = by === -1 ? (card && cy + (dy / reach) * (h / 2 - 60) > card.top ? card.right + 30 : pad.left + 6) : w - pad.right + 18;
+    let y = Math.min(Math.max(cy + (dy / reach) * (h / 2 - 60), pad.top + 10), h - pad.bottom - 24);
     if (card && x < card.right && y > card.top) y = card.top - 30;
-    x = Math.min(Math.max(x, pad.left), w - pad.right);
     const deg = (Math.atan2(dx, -dy) * 180) / Math.PI;
     return (
       <button

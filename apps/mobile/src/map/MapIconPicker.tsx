@@ -54,7 +54,7 @@ export function MapIconPicker() {
           ]}
         />
       ) : null}
-      <Text style={type.caption}>Zoomed out, vehicles show as status dots. The small badge always shows the status.</Text>
+      <Text style={type.caption}>Vehicles show as status dots only when the whole continent is in view. The small badge always shows the status.</Text>
     </Card>
   );
 }
