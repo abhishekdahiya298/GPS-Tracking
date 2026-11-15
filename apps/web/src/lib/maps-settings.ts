@@ -17,16 +17,25 @@ export type AddressProvider = (typeof ADDRESS_PROVIDERS)[number];
 export const MAP_STYLES = ["streets", "light", "dark"] as const;
 export type MapStyleChoice = (typeof MAP_STYLES)[number];
 
+export const ICON_STYLES = ["pin", "circle", "square", "top"] as const;
+export const ICON_COLORS = ["status", "type"] as const;
+
 export interface MapsSettings {
   addressProvider: AddressProvider;
   mapStyle: MapStyleChoice;
+  /** Default map icons for everyone; each person can still pick their own (app Account / web My account). */
+  iconStyle: (typeof ICON_STYLES)[number];
+  iconColor: (typeof ICON_COLORS)[number];
 }
 
-export const DEFAULT_MAPS_SETTINGS: MapsSettings = { addressProvider: "off", mapStyle: "streets" };
+export const DEFAULT_MAPS_SETTINGS: MapsSettings = { addressProvider: "off", mapStyle: "streets", iconStyle: "pin", iconColor: "status" };
 
 export const MapsSettingsSchema = z.object({
   addressProvider: z.enum(ADDRESS_PROVIDERS),
-  mapStyle: z.enum(MAP_STYLES)
+  mapStyle: z.enum(MAP_STYLES),
+  // Saved before these existed: fall back to the defaults instead of losing the rest.
+  iconStyle: z.enum(ICON_STYLES).default("pin"),
+  iconColor: z.enum(ICON_COLORS).default("status")
 });
 
 /** Which services have a key on this server (OpenStreetMap needs none). */
