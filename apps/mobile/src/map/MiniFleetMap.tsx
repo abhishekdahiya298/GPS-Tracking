@@ -73,7 +73,7 @@ function NativeMini({ devices, focus, onDrawn }: { devices: FleetDevice[]; focus
       onMapReady={() => setReady(true)}
     >
       {(data.features as GeoJSON.Feature<GeoJSON.Point, { deviceId: string; pin: string; rot?: number }>[]).map((f) => (
-        <Marker key={f.properties.deviceId} coordinate={{ latitude: f.geometry.coordinates[1]!, longitude: f.geometry.coordinates[0]! }} anchor={{ x: 0.5, y: top ? 0.5 : 1 }} tracksViewChanges={false}>
+        <Marker key={f.properties.deviceId} coordinate={{ latitude: f.geometry.coordinates[1]!, longitude: f.geometry.coordinates[0]! }} anchor={{ x: 0.5, y: top ? 0.5 : 1 }} centerOffset={{ x: 0, y: top ? 0 : -17 }} tracksViewChanges={false}>
           {MAP_ICONS[f.properties.pin] ? <Image source={MAP_ICONS[f.properties.pin]!} style={[top ? { width: 22, height: 35 } : { width: 28, height: 35 }, top ? { transform: [{ rotate: `${f.properties.rot ?? 0}deg` }] } : null]} resizeMode="contain" /> : null}
         </Marker>
       ))}
@@ -119,7 +119,7 @@ function OsmMini({ devices, focus, onDrawn }: { devices: FleetDevice[]; focus?: 
         <Layer
           id="mini-pins"
           type="symbol"
-          layout={{ "icon-image": ["get", "pin"], "icon-size": 0.29, "icon-anchor": prefs.style === "pin" ? "bottom" : "center", "icon-rotate": prefs.style === "top" ? ["get", "rot"] : 0, "icon-rotation-alignment": prefs.style === "top" ? "map" : "viewport", "icon-allow-overlap": true, "icon-ignore-placement": true, "symbol-sort-key": ["case", ["==", ["get", "state"], "moving"], 2, 1] }}
+          layout={{ "icon-image": ["get", "pin"], "icon-size": 0.29, "icon-anchor": prefs.style === "pin" || prefs.style === "photo" ? "bottom" : "center", "icon-rotate": prefs.style === "top" ? ["get", "rot"] : 0, "icon-rotation-alignment": prefs.style === "top" ? "map" : "viewport", "icon-allow-overlap": true, "icon-ignore-placement": true, "symbol-sort-key": ["case", ["==", ["get", "state"], "moving"], 2, 1] }}
         />
       </GeoJSONSource>
     </Map>

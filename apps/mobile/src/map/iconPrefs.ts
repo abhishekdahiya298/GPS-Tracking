@@ -6,7 +6,7 @@ import { DEFAULT_ICON_PREFS, type IconColor, type IconPrefs, type IconStyle } fr
 const KEY = "rio.mapIcons";
 /** The platform default from the server (Platform console → Maps & addresses), remembered for offline starts. */
 const DEFAULT_KEY = "rio.mapIconsDefault";
-const STYLES: IconStyle[] = ["pin", "circle", "square", "top"];
+const STYLES: IconStyle[] = ["photo", "pin", "circle", "square", "top"];
 const COLORS: IconColor[] = ["status", "type"];
 
 function parse(raw: string | null, base: IconPrefs): IconPrefs | null {

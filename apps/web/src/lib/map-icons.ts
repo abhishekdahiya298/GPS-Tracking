@@ -4,7 +4,7 @@ import { DEFAULT_ICON_PREFS, type IconColor, type IconPrefs, type IconStyle } fr
 
 /** How vehicles are drawn on the maps. Kept in this browser, like the phone keeps its own. */
 const KEY = "rio.mapIcons";
-const STYLES: IconStyle[] = ["pin", "circle", "square", "top"];
+const STYLES: IconStyle[] = ["photo", "pin", "circle", "square", "top"];
 const COLORS: IconColor[] = ["status", "type"];
 const EVENT = "rio:map-icons";
 

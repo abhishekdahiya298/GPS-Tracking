@@ -161,7 +161,7 @@ export default function HomeScreen() {
         ) : null}
 
         <FadeInUp index={3}>
-          <FleetToday onVehicle={openVehicle} />
+          <FleetToday onVehicle={openVehicle} onAll={() => router.navigate("/(tabs)/vehicles")} />
         </FadeInUp>
 
         <FadeInUp index={3}>

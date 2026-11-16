@@ -36,6 +36,7 @@
       "expo-router",
       "expo-secure-store",
       "@maplibre/maplibre-react-native",
+      "./plugins/with-apple-globe",
       "expo-notifications",
       [
         "expo-splash-screen",

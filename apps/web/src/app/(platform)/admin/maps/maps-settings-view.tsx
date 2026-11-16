@@ -24,6 +24,7 @@ const MOBILE_CHOICES: ReadonlyArray<{ value: MapsSettings["mobileMap"]; name: st
 ];
 
 const ICON_CHOICES: ReadonlyArray<{ value: MapsSettings["iconStyle"]; label: string }> = [
+  { value: "photo", label: "Photo pin" },
   { value: "pin", label: "3D pin" },
   { value: "circle", label: "Circle" },
   { value: "square", label: "Square" },
@@ -171,7 +172,7 @@ export function MapsSettingsView({ initial, keys }: { initial: MapsSettings; key
             </CardTitle>
           </CardHeader>
           <div className="grid gap-3 p-4">
-            <div role="radiogroup" aria-label="Default icon style" className="grid grid-cols-4 gap-2 sm:max-w-xl">
+            <div role="radiogroup" aria-label="Default icon style" className="grid grid-cols-5 gap-2 sm:max-w-xl">
               {ICON_CHOICES.map((c) => {
                 const on = v.iconStyle === c.value;
                 return (

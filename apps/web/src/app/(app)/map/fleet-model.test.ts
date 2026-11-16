@@ -84,7 +84,8 @@ describe("fleet-model", () => {
 
 describe("iconName", () => {
   it("matches the phone app's icons", () => {
-    expect(iconName("trailer", "parked")).toBe("top-trailer-parked");
+    expect(iconName("trailer", "parked")).toBe("photo-trailer-parked");
+    expect(iconName("trailer", "parked", { style: "top", color: "status" })).toBe("top-trailer-parked");
     expect(iconName("trailer", "parked", { style: "pin", color: "status" })).toBe("pin-status-trailer-parked");
     expect(iconName("semi", "idle", { style: "circle", color: "type" })).toBe("circle-type-truck-idle");
     expect(iconName("other", "moving", { style: "square", color: "status" })).toBe("square-status-asset-moving");

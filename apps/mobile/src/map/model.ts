@@ -2,7 +2,7 @@
  * Pure helpers for the live map: what goes on the map and where the camera should look.
  * No map-library imports, so this is unit-tested.
  */
-import { STATE_META, displayName, fleetState, type FleetDevice, type FleetState } from "../fleet/model";
+import { STATE_META, compassPoint, displayName, fleetState, type FleetDevice, type FleetState } from "../fleet/model";
 
 /** The same three base maps as the website (lib/map-style.ts). */
 export const MAP_STYLES = [
@@ -28,11 +28,11 @@ const spriteState = (s: FleetState): "moving" | "idle" | "stopped" | "offline" =
 /** Name of the map image for a vehicle, e.g. "veh-truck-moving". The files are in assets/map. */
 export const spriteName = (type: string | null | undefined, state: FleetState): string => `veh-${shapeOf(type)}-${spriteState(state)}`;
 /** How vehicles are drawn on the map: "top" is Live 3D (the vehicle from above, in its status colour, turned to its heading); or a 3D pin, a round or a square badge. */
-export type IconStyle = "pin" | "circle" | "square" | "top";
+export type IconStyle = "photo" | "pin" | "circle" | "square" | "top";
 /** Badge colour: the vehicle's status (default) or its type. The status badge always shows the status. */
 export type IconColor = "status" | "type";
 export interface IconPrefs { style: IconStyle; color: IconColor }
-export const DEFAULT_ICON_PREFS: IconPrefs = { style: "top", color: "status" };
+export const DEFAULT_ICON_PREFS: IconPrefs = { style: "photo", color: "status" };
 
 /** Backend vehicle type → the picture drawn on the icon. */
 export function iconKind(type: string | null | undefined): "truck" | "trailer" | "van" | "pickup" | "car" | "bus" | "equipment" | "asset" {
@@ -110,10 +110,19 @@ const iconState = (s: FleetState): "moving" | "idle" | "stopped" | "parked" | "o
 export function iconName(type: string | null | undefined, state: FleetState, prefs: IconPrefs = DEFAULT_ICON_PREFS): string {
   const st = iconState(state);
   if (prefs.style === "top") return `top-${liveKind(type)}-${st}`;
+  if (prefs.style === "photo") return `photo-${photoKind(type)}-${st}`;
   return `${prefs.style}-${prefs.color}-${iconKind(type)}-${st}`;
 }
 /** The prefix every icon of one style shares, to load only those pictures. */
-export const iconPrefix = (prefs: IconPrefs): string => (prefs.style === "top" ? "top-" : `${prefs.style}-${prefs.color}-`);
+export const iconPrefix = (prefs: IconPrefs): string => (prefs.style === "top" ? "top-" : prefs.style === "photo" ? "photo-" : `${prefs.style}-${prefs.color}-`);
+
+/** Types that have their own photo pin; anything else uses the nearest one. */
+const PHOTO_KINDS = new Set(["truck", "semi", "trailer", "car", "van", "pickup", "box_truck", "tanker", "dump_truck", "mixer", "garbage_truck", "bus", "school_bus"]);
+/** "Photo pin": the vehicle's 3D picture in a round pin with a ring in its status colour. */
+export function photoKind(type: string | null | undefined): string {
+  if (type && PHOTO_KINDS.has(type)) return type;
+  return type === "motorcycle" ? "car" : "truck";
+}
 
 /** The whole of North America from space: where the opening dive starts. */
 export const WORLD_VIEW: { center: [number, number]; zoom: number } = { center: [-96, 42], zoom: 1.2 };
@@ -179,7 +188,7 @@ export function toFeatures(
           // A tractor towing a tracked trailer is drawn as the whole rig.
           pin: iconName(tows ? "truck" : d.vehicle?.type, state, prefs),
           rot: d.location.headingDeg ?? headings?.get(d.deviceId) ?? 0,
-          sub: state === "moving" && fmtSpeed ? fmtSpeed(d.location.speedKph) : SUB[state]
+          sub: state === "moving" && fmtSpeed ? [fmtSpeed(d.location.speedKph), compassPoint(d.location.headingDeg ?? null)].filter(Boolean).join(" · ") : SUB[state]
         }
       };
     })

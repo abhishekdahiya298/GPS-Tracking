@@ -60,7 +60,9 @@ describe("vehicle pictures and labels", () => {
   });
 
   it("picks a 3D pin by kind, state and heading", () => {
-    expect(iconName("trailer", "parked")).toBe("top-trailer-parked");
+    expect(iconName("trailer", "parked")).toBe("photo-trailer-parked");
+    expect(iconName("excavator", "idle")).toBe("photo-truck-idle");
+    expect(iconName("trailer", "parked", { style: "top", color: "status" })).toBe("top-trailer-parked");
     expect(iconName("trailer", "parked", { style: "pin", color: "status" })).toBe("pin-status-trailer-parked");
     expect(iconName("van", "never_seen", { style: "pin", color: "status" })).toBe("pin-status-van-offline");
     expect(iconName("semi", "idle", { style: "circle", color: "type" })).toBe("circle-type-truck-idle");
@@ -72,7 +74,7 @@ describe("vehicle pictures and labels", () => {
     expect(iconPrefix({ style: "pin", color: "type" })).toBe("pin-type-");
     const f = toFeatures([dev("1", 43.5, -79.6)], (k) => `${Math.round(k ?? 0)} km/h`).features[0]!;
     expect(f.properties.icon).toBe("veh-truck-moving");
-    expect(f.properties.sub).toBe("60 km/h");
+    expect(f.properties.sub).toBe("60 km/h · E");
     expect(toFeatures([dev("1", 43.5, -79.6, { connectivity: "offline" })]).features[0]!.properties.sub).toBe("Offline");
   });
   it("draws a gliding vehicle where it is shown, and points it along its movement when the tracker sends no heading", () => {

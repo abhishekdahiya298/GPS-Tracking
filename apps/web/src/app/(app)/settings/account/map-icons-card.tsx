@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { hasOwnMapIcons, resetMapIcons, saveMapIcons, useMapIcons } from "@/lib/map-icons";
 
 const STYLES: ReadonlyArray<{ value: IconStyle; label: string }> = [
+  { value: "photo", label: "Photo pin" },
   { value: "pin", label: "3D pin" },
   { value: "circle", label: "Circle" },
   { value: "square", label: "Square" },
@@ -23,7 +24,7 @@ export function MapIconsCard() {
         <CardTitle>Map icons</CardTitle>
       </CardHeader>
       <div className="grid gap-3 px-4 pb-4 pt-4">
-        <div role="radiogroup" aria-label="Map icon style" className="grid grid-cols-4 gap-2">
+        <div role="radiogroup" aria-label="Map icon style" className="grid grid-cols-5 gap-2">
           {STYLES.map((s) => {
             const on = prefs.style === s.value;
             return (
