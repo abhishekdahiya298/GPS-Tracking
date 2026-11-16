@@ -50,7 +50,7 @@ export default function AlertsScreen() {
     const sev = SEVERITY_META[alertSeverity(item.type)];
     const body = (
       <>
-        <LinearGradient colors={[colors.background, isDark ? colors.background : sev.soft]} locations={[0.4, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={[colors.background, isDark ? colors.background : sev.soft]} locations={[0.1, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
         <View style={[styles.edge, { backgroundColor: ink(sev.color) }]} />
         <IconWell icon={meta.icon} color={meta.color} soft={meta.soft} />
         <View style={styles.flex}>

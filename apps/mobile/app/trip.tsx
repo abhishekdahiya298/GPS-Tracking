@@ -195,8 +195,8 @@ export default function TripScreen() {
   );
 }
 
-const STOP_START = "#136c35";
-const STOP_END = "#ad1f1f";
+const STOP_START = "#0f5c2c";
+const STOP_END = "#9c1818";
 
 /** One row of the start / driving / end timeline. */
 function Stop({ color, title, time, detail, last = false }: { color: string; title: string; time: string; detail: string; last?: boolean }) {

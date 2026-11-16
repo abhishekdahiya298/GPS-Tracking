@@ -29,7 +29,7 @@ export const VehicleRow = memo(function VehicleRow({ device, fmtSpeed, now, onPr
   const ignition = facts.find((f) => f.key === "ignition");
   return (
     <PressableScale onPress={() => onPress(device.deviceId)} style={styles.card} scaleTo={0.985} accessibilityRole="button" accessibilityLabel={`${displayName(device)}, ${meta.label}`}>
-      <LinearGradient colors={[colors.background, isDark ? colors.background : softTint(meta.color, meta.soft)]} start={{ x: 0.3, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={[colors.background, isDark ? colors.background : softTint(meta.color, meta.soft)]} start={{ x: 0.05, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
       <View style={[styles.edge, { backgroundColor: color }]} />
       <VehiclePicture type={device.vehicle?.type} state={state} width={68} height={50} />
       {/* The name gets the whole first line; status and freshness sit under it, then where it is. */}
