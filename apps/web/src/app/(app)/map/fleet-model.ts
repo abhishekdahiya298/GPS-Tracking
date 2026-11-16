@@ -177,6 +177,8 @@ export function iconKind(type: string | null | undefined): string {
 /** Map icon name, e.g. "pin-status-truck-idle" or "top-trailer-moving" (files in /fleet-art/map/icons). */
 export function iconName(type: string | null | undefined, state: MapState, prefs: IconPrefs = DEFAULT_ICON_PREFS): string {
   if (prefs.style === "top") {
+    // "Tractor only" is the cab alone, as in the phone app.
+    if (type === "semi") return `top-tractor-${state}`;
     const k = iconKind(type);
     return `top-${k === "truck" || k === "bus" || k === "equipment" ? "truck" : k === "trailer" ? "trailer" : "car"}-${state}`;
   }
@@ -187,6 +189,6 @@ const KINDS = ["truck", "trailer", "van", "pickup", "car", "bus", "equipment", "
 const STATES: MapState[] = ["moving", "idle", "stopped", "parked", "offline"];
 /** Every icon one style draws, for loading onto the map. */
 export function iconNames(prefs: IconPrefs): string[] {
-  if (prefs.style === "top") return ["truck", "trailer", "car"].flatMap((k) => STATES.map((s) => `top-${k}-${s}`));
+  if (prefs.style === "top") return ["truck", "trailer", "car", "tractor"].flatMap((k) => STATES.map((s) => `top-${k}-${s}`));
   return KINDS.flatMap((k) => STATES.map((s) => `${prefs.style}-${prefs.color}-${k}-${s}`));
 }

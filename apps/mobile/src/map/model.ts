@@ -64,9 +64,42 @@ export function iconKind(type: string | null | undefined): "truck" | "trailer" |
   }
 }
 /** The three "Live 3D" shapes: a tractor-trailer, a trailer alone, or a car for everything smaller. */
-export function liveKind(type: string | null | undefined): "truck" | "trailer" | "car" {
+export function liveKind(type: string | null | undefined): "truck" | "tractor" | "trailer" | "car" {
+  // "Tractor only" is drawn as the cab alone; it gets its trailer drawn only while it tows one.
+  if (type === "semi") return "tractor";
   const k = iconKind(type);
   return k === "truck" || k === "bus" || k === "equipment" ? "truck" : k === "trailer" ? "trailer" : "car";
+}
+
+/** How close (km) a tracked trailer must be to a tractor to count as hitched to it. */
+const HITCH_KM = 0.08;
+
+/**
+ * Trailers being towed right now: a trailer with its own tracker that sits on a tractor unit
+ * ("Tractor only" type) and is doing the same thing (both moving, or both standing). Both report
+ * real positions; this only decides how to draw them, so the map shows one truck pulling its
+ * trailer instead of two icons on top of each other. Returns trailer id → tractor id.
+ */
+export function hitchedTrailers(devices: FleetDevice[]): Map<string, string> {
+  const out = new Map<string, string>();
+  const tractors = devices.filter(hasFix).filter((d) => d.vehicle?.type === "semi");
+  if (tractors.length === 0) return out;
+  const taken = new Set<string>();
+  for (const t of devices) {
+    if (!hasFix(t) || t.vehicle?.type !== "trailer") continue;
+    const tMoving = fleetState(t) === "moving";
+    let best: { id: string; km: number } | null = null;
+    for (const c of tractors) {
+      if (taken.has(c.deviceId) || (fleetState(c) === "moving") !== tMoving) continue;
+      const km = distanceKm([t.location.longitude, t.location.latitude], [c.location.longitude, c.location.latitude]);
+      if (km <= HITCH_KM && (!best || km < best.km)) best = { id: c.deviceId, km };
+    }
+    if (best) {
+      out.set(t.deviceId, best.id);
+      taken.add(best.id);
+    }
+  }
+  return out;
 }
 const iconState = (s: FleetState): "moving" | "idle" | "stopped" | "parked" | "offline" => (s === "never_seen" ? "offline" : s);
 
@@ -120,12 +153,18 @@ export function toFeatures(
   fmtSpeed?: (kph: number | null) => string,
   shown?: ReadonlyMap<string, [number, number]>,
   headings?: ReadonlyMap<string, number>,
-  prefs: IconPrefs = DEFAULT_ICON_PREFS
+  prefs: IconPrefs = DEFAULT_ICON_PREFS,
+  /** The vehicle the person opened: always drawn on its own, even a towed trailer. */
+  selectedId?: string | null
 ): GeoJSON.FeatureCollection<GeoJSON.Point, VehicleProps> {
+  const hitched = hitchedTrailers(devices);
+  const towing = new Map<string, string>();
+  for (const [trailer, tractor] of hitched) if (trailer !== selectedId) towing.set(tractor, trailer);
   return {
     type: "FeatureCollection",
-    features: devices.filter(hasFix).map((d) => {
+    features: devices.filter(hasFix).filter((d) => !(hitched.has(d.deviceId) && d.deviceId !== selectedId)).map((d) => {
       const state = fleetState(d);
+      const tows = towing.has(d.deviceId);
       return {
         type: "Feature",
         id: d.deviceId,
@@ -137,7 +176,8 @@ export function toFeatures(
           color: STATE_META[state].color,
           heading: d.location.headingDeg ?? headings?.get(d.deviceId) ?? 0,
           icon: spriteName(d.vehicle?.type, state),
-          pin: iconName(d.vehicle?.type, state, prefs),
+          // A tractor towing a tracked trailer is drawn as the whole rig.
+          pin: iconName(tows ? "truck" : d.vehicle?.type, state, prefs),
           rot: d.location.headingDeg ?? headings?.get(d.deviceId) ?? 0,
           sub: state === "moving" && fmtSpeed ? fmtSpeed(d.location.speedKph) : SUB[state]
         }

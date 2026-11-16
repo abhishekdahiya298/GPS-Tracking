@@ -20,14 +20,16 @@ export interface CameraLike {
 
 type VehicleFeature = GeoJSON.Feature<GeoJSON.Point, { deviceId: string; pin: string; rot?: number; name?: string; color?: string }>;
 
-/** Which map to draw: streets, satellite, or "auto" (streets up close, satellite when zoomed far out). */
-export type NativeMapType = "auto" | "street" | "satellite";
+/** Which map to draw: the street map (default) or satellite photos. */
+export type NativeMapType = "street" | "satellite";
 /** Camera height for the opening: far enough that the whole Earth fits on a phone held upright. */
 const GLOBE_ALTITUDE_M = 42_000_000;
 /** How long a vehicle takes to glide from one reported position to the next. */
 const GLIDE_MS = 1000;
 /** Above this many vehicles in view, close ones are grouped into numbered circles. */
 const MAX_MARKERS = 120;
+/** Zoomed far out, vehicles become dots only when more than this many are in view. */
+const DOTS_FROM = 25;
 
 const zoomOf = (r: Region) => Math.log2(360 / Math.max(r.longitudeDelta, 1e-6));
 
@@ -41,7 +43,7 @@ export const NativeLiveMap = forwardRef<
     bottomInset: number;
     topInset: number;
     initial: { center: [number, number]; zoom: number };
-    /** iPhone only: start as the 3D Earth (Apple's satellite globe) until the fleet dive ends. */
+    /** iPhone only: start as the whole 3D Earth until the opening descent to the fleet ends. */
     globe?: boolean;
     mapType?: NativeMapType;
     /** Text shown in a bubble over the chosen vehicle (its speed, or how long it has stood there). */
@@ -54,7 +56,7 @@ export const NativeLiveMap = forwardRef<
     onZoom: (zoom: number) => void;
     onUserMove: () => void;
   }
->(function NativeLiveMap({ vehicles, trails, selectedId, prefs, bottomInset, topInset, initial, globe = false, mapType = "auto", bubble, onBounds, onSelect, onMapPress, onReady, onZoom, onUserMove }, ref) {
+>(function NativeLiveMap({ vehicles, trails, selectedId, prefs, bottomInset, topInset, initial, globe = false, mapType = "street", bubble, onBounds, onSelect, onMapPress, onReady, onZoom, onUserMove }, ref) {
   const map = useRef<MapView>(null);
   const { width, height } = useWindowDimensions();
   const isPin = prefs.style === "pin";
@@ -65,7 +67,7 @@ export const NativeLiveMap = forwardRef<
   const diving = useRef(startedAsGlobe);
   const [far, setFar] = useState(false);
   // Zoomed out over a country or more: vehicles become small status dots, so they don't pile up.
-  const [dots, setDots] = useState(false);
+  const [zoomedOut, setDots] = useState(false);
 
   const region = (center: [number, number], zoom: number): Region => {
     const lngDelta = (360 / 2 ** zoom) * (width / 256);
@@ -160,6 +162,10 @@ export const NativeLiveMap = forwardRef<
     return { singles, groups };
   }, [vehicles, view, selectedId, width, height]);
 
+  // Dots only when they help: far out AND enough vehicles in view that pictures would pile up.
+  // A small fleet keeps its vehicle pictures at every zoom.
+  const dots = zoomedOut && placed.singles.length > DOTS_FROM;
+
   const lines = useMemo(
     () =>
       trails.features
@@ -175,11 +181,10 @@ export const NativeLiveMap = forwardRef<
       {...(startedAsGlobe
         ? { initialCamera: { center: { latitude: initial.center[1], longitude: initial.center[0] }, altitude: GLOBE_ALTITUDE_M, pitch: 0, heading: 0, zoom: 1 } }
         : { initialRegion: region(initial.center, initial.zoom) })}
-      // Zoomed far out the satellite view is drawn as the round 3D Earth (Apple's "flyover"
-      // satellite map), the way Apple Maps and Life360 show it; close in it is the flat map.
-      mapType={
-        Platform.OS === "ios" && (globe || (far && mapType !== "street")) ? "hybridFlyover" : mapType === "satellite" || (mapType === "auto" && far) ? "hybrid" : "standard"
-      }
+      // Zoomed far out Apple draws the round 3D Earth by itself. Auto and Street keep the normal
+      // map, so the Earth has the app's own light or dark colours (Apple's satellite Earth shows
+      // real night and day, which looks black at night). Satellite is the photo Earth.
+      mapType={mapType === "satellite" ? (Platform.OS === "ios" && far ? "hybridFlyover" : "hybrid") : "standard"}
       mapPadding={{ top: topInset, right: 0, bottom: bottomInset, left: 0 }}
       userInterfaceStyle={isDark ? "dark" : "light"}
       showsPointsOfInterests={false}
@@ -248,7 +253,8 @@ export const NativeLiveMap = forwardRef<
   );
 });
 
-const SIZE = { top: { width: 38, height: 60 }, pin: { width: 42, height: 52 }, round: { width: 44, height: 48 } } as const;
+// Life360-sized: big enough to read the vehicle and its colour, small enough not to cover the road.
+const SIZE = { top: { width: 28, height: 44 }, pin: { width: 34, height: 42 }, round: { width: 36, height: 40 } } as const;
 
 /**
  * One vehicle on the phone's own map. It glides from its last reported position to the new one
@@ -303,7 +309,7 @@ const GlideMarker = memo(function GlideMarker({
   }, [rot, turn]);
 
   const size = SIZE[shape];
-  const box = Math.max(size.width, size.height) + (selected ? 30 : 12);
+  const box = Math.max(size.width, size.height) + (selected ? 24 : 8);
   const spin = turn.interpolate({ inputRange: [-360, 360], outputRange: ["-360deg", "360deg"], extrapolate: "extend" });
   return (
     <MarkerAnimated
@@ -332,7 +338,7 @@ const GlideMarker = memo(function GlideMarker({
         ) : (
         <View style={[styles.box, { width: box, height: box }]}>
           {shape !== "pin" ? <View style={[styles.glow, { width: box, height: box, borderRadius: box / 2, backgroundColor: color, opacity: selected ? 0.28 : 0.14 }]} /> : null}
-          {image ? <Animated.Image source={image} style={[size, { transform: [{ rotate: spin }, { scale: selected ? 1.2 : 1 }] }]} resizeMode="contain" /> : null}
+          {image ? <Animated.Image source={image} style={[size, { transform: [{ rotate: spin }, { scale: selected ? 1.25 : 1 }] }]} resizeMode="contain" /> : null}
         </View>
         )}
       </View>

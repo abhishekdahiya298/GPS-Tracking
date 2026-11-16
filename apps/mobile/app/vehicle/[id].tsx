@@ -12,7 +12,7 @@ import { ActionBar, FactStrip, factCellsFor } from "@/map/VehicleCard";
 import { TodayCard } from "@/trips/TodayCard";
 import { colors, radius, size, space, themed, type } from "@/theme";
 
-// The map only exists in the installed app (see app/(tabs)/index.tsx).
+// The map only exists in the installed app (see app/(tabs)/map.tsx).
 const hasMap = Constants.executionEnvironment !== ExecutionEnvironment.StoreClient;
 
 function Row({ icon, color, soft, label, value, last }: { icon: IconName; color?: string; soft?: string; label: string; value: string; last?: boolean }) {
@@ -54,7 +54,7 @@ export default function VehicleScreen() {
     Linking.openURL(url).catch(() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${at}`));
   }
 
-  const showOnMap = () => router.navigate({ pathname: "/(tabs)", params: { device: device.deviceId } });
+  const showOnMap = () => router.navigate({ pathname: "/(tabs)/map", params: { device: device.deviceId } });
   /** Sends where the vehicle is now: its name, the address if known, and a map link. */
   function shareLocation() {
     if (!loc) return;

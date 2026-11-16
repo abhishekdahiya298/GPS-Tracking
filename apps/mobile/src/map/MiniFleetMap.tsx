@@ -3,15 +3,12 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Image, StyleSheet, View } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import type { FleetDevice } from "@/fleet/model";
-import { isDark } from "@/theme";
+import { colors, isDark } from "@/theme";
 import { useIconPrefs } from "./iconPrefs";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, boundsOf, iconPrefix, styleUrl, toFeatures } from "./model";
 import { useMapEngine } from "./mapEngine";
 import { MAP_ICONS, iconImages } from "./sprites";
 
-/* eslint-disable @typescript-eslint/no-require-imports -- React Native loads images with require() */
-const PREVIEW = { light: require("../../assets/map-preview.png") as number, dark: require("../../assets/map-preview-dark.png") as number };
-/* eslint-enable @typescript-eslint/no-require-imports */
 
 /**
  * A small, still map of the real fleet for the Overview card: the same 3D pins as the Live Map,
@@ -19,7 +16,8 @@ const PREVIEW = { light: require("../../assets/map-preview.png") as number, dark
  */
 export const MiniFleetMap = memo(function MiniFleetMap({ devices, focus }: { devices: FleetDevice[]; focus?: [number, number] | null }) {
   const engine = useMapEngine();
-  // Never a blank box: a picture of a map shows until the real one has drawn, then fades away.
+  // Until the map has drawn, a plain panel in the card's colour covers it (never a white flash
+  // or a half-drawn map); it fades the moment the map is placed on the fleet.
   const [drawn, setDrawn] = useState(false);
   const fade = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -33,7 +31,7 @@ export const MiniFleetMap = memo(function MiniFleetMap({ devices, focus }: { dev
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {engine === "native" ? <NativeMini devices={devices} focus={focus} onDrawn={() => setDrawn(true)} /> : <OsmMini devices={devices} focus={focus} onDrawn={() => setDrawn(true)} />}
-      <Animated.Image source={isDark ? PREVIEW.dark : PREVIEW.light} style={[StyleSheet.absoluteFill, { opacity: fade }]} resizeMode="cover" />
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: colors.muted, opacity: fade }]} />
     </View>
   );
 });
@@ -47,6 +45,8 @@ function NativeMini({ devices, focus, onDrawn }: { devices: FleetDevice[]; focus
   const [ready, setReady] = useState(false);
   useEffect(() => {
     if (!ready) return;
+    // Apple Maps draws from its own cache at once, so the map shows as soon as it is placed.
+    if (focus || bounds) setTimeout(onDrawn, 120);
     if (focus) map.current?.animateToRegion({ latitude: focus[1], longitude: focus[0], latitudeDelta: 0.03, longitudeDelta: 0.03 }, 0);
     else if (bounds)
       map.current?.fitToCoordinates(
@@ -56,7 +56,7 @@ function NativeMini({ devices, focus, onDrawn }: { devices: FleetDevice[]; focus
         ],
         { edgePadding: { top: 50, right: 40, bottom: 56, left: 40 }, animated: false }
       );
-  }, [ready, bounds, focus]);
+  }, [ready, bounds, focus, onDrawn]);
   const top = prefs.style === "top";
   return (
     <MapView
@@ -71,7 +71,6 @@ function NativeMini({ devices, focus, onDrawn }: { devices: FleetDevice[]; focus
       toolbarEnabled={false}
       showsPointsOfInterests={false}
       onMapReady={() => setReady(true)}
-      onMapLoaded={onDrawn}
     >
       {(data.features as GeoJSON.Feature<GeoJSON.Point, { deviceId: string; pin: string; rot?: number }>[]).map((f) => (
         <Marker key={f.properties.deviceId} coordinate={{ latitude: f.geometry.coordinates[1]!, longitude: f.geometry.coordinates[0]! }} anchor={{ x: 0.5, y: top ? 0.5 : 1 }} tracksViewChanges={false}>

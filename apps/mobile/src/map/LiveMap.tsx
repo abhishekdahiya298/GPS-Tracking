@@ -43,8 +43,7 @@ const MAP_TYPE_KEY = "rio.map-type";
 const GLOBE_HOLD_MS = 1100;
 const DIVE_MS = 2800;
 const MAP_TYPES: ReadonlyArray<{ id: NativeMapType; label: string }> = [
-  { id: "auto", label: "Auto" },
-  { id: "street", label: "Street" },
+  { id: "street", label: "Map" },
   { id: "satellite", label: "Satellite" }
 ];
 const NOT_CLUSTER: ["!", ["has", string]] = ["!", ["has", "point_count"]];
@@ -73,7 +72,7 @@ export default function LiveMap() {
   const [listOpen, setListOpen] = useState(false);
   const [style, setStyle] = useState<MapStyleId>(isDark ? "dark" : "streets");
   const [styleMenu, setStyleMenu] = useState(false);
-  const [mapType, setMapType] = useState<NativeMapType>("auto");
+  const [mapType, setMapType] = useState<NativeMapType>("street");
   // What the map shows now, [west, south, east, north]: tells which vehicles are just off screen.
   const [bounds, setBounds] = useState<[number, number, number, number] | null>(null);
   const [zones, setZones] = useState<Zone[]>([]);
@@ -102,7 +101,7 @@ export default function LiveMap() {
   const engine = useMapEngine();
   const images = useMemo(() => iconImages(iconPrefix(prefs)), [prefs]);
   const isPin = prefs.style === "pin";
-  const { vehicles, trails } = useGlide(visible, units.fmtSpeed, prefs);
+  const { vehicles, trails } = useGlide(visible, units.fmtSpeed, prefs, selectedId);
   const zoneData = useMemo(() => zoneFeatures(zones), [zones]);
   const counts = useMemo(() => countByFilter(devices), [devices]);
   const selected = devices.find((d) => d.deviceId === selectedId);
@@ -122,7 +121,7 @@ export default function LiveMap() {
       .catch(() => undefined);
     SecureStore.getItemAsync(MAP_TYPE_KEY)
       .then((saved) => {
-        if (saved === "auto" || saved === "street" || saved === "satellite") setMapType(saved);
+        if (saved === "street" || saved === "satellite") setMapType(saved);
       })
       .catch(() => undefined);
     api

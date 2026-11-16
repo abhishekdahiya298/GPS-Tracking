@@ -5,7 +5,7 @@ import { PressableScale } from "@/components/motion";
 import { displayName, fleetState, STATE_META, type FleetDevice } from "@/fleet/model";
 import { haptic } from "@/haptics";
 import { colors, elevation, themed } from "@/theme";
-import { iconName } from "./model";
+import { hitchedTrailers, iconName } from "./model";
 import { MAP_ICONS } from "./sprites";
 
 const SIZE = 42;
@@ -39,8 +39,9 @@ export function EdgeChips({
     const cy = (s + n) / 2;
     const spanX = Math.max(e - w, 1e-6);
     const spanY = Math.max(n - s, 1e-6);
+    const towed = hitchedTrailers(devices);
     const off = devices
-      .filter((d) => d.deviceId !== skipId && d.location)
+      .filter((d) => d.deviceId !== skipId && d.location && !towed.has(d.deviceId))
       .map((d) => ({ d, lng: d.location!.longitude, lat: d.location!.latitude }))
       .filter((p) => p.lng < w || p.lng > e || p.lat < s || p.lat > n)
       // Nearest first, measured in screens, so the chips are the vehicles "next door".
