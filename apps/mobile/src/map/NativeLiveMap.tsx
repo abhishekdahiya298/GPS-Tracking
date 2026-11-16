@@ -181,10 +181,11 @@ export const NativeLiveMap = forwardRef<
       {...(startedAsGlobe
         ? { initialCamera: { center: { latitude: initial.center[1], longitude: initial.center[0] }, altitude: GLOBE_ALTITUDE_M, pitch: 0, heading: 0, zoom: 1 } }
         : { initialRegion: region(initial.center, initial.zoom) })}
-      // Zoomed far out Apple draws the round 3D Earth by itself. Auto and Street keep the normal
-      // map, so the Earth has the app's own light or dark colours (Apple's satellite Earth shows
-      // real night and day, which looks black at night). Satellite is the photo Earth.
-      mapType={mapType === "satellite" ? (Platform.OS === "ios" && far ? "hybridFlyover" : "hybrid") : "standard"}
+      // Zoomed far out the street map is the round 3D Earth in the app's light or dark colours.
+      // Satellite is Apple's photo Earth (which shows real night).
+      // The opening Earth uses the street map too (the build turns on Apple's realistic style for
+      // it, see plugins/with-apple-globe.js), so it is light or dark like the app.
+      mapType={mapType === "satellite" && !globe ? (Platform.OS === "ios" && far ? "hybridFlyover" : "hybrid") : "standard"}
       mapPadding={{ top: topInset, right: 0, bottom: bottomInset, left: 0 }}
       userInterfaceStyle={isDark ? "dark" : "light"}
       showsPointsOfInterests={false}

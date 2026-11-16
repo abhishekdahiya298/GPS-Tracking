@@ -35,6 +35,8 @@ export function EdgeChips({
   const chips = useMemo(() => {
     if (!bounds || area.width <= 0 || area.bottom - area.top < GAP * 2) return [];
     const [w, s, e, n] = bounds;
+    // Zoomed out to a continent or the whole Earth everything is on screen: no edge chips.
+    if (e - w >= 60 || n - s >= 40) return [];
     const cx = (w + e) / 2;
     const cy = (s + n) / 2;
     const spanX = Math.max(e - w, 1e-6);
