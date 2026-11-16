@@ -689,7 +689,7 @@ export function LiveMap({
                       >
                         <span aria-hidden="true" className="absolute inset-y-1.5 left-0 w-1 rounded-r" style={{ background: STATE_COLORS[r.state] }} />
                         <span className="relative shrink-0">
-                          <VehiclePicture type={d.vehicle?.type} className="h-9 w-12" />
+                          <VehiclePicture type={d.vehicle?.type} state={r.state} className="h-9 w-12" />
                           <span aria-hidden="true" className="absolute -right-1 -top-1 size-3 rounded-full border-2 border-background" style={{ background: STATE_COLORS[r.state] }} />
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col">
@@ -817,7 +817,7 @@ export function LiveMap({
       )}
     >
       <div className="flex items-start gap-3">
-        <VehiclePicture type={sel.vehicle?.type} className="h-11 w-14 shrink-0" />
+        <VehiclePicture type={sel.vehicle?.type} state={selState ?? undefined} className="h-11 w-14 shrink-0" />
         <div className="min-w-0 flex-1">
           <h2 className="m-0 flex min-w-0 items-baseline gap-1.5 text-base font-semibold">
             <span className="truncate">{splitName(deviceLabel(sel)).main}</span>
