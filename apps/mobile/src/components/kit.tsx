@@ -115,22 +115,85 @@ const PICTURES_3D: Record<string, number> = {
   "car-idle": require("../../assets/vehicles/3d-car-idle.png") as number,
   "car-stopped": require("../../assets/vehicles/3d-car-stopped.png") as number,
   "car-parked": require("../../assets/vehicles/3d-car-parked.png") as number,
-  "car-offline": require("../../assets/vehicles/3d-car-offline.png") as number
+  "car-offline": require("../../assets/vehicles/3d-car-offline.png") as number,
+  "semi-moving": require("../../assets/vehicles/3d-semi-moving.png") as number,
+  "semi-idle": require("../../assets/vehicles/3d-semi-idle.png") as number,
+  "semi-stopped": require("../../assets/vehicles/3d-semi-stopped.png") as number,
+  "semi-parked": require("../../assets/vehicles/3d-semi-parked.png") as number,
+  "semi-offline": require("../../assets/vehicles/3d-semi-offline.png") as number,
+  "van-moving": require("../../assets/vehicles/3d-van-moving.png") as number,
+  "van-idle": require("../../assets/vehicles/3d-van-idle.png") as number,
+  "van-stopped": require("../../assets/vehicles/3d-van-stopped.png") as number,
+  "van-parked": require("../../assets/vehicles/3d-van-parked.png") as number,
+  "van-offline": require("../../assets/vehicles/3d-van-offline.png") as number,
+  "pickup-moving": require("../../assets/vehicles/3d-pickup-moving.png") as number,
+  "pickup-idle": require("../../assets/vehicles/3d-pickup-idle.png") as number,
+  "pickup-stopped": require("../../assets/vehicles/3d-pickup-stopped.png") as number,
+  "pickup-parked": require("../../assets/vehicles/3d-pickup-parked.png") as number,
+  "pickup-offline": require("../../assets/vehicles/3d-pickup-offline.png") as number,
+  "box_truck-moving": require("../../assets/vehicles/3d-box_truck-moving.png") as number,
+  "box_truck-idle": require("../../assets/vehicles/3d-box_truck-idle.png") as number,
+  "box_truck-stopped": require("../../assets/vehicles/3d-box_truck-stopped.png") as number,
+  "box_truck-parked": require("../../assets/vehicles/3d-box_truck-parked.png") as number,
+  "box_truck-offline": require("../../assets/vehicles/3d-box_truck-offline.png") as number,
+  "tanker-moving": require("../../assets/vehicles/3d-tanker-moving.png") as number,
+  "tanker-idle": require("../../assets/vehicles/3d-tanker-idle.png") as number,
+  "tanker-stopped": require("../../assets/vehicles/3d-tanker-stopped.png") as number,
+  "tanker-parked": require("../../assets/vehicles/3d-tanker-parked.png") as number,
+  "tanker-offline": require("../../assets/vehicles/3d-tanker-offline.png") as number,
+  "dump_truck-moving": require("../../assets/vehicles/3d-dump_truck-moving.png") as number,
+  "dump_truck-idle": require("../../assets/vehicles/3d-dump_truck-idle.png") as number,
+  "dump_truck-stopped": require("../../assets/vehicles/3d-dump_truck-stopped.png") as number,
+  "dump_truck-parked": require("../../assets/vehicles/3d-dump_truck-parked.png") as number,
+  "dump_truck-offline": require("../../assets/vehicles/3d-dump_truck-offline.png") as number,
+  "mixer-moving": require("../../assets/vehicles/3d-mixer-moving.png") as number,
+  "mixer-idle": require("../../assets/vehicles/3d-mixer-idle.png") as number,
+  "mixer-stopped": require("../../assets/vehicles/3d-mixer-stopped.png") as number,
+  "mixer-parked": require("../../assets/vehicles/3d-mixer-parked.png") as number,
+  "mixer-offline": require("../../assets/vehicles/3d-mixer-offline.png") as number,
+  "garbage_truck-moving": require("../../assets/vehicles/3d-garbage_truck-moving.png") as number,
+  "garbage_truck-idle": require("../../assets/vehicles/3d-garbage_truck-idle.png") as number,
+  "garbage_truck-stopped": require("../../assets/vehicles/3d-garbage_truck-stopped.png") as number,
+  "garbage_truck-parked": require("../../assets/vehicles/3d-garbage_truck-parked.png") as number,
+  "garbage_truck-offline": require("../../assets/vehicles/3d-garbage_truck-offline.png") as number,
+  "bus-moving": require("../../assets/vehicles/3d-bus-moving.png") as number,
+  "bus-idle": require("../../assets/vehicles/3d-bus-idle.png") as number,
+  "bus-stopped": require("../../assets/vehicles/3d-bus-stopped.png") as number,
+  "bus-parked": require("../../assets/vehicles/3d-bus-parked.png") as number,
+  "bus-offline": require("../../assets/vehicles/3d-bus-offline.png") as number,
+  "school_bus-moving": require("../../assets/vehicles/3d-school_bus-moving.png") as number,
+  "school_bus-idle": require("../../assets/vehicles/3d-school_bus-idle.png") as number,
+  "school_bus-stopped": require("../../assets/vehicles/3d-school_bus-stopped.png") as number,
+  "school_bus-parked": require("../../assets/vehicles/3d-school_bus-parked.png") as number,
+  "school_bus-offline": require("../../assets/vehicles/3d-school_bus-offline.png") as number
 };
 /* eslint-enable @typescript-eslint/no-require-imports */
 
+/** Vehicle type → its 3D picture. Types without a picture yet show a clear symbol instead. */
+const PICTURE_OF: Record<string, string> = {
+  truck: "truck", semi: "semi", trailer: "trailer", car: "car", van: "van", pickup: "pickup", box_truck: "box_truck", tanker: "tanker",
+  dump_truck: "dump_truck", mixer: "mixer", garbage_truck: "garbage_truck", bus: "bus", school_bus: "school_bus"
+};
+const SYMBOL_OF: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = { excavator: "excavator", tractor: "tractor", motorcycle: "motorbike", equipment: "tow-truck", other: "map-marker" };
+
 /**
- * The vehicle's 3D picture: a truck, a trailer or a car, in its status colour (green moving,
- * orange idling, red stopped, purple parked, grey not reporting) on a soft tile of that colour.
- * Without a state it is the plain truck or trailer picture.
+ * The vehicle's 3D picture by its type (truck with trailer, tractor only, trailer, box truck,
+ * tanker, dump truck, mixer, garbage truck, van, pickup, car, bus, school bus), in its status
+ * colour: green moving, orange idling, red stopped, purple parked, grey not reporting. The type
+ * is set per vehicle on the website. Without a state it is the plain truck or trailer picture.
  */
 export const VehiclePicture = memo(function VehiclePicture({ type: kind, state, width = 72, height = 56 }: { type: string | undefined; state?: FleetState; width?: number; height?: number }) {
   const st = state === "never_seen" ? "offline" : state;
-  const shape = kind === "trailer" ? "trailer" : kind === "truck" || kind === "semi" || kind === "bus" || kind === "equipment" || !kind ? "truck" : "car";
-  const source = st ? PICTURES_3D[`${shape}-${st}`] : undefined;
+  const symbol = st && kind ? SYMBOL_OF[kind] : undefined;
+  const source = st && !symbol ? PICTURES_3D[`${PICTURE_OF[kind ?? "truck"] ?? "truck"}-${st}`] : undefined;
+  const tint = st ? { backgroundColor: softTint(STATE_META[st].color, STATE_META[st].soft), borderColor: colors.border } : null;
   return (
-    <View style={[styles.picture, { width, height }, source && st ? { backgroundColor: softTint(STATE_META[st].color, STATE_META[st].soft), borderColor: colors.border } : null]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Image source={source ?? (kind === "trailer" ? PICTURES.trailer : PICTURES.truck)} style={{ width: width - 6, height: height - 4 }} resizeMode="contain" />
+    <View style={[styles.picture, { width, height }, tint]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {symbol && st ? (
+        <MaterialCommunityIcons name={symbol} size={Math.round(height * 0.62)} color={STATE_META[st].color} />
+      ) : (
+        <Image source={source ?? (kind === "trailer" ? PICTURES.trailer : PICTURES.truck)} style={{ width: width - 6, height: height - 4 }} resizeMode="contain" />
+      )}
     </View>
   );
 });

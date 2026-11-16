@@ -149,6 +149,11 @@ export function iconKind(type: string | null | undefined): string {
   switch (type) {
     case "truck":
     case "semi":
+    case "box_truck":
+    case "tanker":
+    case "dump_truck":
+    case "mixer":
+    case "garbage_truck":
       return "truck";
     case "trailer":
     case "van":
@@ -157,6 +162,13 @@ export function iconKind(type: string | null | undefined): string {
     case "bus":
     case "equipment":
       return type;
+    case "school_bus":
+      return "bus";
+    case "excavator":
+    case "tractor":
+      return "equipment";
+    case "motorcycle":
+      return "car";
     default:
       return "asset";
   }

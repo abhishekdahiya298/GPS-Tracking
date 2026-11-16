@@ -234,7 +234,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               .map(({ d, s }) => (
                 <li key={d.deviceId}>
                   <Link href={`/map?focus=${d.deviceId}`} className="flex items-center gap-3 px-4 py-3 text-foreground no-underline hover:bg-canvas sm:px-5">
-                    <VehiclePicture type={d.vehicle?.type} />
+                    <VehiclePicture type={d.vehicle?.type} state={s === "never_seen" ? "offline" : s} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? d.name ?? d.model ?? "Device"}</span>
                       <span className="block truncate text-xs text-muted-foreground">

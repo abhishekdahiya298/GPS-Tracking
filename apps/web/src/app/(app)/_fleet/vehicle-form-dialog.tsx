@@ -8,7 +8,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
-import { VehicleTypeIcon } from "@/components/app/vehicle-type-icon";
+import { VehiclePicture } from "@/components/app/vehicle-picture";
 import { cn } from "@/lib/cn";
 import { asVehicleType, DEFAULT_VEHICLE_TYPE, VEHICLE_TYPE_LABEL, VEHICLE_TYPES, VehicleInputSchema } from "@/lib/schemas/vehicle";
 
@@ -66,12 +66,12 @@ export function VehicleFormDialog({ open, onOpenChange, vehicle, onSaved }: { op
                   )}
                 >
                   <input type="radio" value={t} className="sr-only" {...form.register("type")} />
-                  <VehicleTypeIcon type={t} className={cn("size-6", type === t ? "text-primary [--vehicle-icon-gap:var(--color-primary-soft)]" : "")} />
+                  <VehiclePicture type={t} state="moving" className="h-9 w-12" />
                   {VEHICLE_TYPE_LABEL[t]}
                 </label>
               ))}
             </div>
-            <p className="m-0 text-xs text-muted-foreground">Sets the icon shown on the map and in lists.</p>
+            <p className="m-0 text-xs text-muted-foreground">Sets the picture shown on the map and in lists, here and in the phone app.</p>
           </fieldset>
           {editing && (
             <Field id="v-status" label="Status">

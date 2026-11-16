@@ -15,7 +15,19 @@ export interface VehicleGlyph {
 
 export const WHEEL_Y = 16.5;
 
+/** A cargo box and a short cab: the plain truck outline, shared by the working trucks. */
+const BOX_TRUCK: VehicleGlyph = { body: "M2 6.5h11.5v10H2zM14.5 9.5h3.6l3.4 3.6v3.4h-7z", wheels: [[6.2, 2], [17.2, 2]] };
+
 export const VEHICLE_GLYPHS: Record<VehicleType, VehicleGlyph> = {
+  box_truck: BOX_TRUCK,
+  tanker: BOX_TRUCK,
+  dump_truck: BOX_TRUCK,
+  mixer: BOX_TRUCK,
+  garbage_truck: BOX_TRUCK,
+  school_bus: { body: "M2 5.5h18.5a1.5 1.5 0 0 1 1.500 1.5v9.5H2z", wheels: [[6.5, 2], [17, 2]] },
+  excavator: { body: "M9.5 5.5h6.2l1 5h3.8v6H9.5zM3 11.5h6.5v5H3z", wheels: [[7, 3.2], [18, 2]] },
+  tractor: { body: "M9.5 5.5h6.2l1 5h3.8v6H9.5zM3 11.5h6.5v5H3z", wheels: [[7, 3.2], [18, 2]] },
+  motorcycle: { body: "M6 13.5h4l2.5-4h4l2 4h-3l-1.500 3H6z", wheels: [[5.5, 2.6], [18.5, 2.6]] },
   // Box truck: cargo box and a short cab.
   truck: { body: "M2 6.5h11.5v10H2zM14.5 9.5h3.6l3.4 3.6v3.4h-7z", wheels: [[6.2, 2], [17.2, 2]] },
   // Tractor unit: tall cab, low frame behind it, tandem rear axle.

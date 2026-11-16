@@ -182,3 +182,14 @@ export function sheetHeadline(d: FleetDevice, now: number = Date.now()): { title
   if (state === "parked") return { title: "Parked, unhooked", detail: freshnessLine(d, now) };
   return { title: STATE_META[state].label, detail: freshnessLine(d, now) };
 }
+
+/** The vehicle type as people read it. The type is chosen per vehicle on the website. */
+const TYPE_LABEL: Record<string, string> = {
+  truck: "Truck with trailer", semi: "Tractor only", trailer: "Trailer", box_truck: "Box truck", tanker: "Tanker", dump_truck: "Dump truck",
+  mixer: "Mixer", garbage_truck: "Garbage truck", van: "Van", pickup: "Pickup", car: "Car", motorcycle: "Motorcycle", bus: "Bus",
+  school_bus: "School bus", excavator: "Excavator", tractor: "Farm tractor", equipment: "Equipment", other: "Other"
+};
+export function typeLabel(type: string | null | undefined): string | null {
+  if (!type) return null;
+  return TYPE_LABEL[type] ?? type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, " ");
+}

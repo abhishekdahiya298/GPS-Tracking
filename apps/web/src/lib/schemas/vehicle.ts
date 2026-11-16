@@ -5,16 +5,25 @@ import { z } from "zod";
  * (instant feedback). Pure zod: safe to import in client components.
  */
 /** Kinds of vehicle. The kind picks the icon on the map and in lists. */
-export const VEHICLE_TYPES = ["truck", "semi", "trailer", "van", "pickup", "car", "bus", "equipment", "other"] as const;
+export const VEHICLE_TYPES = ["truck", "semi", "trailer", "box_truck", "tanker", "dump_truck", "mixer", "garbage_truck", "van", "pickup", "car", "motorcycle", "bus", "school_bus", "excavator", "tractor", "equipment", "other"] as const;
 export type VehicleType = (typeof VEHICLE_TYPES)[number];
 export const VEHICLE_TYPE_LABEL: Record<VehicleType, string> = {
-  truck: "Truck",
-  semi: "Tractor (semi)",
+  truck: "Truck with trailer",
+  semi: "Tractor only",
   trailer: "Trailer",
+  box_truck: "Box truck",
+  tanker: "Tanker",
+  dump_truck: "Dump truck",
+  mixer: "Mixer",
+  garbage_truck: "Garbage truck",
   van: "Van",
   pickup: "Pickup",
   car: "Car",
+  motorcycle: "Motorcycle",
   bus: "Bus",
+  school_bus: "School bus",
+  excavator: "Excavator",
+  tractor: "Farm tractor",
   equipment: "Equipment",
   other: "Other"
 };
