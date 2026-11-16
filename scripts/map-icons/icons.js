@@ -111,7 +111,20 @@ const liveIcon = (kind, st) => {
     <filter id="s${id}" x="-40%" y="-20%" width="180%" height="150%"><feGaussianBlur stdDeviation="1.6"/></filter>
   </defs>`;
   let sil, body;
-  if (kind === 'car') {
+  if (kind === 'tractor') {
+    // A tractor unit alone (no trailer): the cab, then the bare chassis with its fifth wheel.
+    sil = `<path d="M15 34 v-12 q0 -8 9 -8 q9 0 9 8 v12z"/><rect x="16" y="33" width="16" height="25" rx="2.5"/>`;
+    body = `<rect x="16" y="33" width="16" height="25" rx="2.5" fill="#2b3442" stroke="#111827" stroke-width="0.7"/>
+    <rect x="13.4" y="40" width="3" height="6" rx="1.2" fill="#111827"/><rect x="31.6" y="40" width="3" height="6" rx="1.2" fill="#111827"/>
+    <rect x="13.4" y="49" width="3" height="6" rx="1.2" fill="#111827"/><rect x="31.6" y="49" width="3" height="6" rx="1.2" fill="#111827"/>
+    <circle cx="24" cy="47" r="4.6" fill="#6b7280" stroke="#111827" stroke-width="0.8"/><circle cx="24" cy="47" r="1.6" fill="#111827"/>
+    <rect x="17" y="55.6" width="4.6" height="1.8" rx="0.9" fill="#ff5a5a"/><rect x="26.4" y="55.6" width="4.6" height="1.8" rx="0.9" fill="#ff5a5a"/>
+    <path d="M15 34 v-12 q0 -8 9 -8 q9 0 9 8 v12z" fill="url(#b${id})" stroke="${dk}" stroke-width="0.7"/>
+    <path d="M17 21.6 q7 -3.4 14 0 l-1 5 h-12z" fill="url(#g${id})"/>
+    <rect x="17.6" y="27.4" width="12.8" height="5.6" rx="1.8" fill="url(#r${id})" opacity="0.9"/>
+    <rect x="11.4" y="21" width="3.2" height="4.4" rx="1.4" fill="${dk}"/><rect x="33.4" y="21" width="3.2" height="4.4" rx="1.4" fill="${dk}"/>
+    <rect x="16.4" y="15.6" width="4.4" height="1.9" rx="0.9" fill="#fff6c9"/><rect x="27.2" y="15.6" width="4.4" height="1.9" rx="0.9" fill="#fff6c9"/>`;
+  } else if (kind === 'car') {
     sil = `<rect x="13" y="16" width="22" height="44" rx="9"/>`;
     body = `<rect x="13" y="16" width="22" height="44" rx="9" fill="url(#b${id})" stroke="${dk}" stroke-width="0.7"/>
     <path d="M16.5 28 q7.5 -4 15 0 l-1.4 7 h-12.2z" fill="url(#g${id})"/>

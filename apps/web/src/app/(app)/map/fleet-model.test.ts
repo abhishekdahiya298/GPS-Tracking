@@ -90,6 +90,6 @@ describe("iconName", () => {
     expect(iconName("other", "moving", { style: "square", color: "status" })).toBe("square-status-asset-moving");
     expect(iconName("bus", "stopped", { style: "top", color: "status" })).toBe("top-truck-stopped");
     expect(iconNames({ style: "pin", color: "status" })).toHaveLength(40);
-    expect(iconNames({ style: "top", color: "type" })).toHaveLength(15);
+    expect(iconNames({ style: "top", color: "type" })).toHaveLength(20);
   });
 });

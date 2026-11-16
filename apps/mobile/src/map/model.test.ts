@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FleetDevice } from "../fleet/model";
-import { FOCUS_ZOOM, MAP_STYLES, focusZoom, TRAIL_POINTS, bearing, boundsOf, distanceKm, isMapStyleId, lerpLngLat, nextTrails, iconName, iconPrefix, positionOf, readTap, shapeOf, shouldAnimate, spriteName, styleUrl, toFeatures, trailFeatures, zoneFeatures, type Zone } from "./model";
+import { hitchedTrailers, FOCUS_ZOOM, MAP_STYLES, focusZoom, TRAIL_POINTS, bearing, boundsOf, distanceKm, isMapStyleId, lerpLngLat, nextTrails, iconName, iconPrefix, positionOf, readTap, shapeOf, shouldAnimate, spriteName, styleUrl, toFeatures, trailFeatures, zoneFeatures, type Zone } from "./model";
 
 const dev = (id: string, lat: number | null, lng: number | null, over: Partial<FleetDevice> = {}): FleetDevice => ({
   deviceId: id, model: "FTM880", name: null, deviceStatus: "active", vehicle: { id, name: `Truck ${id}`, licensePlate: null, type: "truck" }, connectivity: "online", lastSeenAt: "2026-10-09T12:00:00Z",
@@ -181,5 +181,27 @@ describe("large fleets", () => {
     // the limit is loose so a slow test machine does not fail it.
     expect(performance.now() - started).toBeLessThan(2000);
     expect(trails.size).toBe(1000);
+  });
+});
+
+describe("tractor and towed trailer", () => {
+  const tractor = dev("T", 43.5, -79.6, { vehicle: { id: "T", name: "Truck 101", licensePlate: null, type: "semi" } });
+  const trailer = dev("R", 43.5003, -79.6003, { vehicle: { id: "R", name: "Trailer 502", licensePlate: null, type: "trailer" } });
+  const farTrailer = dev("F", 43.6, -79.7, { vehicle: { id: "F", name: "Trailer 501", licensePlate: null, type: "trailer" } });
+  const top = { style: "top", color: "status" } as const;
+
+  it("a tractor alone is drawn as the cab only", () => {
+    expect(toFeatures([tractor], undefined, undefined, undefined, top).features[0]!.properties.pin).toBe("top-tractor-moving");
+  });
+  it("pairs a trailer sitting on a tractor doing the same thing, and only that one", () => {
+    expect([...hitchedTrailers([tractor, trailer, farTrailer])]).toEqual([["R", "T"]]);
+    const parked = { ...trailer, location: { ...trailer.location!, speedKph: 0, motion: false, ignition: false } };
+    expect(hitchedTrailers([tractor, parked]).size).toBe(0);
+  });
+  it("draws one rig instead of two icons, but shows the trailer when it is the one opened", () => {
+    const fc = toFeatures([tractor, trailer, farTrailer], undefined, undefined, undefined, top);
+    expect(fc.features.map((f) => [f.properties.deviceId, f.properties.pin])).toEqual([["T", "top-truck-moving"], ["F", "top-trailer-moving"]]);
+    const open = toFeatures([tractor, trailer], undefined, undefined, undefined, top, "R");
+    expect(open.features.map((f) => [f.properties.deviceId, f.properties.pin])).toEqual([["T", "top-tractor-moving"], ["R", "top-trailer-moving"]]);
   });
 });

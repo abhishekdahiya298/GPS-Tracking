@@ -4,15 +4,14 @@ import { badgeText } from "@/alerts/model";
 import { TabBar } from "@/components/TabBar";
 import { colors } from "@/theme";
 
-/** The five tabs, Overview first (the app opens on it), then the live map. Each screen draws its own title, so the system header is off. */
-export const unstable_settings = { initialRouteName: "overview" };
+/** The five tabs, Overview first (it is the tabs' index, so the app opens on it), then the live map. Each screen draws its own title, so the system header is off. */
 
 export default function TabsLayout() {
   const { unread } = useAlerts();
   return (
-    <Tabs initialRouteName="overview" tabBar={(props) => <TabBar {...props} />} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.canvas } }}>
-      <Tabs.Screen name="overview" options={{ title: "Overview" }} />
-      <Tabs.Screen name="index" options={{ title: "Map" }} />
+    <Tabs tabBar={(props) => <TabBar {...props} />} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.canvas } }}>
+      <Tabs.Screen name="index" options={{ title: "Overview" }} />
+      <Tabs.Screen name="map" options={{ title: "Map" }} />
       <Tabs.Screen name="vehicles" options={{ title: "Vehicles" }} />
       <Tabs.Screen name="alerts" options={{ title: "Alerts", tabBarBadge: badgeText(unread) }} />
       <Tabs.Screen name="account" options={{ title: "Account" }} />
