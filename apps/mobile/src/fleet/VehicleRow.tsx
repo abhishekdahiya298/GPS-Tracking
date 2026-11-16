@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { StatusPill, VehiclePicture } from "../components/kit";
 import { PressableScale } from "../components/motion";
 import { colors, elevation, ink, isDark, radius, softTint, space, type, themed } from "../theme";
+import { useAddress } from "@/map/useAddress";
 import { STATE_META, coordsText, displayName, fleetState, freshnessLine, vehicleFacts, type FleetDevice } from "./model";
 
 /** Gap under each card. */
@@ -26,6 +27,8 @@ export const VehicleRow = memo(function VehicleRow({ device, fmtSpeed, now, onPr
   const moving = state === "moving";
   const [value, unit] = splitSpeed(state === "offline" || state === "never_seen" ? "—" : fmtSpeed(moving ? (device.location?.speedKph ?? null) : 0));
   const facts = vehicleFacts(device);
+  // The street address (from the server, cached); the coordinates show until it arrives.
+  const address = useAddress(device.location?.latitude, device.location?.longitude, moving);
   const ignition = facts.find((f) => f.key === "ignition");
   return (
     <PressableScale onPress={() => onPress(device.deviceId)} style={styles.card} scaleTo={0.985} accessibilityRole="button" accessibilityLabel={`${displayName(device)}, ${meta.label}`}>
@@ -41,7 +44,7 @@ export const VehicleRow = memo(function VehicleRow({ device, fmtSpeed, now, onPr
         </View>
         <View style={styles.line}>
           <Ionicons name="location-outline" size={13} color={colors.mutedForeground} />
-          <Text style={styles.lineText} numberOfLines={1}>{coordsText(device) ?? "No position yet"}</Text>
+          <Text style={styles.lineText} numberOfLines={1}>{address?.label ?? address?.line1 ?? coordsText(device) ?? "No position yet"}</Text>
           {ignition ? <Ionicons name="power" size={12} color={ink(ignition.tone === "good" ? colors.success : colors.danger)} accessibilityLabel={ignition.label} /> : null}
         </View>
       </View>

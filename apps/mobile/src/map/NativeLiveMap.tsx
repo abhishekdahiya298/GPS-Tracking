@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { forwardRef, memo, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Platform, StyleSheet, Text, View, useWindowDimensions, type ImageSourcePropType } from "react-native";
-import MapView, { AnimatedRegion, MarkerAnimated, Polyline, type Region } from "react-native-maps";
+import MapView, { AnimatedRegion, Marker, MarkerAnimated, Polyline, type Region } from "react-native-maps";
 import { colors, elevation, isDark, themed } from "@/theme";
 import type { IconPrefs } from "./model";
 import { MAP_ICONS } from "./sprites";
@@ -26,6 +26,8 @@ export type NativeMapType = "auto" | "street" | "satellite";
 const GLOBE_ALTITUDE_M = 42_000_000;
 /** How long a vehicle takes to glide from one reported position to the next. */
 const GLIDE_MS = 1000;
+/** Above this many vehicles in view, close ones are grouped into numbered circles. */
+const MAX_MARKERS = 120;
 
 const zoomOf = (r: Region) => Math.log2(360 / Math.max(r.longitudeDelta, 1e-6));
 
@@ -62,27 +64,40 @@ export const NativeLiveMap = forwardRef<
   const shown = useRef<Region | null>(null);
   const diving = useRef(startedAsGlobe);
   const [far, setFar] = useState(false);
+  // Zoomed out over a country or more: vehicles become small status dots, so they don't pile up.
+  const [dots, setDots] = useState(false);
 
   const region = (center: [number, number], zoom: number): Region => {
     const lngDelta = (360 / 2 ** zoom) * (width / 256);
     return { latitude: center[1], longitude: center[0], longitudeDelta: lngDelta, latitudeDelta: lngDelta * (height / width) };
   };
 
-  // A hop to somewhere far off the screen would fly over map that is not loaded yet (a blank
-  // screen), so it is made in one quick step; a nearby move glides.
-  const ms = (center: [number, number], duration: number | undefined): number => {
+  // A hop to somewhere well off the screen: flying straight there crosses map that is not
+  // loaded yet (a blank, beige screen). Instead the camera rises until both places fit (those
+  // wider tiles load at once), then comes down on the new place, like Life360.
+  const hop = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const goTo = (target: Region | null, center: [number, number], duration: number | undefined) => {
+    if (hop.current) clearTimeout(hop.current);
     const r = shown.current;
-    if (!r) return duration ?? 600;
+    const d = duration ?? 600;
+    const land = () => (target ? map.current?.animateToRegion(target, Math.max(d, 700)) : map.current?.animateCamera({ center: { latitude: center[1], longitude: center[0] } }, { duration: Math.max(d, 700) }));
+    if (!r) return void land();
     const away = Math.max(Math.abs(center[0] - r.longitude) / Math.max(r.longitudeDelta, 1e-6), Math.abs(center[1] - r.latitude) / Math.max(r.latitudeDelta, 1e-6));
-    return away > 2.5 ? 1 : (duration ?? 600);
+    if (away <= 1.5) {
+      if (target) map.current?.animateToRegion(target, d);
+      else map.current?.animateCamera({ center: { latitude: center[1], longitude: center[0] } }, { duration: d });
+      return;
+    }
+    const lngSpan = Math.abs(center[0] - r.longitude) * 1.6 + r.longitudeDelta;
+    const latSpan = Math.abs(center[1] - r.latitude) * 1.6 + r.latitudeDelta;
+    const span = Math.min(Math.max(lngSpan, latSpan * (width / height)), 300);
+    map.current?.animateToRegion({ latitude: (center[1] + r.latitude) / 2, longitude: (center[0] + r.longitude) / 2, longitudeDelta: span, latitudeDelta: span * (height / width) }, 650);
+    hop.current = setTimeout(land, 700);
   };
 
   useImperativeHandle(ref, () => ({
-    flyTo: ({ center, zoom, duration }) => map.current?.animateToRegion(region(center, zoom ?? 14), ms(center, duration)),
-    easeTo: ({ center, zoom, duration }) => {
-      if (zoom === undefined) map.current?.animateCamera({ center: { latitude: center[1], longitude: center[0] } }, { duration: ms(center, duration) });
-      else map.current?.animateToRegion(region(center, zoom), ms(center, duration));
-    },
+    flyTo: ({ center, zoom, duration }) => goTo(region(center, zoom ?? 14), center, duration),
+    easeTo: ({ center, zoom, duration }) => goTo(zoom === undefined ? null : region(center, zoom), center, duration),
     fitBounds: ([w, s, e, n], o) => {
       const fit = () =>
         map.current?.fitToCoordinates(
@@ -105,6 +120,46 @@ export const NativeLiveMap = forwardRef<
     }
   }));
 
+  // Large fleets: only vehicles in or near the view get a marker, and where many would pile up
+  // (more than MAX_MARKERS in view) close ones are drawn as one numbered circle. The chosen vehicle
+  // is always drawn on its own. Recomputed when the view settles, not on every frame.
+  const [view, setView] = useState<Region | null>(null);
+  const placed = useMemo(() => {
+    const all = (vehicles.features as VehicleFeature[]).filter((f) => f.geometry?.type === "Point" && f.properties?.deviceId);
+    if (!view || all.length <= MAX_MARKERS) return { singles: all, groups: [] as { key: string; lat: number; lng: number; count: number }[] };
+    const w = view.longitude - view.longitudeDelta, e = view.longitude + view.longitudeDelta;
+    const s0 = view.latitude - view.latitudeDelta, n = view.latitude + view.latitudeDelta;
+    const near = all.filter((f) => {
+      const [lng, lat] = f.geometry.coordinates as [number, number];
+      return f.properties.deviceId === selectedId || (lng >= w && lng <= e && lat >= s0 && lat <= n);
+    });
+    if (near.length <= MAX_MARKERS) return { singles: near, groups: [] };
+    // A grid of about 56 points on screen: vehicles sharing a cell become one group.
+    const cellLng = (view.longitudeDelta / width) * 56, cellLat = (view.latitudeDelta / height) * 56;
+    const cells = new globalThis.Map<string, VehicleFeature[]>();
+    for (const f of near) {
+      const [lng, lat] = f.geometry.coordinates as [number, number];
+      const k = `${Math.floor(lng / cellLng)}:${Math.floor(lat / cellLat)}`;
+      const list = cells.get(k);
+      if (list) list.push(f);
+      else cells.set(k, [f]);
+    }
+    const singles: VehicleFeature[] = [];
+    const groups: { key: string; lat: number; lng: number; count: number }[] = [];
+    for (const [k, list] of cells) {
+      const keep = list.filter((f) => f.properties.deviceId === selectedId);
+      const rest = list.filter((f) => f.properties.deviceId !== selectedId);
+      singles.push(...keep);
+      if (rest.length === 1) singles.push(rest[0]!);
+      else if (rest.length > 1) {
+        const lat = rest.reduce((t, f) => t + (f.geometry.coordinates[1] ?? 0), 0) / rest.length;
+        const lng = rest.reduce((t, f) => t + (f.geometry.coordinates[0] ?? 0), 0) / rest.length;
+        groups.push({ key: `g${k}`, lat, lng, count: rest.length });
+      }
+    }
+    return { singles, groups };
+  }, [vehicles, view, selectedId, width, height]);
+
   const lines = useMemo(
     () =>
       trails.features
@@ -120,7 +175,11 @@ export const NativeLiveMap = forwardRef<
       {...(startedAsGlobe
         ? { initialCamera: { center: { latitude: initial.center[1], longitude: initial.center[0] }, altitude: GLOBE_ALTITUDE_M, pitch: 0, heading: 0, zoom: 1 } }
         : { initialRegion: region(initial.center, initial.zoom) })}
-      mapType={globe && Platform.OS === "ios" ? "hybridFlyover" : mapType === "satellite" || (mapType === "auto" && far) ? "hybrid" : "standard"}
+      // Zoomed far out the satellite view is drawn as the round 3D Earth (Apple's "flyover"
+      // satellite map), the way Apple Maps and Life360 show it; close in it is the flat map.
+      mapType={
+        Platform.OS === "ios" && (globe || (far && mapType !== "street")) ? "hybridFlyover" : mapType === "satellite" || (mapType === "auto" && far) ? "hybrid" : "standard"
+      }
       mapPadding={{ top: topInset, right: 0, bottom: bottomInset, left: 0 }}
       userInterfaceStyle={isDark ? "dark" : "light"}
       showsPointsOfInterests={false}
@@ -128,39 +187,63 @@ export const NativeLiveMap = forwardRef<
       pitchEnabled={false}
       toolbarEnabled={false}
       onMapReady={onReady}
-      onPress={onMapPress}
+      // On iPhone a tap on a vehicle also reaches the map; that one must not close the vehicle.
+      onPress={(e) => {
+        if ((e.nativeEvent as { action?: string }).action === "marker-press") return;
+        onMapPress();
+      }}
       onPanDrag={onUserMove}
       onRegionChangeComplete={(r) => {
         shown.current = r;
+        setView(r);
         const zoom = zoomOf(r);
         onZoom(zoom);
         setFar(zoom < 6.5);
+        setDots(zoom < 5.5);
         onBounds?.([r.longitude - r.longitudeDelta / 2, r.latitude - r.latitudeDelta / 2, r.longitude + r.longitudeDelta / 2, r.latitude + r.latitudeDelta / 2]);
       }}
     >
       {lines.map((l) => (
         <Polyline key={l.key} coordinates={l.coords} strokeColor="rgba(19,108,53,0.45)" strokeWidth={3} />
       ))}
-      {(vehicles.features as VehicleFeature[])
-        .filter((f) => f.geometry?.type === "Point" && f.properties?.deviceId)
-        .map((f) => {
-          const on = f.properties.deviceId === selectedId;
-          return (
-            <GlideMarker
-              key={f.properties.deviceId}
-              id={f.properties.deviceId}
-              lat={f.geometry.coordinates[1]!}
-              lng={f.geometry.coordinates[0]!}
-              rot={top ? (f.properties.rot ?? 0) : 0}
-              image={MAP_ICONS[f.properties.pin]}
-              shape={top ? "top" : isPin ? "pin" : "round"}
-              color={f.properties.color ?? colors.primary}
-              selected={on}
-              bubble={on ? (bubble ?? null) : null}
-              onSelect={onSelect}
-            />
-          );
-        })}
+      {placed.singles.map((f) => {
+        const on = f.properties.deviceId === selectedId;
+        return (
+          <GlideMarker
+            key={f.properties.deviceId}
+            id={f.properties.deviceId}
+            lat={f.geometry.coordinates[1]!}
+            lng={f.geometry.coordinates[0]!}
+            rot={top ? (f.properties.rot ?? 0) : 0}
+            image={MAP_ICONS[f.properties.pin]}
+            shape={top ? "top" : isPin ? "pin" : "round"}
+            color={f.properties.color ?? colors.primary}
+            selected={on}
+            dot={dots && !on}
+            bubble={on && !dots ? (bubble ?? null) : null}
+            onSelect={onSelect}
+          />
+        );
+      })}
+      {placed.groups.map((g) => (
+        <Marker
+          key={g.key}
+          coordinate={{ latitude: g.lat, longitude: g.lng }}
+          anchor={{ x: 0.5, y: 0.5 }}
+          tracksViewChanges={false}
+          onPress={(e) => {
+            e.stopPropagation();
+            // Open the group: zoom in until its vehicles separate.
+            const r = shown.current;
+            const span = (r?.longitudeDelta ?? 10) / 4;
+            map.current?.animateToRegion({ latitude: g.lat, longitude: g.lng, longitudeDelta: span, latitudeDelta: span * (height / width) }, 500);
+          }}
+        >
+          <View style={styles.cluster} accessibilityLabel={`${g.count} vehicles here`}>
+            <Text style={styles.clusterText}>{g.count}</Text>
+          </View>
+        </Marker>
+      ))}
     </MapView>
   );
 });
@@ -181,6 +264,7 @@ const GlideMarker = memo(function GlideMarker({
   shape,
   color,
   selected,
+  dot,
   bubble,
   onSelect
 }: {
@@ -192,6 +276,7 @@ const GlideMarker = memo(function GlideMarker({
   shape: "top" | "pin" | "round";
   color: string;
   selected: boolean;
+  dot: boolean;
   bubble: string | null;
   onSelect: (deviceId: string) => void;
 }) {
@@ -226,8 +311,8 @@ const GlideMarker = memo(function GlideMarker({
       // AnimatedRegion is what MarkerAnimated moves; its type asks for a plain coordinate.
       coordinate={at as unknown as { latitude: number; longitude: number }}
       // Apple Maps centres the view on the point; a pin has to stand on it instead.
-      anchor={shape === "pin" ? { x: 0.5, y: 1 } : { x: 0.5, y: 0.5 }}
-      centerOffset={shape === "pin" ? { x: 0, y: -size.height / 2 } : { x: 0, y: bubble ? -17 : 0 }}
+      anchor={shape === "pin" && !dot ? { x: 0.5, y: 1 } : { x: 0.5, y: 0.5 }}
+      centerOffset={shape === "pin" && !dot ? { x: 0, y: -size.height / 2 } : { x: 0, y: bubble ? -17 : 0 }}
       zIndex={selected ? 10 : 1}
       tracksViewChanges
       onPress={(e) => {
@@ -242,10 +327,14 @@ const GlideMarker = memo(function GlideMarker({
             <Text style={styles.bubbleText} numberOfLines={1}>{bubble}</Text>
           </View>
         ) : null}
+        {dot ? (
+          <View style={[styles.dot, { backgroundColor: color }]} />
+        ) : (
         <View style={[styles.box, { width: box, height: box }]}>
           {shape !== "pin" ? <View style={[styles.glow, { width: box, height: box, borderRadius: box / 2, backgroundColor: color, opacity: selected ? 0.28 : 0.14 }]} /> : null}
           {image ? <Animated.Image source={image} style={[size, { transform: [{ rotate: spin }, { scale: selected ? 1.2 : 1 }] }]} resizeMode="contain" /> : null}
         </View>
+        )}
       </View>
     </MarkerAnimated>
   );
@@ -255,6 +344,9 @@ const styles = themed(() => ({
   stack: { alignItems: "center" as const },
   box: { alignItems: "center" as const, justifyContent: "center" as const },
   glow: { position: "absolute" as const },
+  dot: { width: 14, height: 14, borderRadius: 7, borderWidth: 2.5, borderColor: "#ffffff", ...elevation.sm },
+  cluster: { minWidth: 34, height: 34, paddingHorizontal: 8, borderRadius: 17, borderWidth: 3, borderColor: "#ffffff", backgroundColor: colors.primary, alignItems: "center" as const, justifyContent: "center" as const, ...elevation.md },
+  clusterText: { fontSize: 13, fontWeight: "800" as const, color: "#ffffff", fontVariant: ["tabular-nums" as const] },
   bubble: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5, height: 28, marginBottom: 6, paddingHorizontal: 10, borderRadius: 14, backgroundColor: colors.background, ...elevation.md },
   bubbleText: { fontSize: 13, lineHeight: 17, fontWeight: "800" as const, color: colors.foreground, fontVariant: ["tabular-nums" as const] }
 }));
