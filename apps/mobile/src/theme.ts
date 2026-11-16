@@ -18,14 +18,14 @@ const light = {
   primaryDark: "#1e3a8a",
   primaryForeground: "#ffffff",
   primarySoft: "#dde7fb",
-  success: "#136c35",
-  successSoft: "#c8e8d2",
+  success: "#0f5c2c",
+  successSoft: "#b4e0c2",
   warning: "#b45309",
   warningSoft: "#fdebcf",
   danger: "#c42b2b",
-  dangerSoft: "#f6cdcd",
+  dangerSoft: "#f4bcbc",
   info: "#0369a1",
-  offline: "#4b5563"
+  offline: "#414b59"
 };
 
 /** Dark palette. Status colours are brighter so they stay readable on a dark surface. */
@@ -86,13 +86,13 @@ export const colors: typeof light = { ...(isDark ? dark : light) };
 
 /** Brighter twins of the fixed status and alert colours, for dark surfaces. */
 const BRIGHT: Record<string, string> = {
-  "#136c35": "#4ade80",
-  "#a3470a": "#fb923c",
-  "#ad1f1f": "#f87171",
-  "#6526d1": "#a78bfa",
+  "#0f5c2c": "#4ade80",
+  "#8f3d06": "#fb923c",
+  "#9c1818": "#f87171",
+  "#5a1fc0": "#a78bfa",
   "#b45309": "#fbbf24",
   "#0369a1": "#38bdf8",
-  "#4b5563": "#9ca3af",
+  "#414b59": "#9ca3af",
   "#5b6472": "#9ca3af",
   "#c42b2b": "#f87171",
   "#1d4ed8": "#8fb0ff"

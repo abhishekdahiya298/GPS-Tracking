@@ -138,7 +138,7 @@ export default function HomeScreen() {
                 const meta = item.key === "offline" ? STATE_META.offline : STATE_META.idle;
                 return (
                   <PressableScale key={item.key} onPress={() => router.navigate({ pathname: "/(tabs)/vehicles", params: { filter: "offline" } })} scaleTo={0.97} style={styles.needCard} accessibilityRole="button" accessibilityLabel={`${item.title}. ${item.detail}`}>
-                    {isDark ? null : <LinearGradient colors={[colors.background, meta.soft]} locations={[0.35, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+                    {isDark ? null : <LinearGradient colors={[colors.background, meta.soft]} locations={[0.1, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
                     <View style={[styles.edge, { backgroundColor: ink(meta.color) }]} />
                     <View style={styles.needTop}>
                       <IconWell icon={item.key === "offline" ? "cloud-offline-outline" : "hourglass-outline"} color={meta.color} soft={meta.soft} box={34} />
@@ -167,7 +167,7 @@ export default function HomeScreen() {
                 const detail = alertDetail(e, units.fmtSpeed);
                 return (
                   <PressableScale key={e.id} onPress={() => router.push({ pathname: "/alert/[id]", params: { id: String(e.id) } })} scaleTo={0.985} style={styles.alertCard} accessibilityRole="button">
-                    {isDark ? null : <LinearGradient colors={[colors.background, sev.soft]} locations={[0.4, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+                    {isDark ? null : <LinearGradient colors={[colors.background, sev.soft]} locations={[0.1, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
                     <View style={[styles.edge, { backgroundColor: ink(sev.color) }]} />
                     <IconWell icon={meta.icon} color={meta.color} soft={meta.soft} box={40} />
                     <View style={styles.flex}>

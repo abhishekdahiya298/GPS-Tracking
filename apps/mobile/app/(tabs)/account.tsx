@@ -176,9 +176,9 @@ export default function AccountScreen() {
         <FadeInUp index={3}>
           <SectionLabel text="Account" />
           <Card style={styles.group}>
-            <LinkRow icon="lock-closed-outline" label="Change password" onPress={() => router.push("/password")} color="#6526d1" soft="#dccdfa" />
-            <LinkRow icon="help-circle-outline" label="Help" onPress={() => void Linking.openURL("https://www.riogps.com/help")} color="#136c35" soft="#c8e8d2" />
-            <LinkRow icon="shield-checkmark-outline" label="Privacy policy" onPress={() => void Linking.openURL("https://www.riogps.com/privacy")} color="#a3470a" soft="#fcd9b2" last />
+            <LinkRow icon="lock-closed-outline" label="Change password" onPress={() => router.push("/password")} color="#5a1fc0" soft="#d0bbf9" />
+            <LinkRow icon="help-circle-outline" label="Help" onPress={() => void Linking.openURL("https://www.riogps.com/help")} color="#0f5c2c" soft="#b4e0c2" />
+            <LinkRow icon="shield-checkmark-outline" label="Privacy policy" onPress={() => void Linking.openURL("https://www.riogps.com/privacy")} color="#8f3d06" soft="#fbcd9b" last />
           </Card>
         </FadeInUp>
 

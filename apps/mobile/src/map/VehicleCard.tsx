@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { StatusPill, VehiclePicture, type IconName } from "@/components/kit";
 import { PressableScale } from "@/components/motion";
 import { STATE_META, compassPoint, displayName, fleetState, sheetFacts, type FleetDevice, type FleetState } from "@/fleet/model";
@@ -72,6 +73,7 @@ export function VehicleCarousel({
     <View style={styles.row}>
       {prev ? <SidePeek side="left" device={prev} onPress={() => onStep(-1)} /> : <View style={styles.gap} />}
       <View style={styles.card}>
+        {isDark ? null : <LinearGradient colors={[colors.background, softTint(meta.color, meta.soft)]} locations={[0.2, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
         <View style={[styles.edge, { backgroundColor: meta.color }]} />
         <View style={styles.head}>
           <VehiclePicture type={device.vehicle?.type} state={state} width={52} height={38} />

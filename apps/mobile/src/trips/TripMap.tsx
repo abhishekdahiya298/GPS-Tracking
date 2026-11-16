@@ -23,9 +23,9 @@ export default function TripMap({ track, at, index = 0, kind = "truck" }: { trac
     () => ({
       type: "FeatureCollection",
       features: [
-        ...trackStops(track).map((s) => ({ type: "Feature" as const, properties: { color: "#a3470a", label: "P", stop: 1 }, geometry: { type: "Point" as const, coordinates: s.at } })),
-        { type: "Feature", properties: { color: "#136c35", label: "A" }, geometry: { type: "Point", coordinates: track.at[0]! } },
-        { type: "Feature", properties: { color: "#ad1f1f", label: "B" }, geometry: { type: "Point", coordinates: track.at[track.at.length - 1]! } }
+        ...trackStops(track).map((s) => ({ type: "Feature" as const, properties: { color: "#8f3d06", label: "P", stop: 1 }, geometry: { type: "Point" as const, coordinates: s.at } })),
+        { type: "Feature", properties: { color: "#0f5c2c", label: "A" }, geometry: { type: "Point", coordinates: track.at[0]! } },
+        { type: "Feature", properties: { color: "#9c1818", label: "B" }, geometry: { type: "Point", coordinates: track.at[track.at.length - 1]! } }
       ]
     }),
     [track]
