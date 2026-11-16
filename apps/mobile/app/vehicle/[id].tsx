@@ -4,7 +4,7 @@ import { Linking, Platform, ScrollView, Share, StyleSheet, Text, View } from "re
 import { AddressCard, Card, EmptyState, IconWell, StatusPill, VehiclePicture, type IconName } from "@/components/kit";
 import { FadeInUp, PressableScale } from "@/components/motion";
 import { useFleet, useNow } from "@/fleet/FleetProvider";
-import { STATE_META, coordsText, displayName, fleetState, freshnessLine, statusLine, timeAgo } from "@/fleet/model";
+import { STATE_META, coordsText, displayName, fleetState, freshnessLine, statusLine, timeAgo, typeLabel } from "@/fleet/model";
 import { useBottomInset } from "@/layout";
 import { MiniFleetMap } from "@/map/MiniFleetMap";
 import { useAddress } from "@/map/useAddress";
@@ -77,7 +77,7 @@ export default function VehicleScreen() {
             <View style={styles.flex}>
               <Text style={styles.name} numberOfLines={2}>{name}</Text>
               <Text style={type.small} numberOfLines={1}>
-                {[kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : null, device.vehicle?.licensePlate].filter(Boolean).join(" · ") || statusLine(device, units.fmtSpeed, now)}
+                {[typeLabel(kind), device.vehicle?.licensePlate].filter(Boolean).join(" · ") || statusLine(device, units.fmtSpeed, now)}
               </Text>
               <View style={styles.pillLine}>
                 <StatusPill state={state} compact />
@@ -113,7 +113,7 @@ export default function VehicleScreen() {
         <Card style={styles.rows}>
           <Row icon="location-outline" label="Last position" value={loc ? new Date(loc.recordedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "None yet"} />
           <Row icon="pulse-outline" color={STATE_META.moving.color} soft={STATE_META.moving.soft} label="Tracker last heard" value={device.lastSeenAt ? timeAgo(device.lastSeenAt, now) : "Never"} last={!kind && !device.model} />
-          {kind ? <Row icon="car-outline" color={STATE_META.parked.color} soft={STATE_META.parked.soft} label="Type" value={kind.charAt(0).toUpperCase() + kind.slice(1)} last={!device.model} /> : null}
+          {kind ? <Row icon="car-outline" color={STATE_META.parked.color} soft={STATE_META.parked.soft} label="Type" value={typeLabel(kind) ?? kind} last={!device.model} /> : null}
           {device.model ? <Row icon="hardware-chip-outline" color={STATE_META.offline.color} soft={STATE_META.offline.soft} label="Tracker" value={device.model} last /> : null}
         </Card>
       </FadeInUp>

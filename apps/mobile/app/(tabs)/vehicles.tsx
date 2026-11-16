@@ -11,7 +11,7 @@ import { colors, space, themed } from "@/theme";
 
 type Kind = "all" | "truck" | "trailer" | "asset";
 /** Anything with an engine (truck, semi, van, pickup, car, bus) is a vehicle; trailers on their own; equipment and other are assets. */
-const kindOf = (type: string | null | undefined): Exclude<Kind, "all"> => (type === "trailer" ? "trailer" : type === "equipment" || type === "other" || !type ? "asset" : "truck");
+const kindOf = (type: string | null | undefined): Exclude<Kind, "all"> => (type === "trailer" ? "trailer" : type === "equipment" || type === "excavator" || type === "tractor" || type === "other" || !type ? "asset" : "truck");
 
 export default function VehiclesScreen() {
   const router = useRouter();

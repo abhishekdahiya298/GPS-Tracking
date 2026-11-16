@@ -47,7 +47,7 @@ const pixelRatio = () => Math.min(2, typeof window !== "undefined" ? window.devi
 
 /** Top-down silhouettes, drawn on a 24 x 48 grid pointing up (north). */
 type Shape = "car" | "van" | "truck" | "trailer";
-export const SHAPE_OF: Record<VehicleType, Shape> = { car: "car", pickup: "car", other: "car", van: "van", bus: "truck", truck: "truck", semi: "truck", equipment: "truck", trailer: "trailer" };
+export const SHAPE_OF: Record<VehicleType, Shape> = { car: "car", pickup: "car", other: "car", van: "van", bus: "truck", truck: "truck", semi: "truck", equipment: "truck", trailer: "trailer", box_truck: "truck", tanker: "truck", dump_truck: "truck", mixer: "truck", garbage_truck: "truck", school_bus: "truck", excavator: "truck", tractor: "truck", motorcycle: "car" };
 const SPRITE_W = 26;
 const SPRITE_H = 52;
 
