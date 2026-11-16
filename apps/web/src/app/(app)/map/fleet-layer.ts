@@ -287,7 +287,7 @@ export class FleetLayer {
     if (!m.getSource(SRC)) return;
     this.loadIcons();
     if (m.getLayer("fleet-icons")) {
-      m.setLayoutProperty("fleet-icons", "icon-anchor", prefs.style === "pin" ? "bottom" : "center");
+      m.setLayoutProperty("fleet-icons", "icon-anchor", prefs.style === "pin" || prefs.style === "photo" ? "bottom" : "center");
       m.setLayoutProperty("fleet-icons", "icon-rotate", prefs.style === "top" ? ["to-number", ["get", "rot"]] : 0);
       m.setLayoutProperty("fleet-icons", "icon-rotation-alignment", prefs.style === "top" ? "map" : "viewport");
     }
@@ -446,7 +446,7 @@ export class FleetLayer {
         layout: {
           "icon-image": ["coalesce", ["image", ["get", "pin"]], ["image", ["concat", "pin-", ["get", "type"], "-", ["get", "state"]]]] as never,
           "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.8, 14, 0.9, 18, 1],
-          "icon-anchor": this.prefs.style === "pin" ? "bottom" : "center",
+          "icon-anchor": this.prefs.style === "pin" || this.prefs.style === "photo" ? "bottom" : "center",
           "icon-rotate": this.prefs.style === "top" ? ["to-number", ["get", "rot"]] : 0,
           "icon-rotation-alignment": this.prefs.style === "top" ? "map" : "viewport",
           "icon-allow-overlap": true,

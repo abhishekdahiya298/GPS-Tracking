@@ -139,10 +139,10 @@ export const FALLBACK_VIEW = { center: [-98.6, 39.8] as [number, number], zoom: 
  * eight heading arrows (0 = north, 2 = east …), so the map and the app always look alike.
  */
 /** How vehicles are drawn: 3D pin, round or square badge, or top-down (turns with the heading). */
-export type IconStyle = "pin" | "circle" | "square" | "top";
+export type IconStyle = "photo" | "pin" | "circle" | "square" | "top";
 export type IconColor = "status" | "type";
 export interface IconPrefs { style: IconStyle; color: IconColor }
-export const DEFAULT_ICON_PREFS: IconPrefs = { style: "top", color: "status" };
+export const DEFAULT_ICON_PREFS: IconPrefs = { style: "photo", color: "status" };
 
 /** Backend vehicle type → the picture on the icon (same rule as the phone app). */
 export function iconKind(type: string | null | undefined): string {
@@ -182,7 +182,15 @@ export function iconName(type: string | null | undefined, state: MapState, prefs
     const k = iconKind(type);
     return `top-${k === "truck" || k === "bus" || k === "equipment" ? "truck" : k === "trailer" ? "trailer" : "car"}-${state}`;
   }
+  if (prefs.style === "photo") return `photo-${photoKind(type)}-${state}`;
   return `${prefs.style}-${prefs.color}-${iconKind(type)}-${state}`;
+}
+
+/** Types with their own photo pin (the vehicle's 3D picture in a ring of its status colour). */
+const PHOTO_KINDS = ["truck", "semi", "trailer", "car", "van", "pickup", "box_truck", "tanker", "dump_truck", "mixer", "garbage_truck", "bus", "school_bus"];
+export function photoKind(type: string | null | undefined): string {
+  if (type && PHOTO_KINDS.includes(type)) return type;
+  return type === "motorcycle" ? "car" : "truck";
 }
 
 const KINDS = ["truck", "trailer", "van", "pickup", "car", "bus", "equipment", "asset"];
@@ -190,5 +198,6 @@ const STATES: MapState[] = ["moving", "idle", "stopped", "parked", "offline"];
 /** Every icon one style draws, for loading onto the map. */
 export function iconNames(prefs: IconPrefs): string[] {
   if (prefs.style === "top") return ["truck", "trailer", "car", "tractor"].flatMap((k) => STATES.map((s) => `top-${k}-${s}`));
+  if (prefs.style === "photo") return PHOTO_KINDS.flatMap((k) => STATES.map((s) => `photo-${k}-${s}`));
   return KINDS.flatMap((k) => STATES.map((s) => `${prefs.style}-${prefs.color}-${k}-${s}`));
 }

@@ -8,6 +8,7 @@ import { iconName, type IconStyle } from "./model";
 import { MAP_ICONS } from "./sprites";
 
 const STYLES: ReadonlyArray<{ value: IconStyle; label: string }> = [
+  { value: "photo", label: "Photo pin" },
   { value: "top", label: "Live 3D" },
   { value: "pin", label: "3D pin" },
   { value: "circle", label: "Circle" },
@@ -37,7 +38,7 @@ export function MapIconPicker() {
               accessibilityState={{ selected: on }}
               accessibilityLabel={s.label}
             >
-              <View style={styles.preview}>{img ? <Image source={img} style={s.value === "top" ? styles.top : s.value === "pin" ? styles.pin : styles.round} resizeMode="contain" /> : null}</View>
+              <View style={styles.preview}>{img ? <Image source={img} style={s.value === "top" ? styles.top : s.value === "pin" || s.value === "photo" ? styles.pin : styles.round} resizeMode="contain" /> : null}</View>
               <Text style={[styles.label, on && styles.labelOn]} numberOfLines={1}>{s.label}</Text>
             </PressableScale>
           );

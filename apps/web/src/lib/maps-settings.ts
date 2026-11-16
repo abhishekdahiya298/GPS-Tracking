@@ -17,7 +17,7 @@ export type AddressProvider = (typeof ADDRESS_PROVIDERS)[number];
 export const MAP_STYLES = ["streets", "light", "dark"] as const;
 export type MapStyleChoice = (typeof MAP_STYLES)[number];
 
-export const ICON_STYLES = ["pin", "circle", "square", "top"] as const;
+export const ICON_STYLES = ["photo", "pin", "circle", "square", "top"] as const;
 export const ICON_COLORS = ["status", "type"] as const;
 /** Map drawn in the phone app: OpenStreetMap (free everywhere) or the phone's own (Apple Maps on iPhone, free; Google Maps on Android when the build has a key). */
 export const MOBILE_MAPS = ["osm", "native"] as const;
@@ -31,13 +31,13 @@ export interface MapsSettings {
   mobileMap: (typeof MOBILE_MAPS)[number];
 }
 
-export const DEFAULT_MAPS_SETTINGS: MapsSettings = { addressProvider: "off", mapStyle: "streets", iconStyle: "top", iconColor: "status", mobileMap: "osm" };
+export const DEFAULT_MAPS_SETTINGS: MapsSettings = { addressProvider: "off", mapStyle: "streets", iconStyle: "photo", iconColor: "status", mobileMap: "osm" };
 
 export const MapsSettingsSchema = z.object({
   addressProvider: z.enum(ADDRESS_PROVIDERS),
   mapStyle: z.enum(MAP_STYLES),
   // Saved before these existed: fall back to the defaults instead of losing the rest.
-  iconStyle: z.enum(ICON_STYLES).default("top"),
+  iconStyle: z.enum(ICON_STYLES).default("photo"),
   iconColor: z.enum(ICON_COLORS).default("status"),
   mobileMap: z.enum(MOBILE_MAPS).default("osm")
 });

@@ -100,7 +100,7 @@ export default function LiveMap() {
   const prefs = useIconPrefs();
   const engine = useMapEngine();
   const images = useMemo(() => iconImages(iconPrefix(prefs)), [prefs]);
-  const isPin = prefs.style === "pin";
+  const isPin = prefs.style === "pin" || prefs.style === "photo";
   const { vehicles, trails } = useGlide(visible, units.fmtSpeed, prefs, selectedId);
   const zoneData = useMemo(() => zoneFeatures(zones), [zones]);
   const counts = useMemo(() => countByFilter(devices), [devices]);

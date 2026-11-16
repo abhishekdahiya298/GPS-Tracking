@@ -18,7 +18,7 @@ export interface CameraLike {
   fitBounds(b: [number, number, number, number], o?: { padding?: { top: number; right: number; bottom: number; left: number }; duration?: number }): void;
 }
 
-type VehicleFeature = GeoJSON.Feature<GeoJSON.Point, { deviceId: string; pin: string; rot?: number; name?: string; color?: string }>;
+type VehicleFeature = GeoJSON.Feature<GeoJSON.Point, { deviceId: string; pin: string; rot?: number; name?: string; sub?: string; color?: string }>;
 
 /** Which map to draw: the street map (default) or satellite photos. */
 export type NativeMapType = "street" | "satellite";
@@ -30,6 +30,8 @@ const GLIDE_MS = 1000;
 const MAX_MARKERS = 120;
 /** Zoomed far out, vehicles become dots only when more than this many are in view. */
 const DOTS_FROM = 25;
+/** Name tags beside photo pins only while no more than this many vehicles are in view. */
+const LABELS_UP_TO = 30;
 
 const zoomOf = (r: Region) => Math.log2(360 / Math.max(r.longitudeDelta, 1e-6));
 
@@ -59,7 +61,8 @@ export const NativeLiveMap = forwardRef<
 >(function NativeLiveMap({ vehicles, trails, selectedId, prefs, bottomInset, topInset, initial, globe = false, mapType = "street", bubble, onBounds, onSelect, onMapPress, onReady, onZoom, onUserMove }, ref) {
   const map = useRef<MapView>(null);
   const { width, height } = useWindowDimensions();
-  const isPin = prefs.style === "pin";
+  const isPin = prefs.style === "pin" || prefs.style === "photo";
+  const photo = prefs.style === "photo";
   const top = prefs.style === "top";
   // Started as the globe? Fixed at first render so the camera props never reset the view.
   const startedAsGlobe = useRef(globe && Platform.OS === "ios").current;
@@ -165,6 +168,8 @@ export const NativeLiveMap = forwardRef<
   // Dots only when they help: far out AND enough vehicles in view that pictures would pile up.
   // A small fleet keeps its vehicle pictures at every zoom.
   const dots = zoomedOut && placed.singles.length > DOTS_FROM;
+  // Photo pins carry a name tag beside them (like Life360) while there is room for it.
+  const showLabels = photo && !dots && !far && placed.singles.length <= LABELS_UP_TO;
 
   const lines = useMemo(
     () =>
@@ -222,7 +227,8 @@ export const NativeLiveMap = forwardRef<
             lng={f.geometry.coordinates[0]!}
             rot={top ? (f.properties.rot ?? 0) : 0}
             image={MAP_ICONS[f.properties.pin]}
-            shape={top ? "top" : isPin ? "pin" : "round"}
+            shape={top ? "top" : photo ? "photo" : isPin ? "pin" : "round"}
+            label={showLabels && !on ? { name: f.properties.name ?? "", line: f.properties.sub ?? "" } : null}
             color={f.properties.color ?? colors.primary}
             selected={on}
             dot={dots && !on}
@@ -255,7 +261,7 @@ export const NativeLiveMap = forwardRef<
 });
 
 // Life360-sized: big enough to read the vehicle and its colour, small enough not to cover the road.
-const SIZE = { top: { width: 28, height: 44 }, pin: { width: 34, height: 42 }, round: { width: 36, height: 40 } } as const;
+const SIZE = { top: { width: 28, height: 44 }, photo: { width: 44, height: 49 }, pin: { width: 34, height: 42 }, round: { width: 36, height: 40 } } as const;
 
 /**
  * One vehicle on the phone's own map. It glides from its last reported position to the new one
@@ -273,6 +279,7 @@ const GlideMarker = memo(function GlideMarker({
   selected,
   dot,
   bubble,
+  label,
   onSelect
 }: {
   id: string;
@@ -280,7 +287,8 @@ const GlideMarker = memo(function GlideMarker({
   lng: number;
   rot: number;
   image: ImageSourcePropType | undefined;
-  shape: "top" | "pin" | "round";
+  shape: "top" | "photo" | "pin" | "round";
+  label?: { name: string; line: string } | null;
   color: string;
   selected: boolean;
   dot: boolean;
@@ -310,7 +318,10 @@ const GlideMarker = memo(function GlideMarker({
   }, [rot, turn]);
 
   const size = SIZE[shape];
+  // Pins stand on their point; the others sit centred on it.
+  const standing = shape === "pin" || shape === "photo";
   const box = Math.max(size.width, size.height) + (selected ? 24 : 8);
+  const frame = standing ? { width: size.width, height: size.height } : { width: box, height: box };
   const spin = turn.interpolate({ inputRange: [-360, 360], outputRange: ["-360deg", "360deg"], extrapolate: "extend" });
   return (
     <MarkerAnimated
@@ -318,8 +329,8 @@ const GlideMarker = memo(function GlideMarker({
       // AnimatedRegion is what MarkerAnimated moves; its type asks for a plain coordinate.
       coordinate={at as unknown as { latitude: number; longitude: number }}
       // Apple Maps centres the view on the point; a pin has to stand on it instead.
-      anchor={shape === "pin" && !dot ? { x: 0.5, y: 1 } : { x: 0.5, y: 0.5 }}
-      centerOffset={shape === "pin" && !dot ? { x: 0, y: -size.height / 2 } : { x: 0, y: bubble ? -17 : 0 }}
+      anchor={standing && !dot ? { x: 0.5, y: 1 } : { x: 0.5, y: 0.5 }}
+      centerOffset={standing && !dot ? { x: 0, y: -size.height / 2 } : { x: 0, y: bubble ? -17 : 0 }}
       zIndex={selected ? 10 : 1}
       tracksViewChanges
       onPress={(e) => {
@@ -337,8 +348,14 @@ const GlideMarker = memo(function GlideMarker({
         {dot ? (
           <View style={[styles.dot, { backgroundColor: color }]} />
         ) : (
-        <View style={[styles.box, { width: box, height: box }]}>
-          {shape !== "pin" ? <View style={[styles.glow, { width: box, height: box, borderRadius: box / 2, backgroundColor: color, opacity: selected ? 0.28 : 0.14 }]} /> : null}
+        <View style={[styles.box, frame]}>
+          {!standing ? <View style={[styles.glow, { width: box, height: box, borderRadius: box / 2, backgroundColor: color, opacity: selected ? 0.28 : 0.14 }]} /> : null}
+          {label ? (
+            <View style={[styles.tag, { left: size.width - 6 }]}>
+              <Text style={styles.tagName} numberOfLines={1}>{label.name}</Text>
+              {label.line ? <Text style={[styles.tagLine, { color }]} numberOfLines={1}>{label.line}</Text> : null}
+            </View>
+          ) : null}
           {image ? <Animated.Image source={image} style={[size, { transform: [{ rotate: spin }, { scale: selected ? 1.25 : 1 }] }]} resizeMode="contain" /> : null}
         </View>
         )}
@@ -354,6 +371,9 @@ const styles = themed(() => ({
   dot: { width: 14, height: 14, borderRadius: 7, borderWidth: 2.5, borderColor: "#ffffff", ...elevation.sm },
   cluster: { minWidth: 34, height: 34, paddingHorizontal: 8, borderRadius: 17, borderWidth: 3, borderColor: "#ffffff", backgroundColor: colors.primary, alignItems: "center" as const, justifyContent: "center" as const, ...elevation.md },
   clusterText: { fontSize: 13, fontWeight: "800" as const, color: "#ffffff", fontVariant: ["tabular-nums" as const] },
+  tag: { position: "absolute" as const, top: 4, maxWidth: 150, paddingLeft: 10, paddingRight: 9, paddingVertical: 3, borderTopRightRadius: 12, borderBottomRightRadius: 12, borderTopLeftRadius: 4, borderBottomLeftRadius: 4, backgroundColor: colors.background, ...elevation.sm },
+  tagName: { fontSize: 12, lineHeight: 15, fontWeight: "800" as const, color: colors.foreground },
+  tagLine: { fontSize: 11, lineHeight: 14, fontWeight: "700" as const },
   bubble: { flexDirection: "row" as const, alignItems: "center" as const, gap: 5, height: 28, marginBottom: 6, paddingHorizontal: 10, borderRadius: 14, backgroundColor: colors.background, ...elevation.md },
   bubbleText: { fontSize: 13, lineHeight: 17, fontWeight: "800" as const, color: colors.foreground, fontVariant: ["tabular-nums" as const] }
 }));
