@@ -16,6 +16,7 @@ import { listEvents } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { getServerEnv } from "@/lib/env";
 import { FLEET_STATE_META, fleetState, type FleetState } from "@/lib/fleet-status";
+import { isFixStale } from "@rio-gps/core/freshness";
 import { durationMin, relativeTime } from "@/lib/format";
 import { listCurrentLocations, type CurrentDeviceLocation } from "@/lib/locations";
 import { dueCounts } from "@/lib/maintenance";
@@ -115,7 +116,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     </section>
   ) : null;
 
-  const states = devices.map((d) => ({ d, s: fleetState(d) }));
+  const fixOpts = { nowMs: now.getTime(), maxFixAgeSeconds: getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS };
+  // Online but the newest position is old: say so instead of showing a past speed as current.
+  const staleFix = (d: CurrentDeviceLocation) => d.connectivity === "online" && !!d.location && isFixStale(d.location.recordedAt, fixOpts.nowMs, fixOpts.maxFixAgeSeconds);
+  const states = devices.map((d) => ({ d, s: fleetState(d, fixOpts) }));
   const count = (s: FleetState) => states.filter((x) => x.s === s).length;
   const firstName = (user.name || "").split(" ")[0];
   // Moving, Idling, Stopped, Offline, and Alerts for people who can see them.
@@ -238,7 +242,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? d.name ?? d.model ?? "Device"}</span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {d.location && s !== "offline" && s !== "parked" ? `${u.fmtSpeed(d.location.speedKph)} · engine ${d.location.ignition === true ? "on" : d.location.ignition === false ? "off" : "unknown"} · last update ` : "last seen "}
+                        {staleFix(d) ? `No current GPS · last fix ${relativeTime(d.location!.recordedAt, now.getTime(), rc.timeZone)} · last report ` : d.location && s !== "offline" && s !== "parked" ? `${u.fmtSpeed(d.location.speedKph)} · engine ${d.location.ignition === true ? "on" : d.location.ignition === false ? "off" : "unknown"} · last update ` : "last seen "}
                         {relativeTime(d.lastSeenAt, now.getTime(), rc.timeZone)}
                       </span>
                     </span>

@@ -2,6 +2,7 @@
  * Pure, framework-free helpers for the live map (unit-tested). Nothing here
  * changes GPS data: interpolation only produces display coordinates.
  */
+import { isFixStale } from "@rio-gps/core/freshness";
 import { addDays, dateFormatter, startOfLocalDay } from "@rio-gps/core/timezones";
 import type { CurrentDeviceLocation, LocationPoint } from "@/lib/locations";
 
@@ -31,8 +32,20 @@ export function mapState(d: Pick<CurrentDeviceLocation, "lastSeenAt" | "location
     // A trailer's tracker is powered by the tractor: silence after reporting means unhooked.
     return d.lastSeenAt && d.vehicle?.type === "trailer" ? "parked" : "offline";
   }
+  // Online, but the newest position is old (backlog upload, or no GNSS fix): its speed and
+  // ignition are history, so the vehicle is never shown as Moving or Idling from it.
+  if (hasStaleFix(d, nowMs, offlineSeconds)) return "stopped";
   if ((d.location?.speedKph ?? 0) >= MOVING_KPH) return "moving";
   return d.location?.ignition === true ? "idle" : "stopped";
+}
+
+/**
+ * True when the tracker is reporting (online) but its newest GPS position is older than the
+ * offline threshold: the map shows "No current GPS" with the fix's age instead of a status.
+ */
+export function hasStaleFix(d: Pick<CurrentDeviceLocation, "lastSeenAt" | "location">, nowMs: number, offlineSeconds: number): boolean {
+  if (!d.location || !d.lastSeenAt || nowMs - Date.parse(d.lastSeenAt) > offlineSeconds * 1000) return false;
+  return isFixStale(d.location.recordedAt, nowMs, offlineSeconds);
 }
 
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;

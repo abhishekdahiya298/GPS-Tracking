@@ -25,5 +25,11 @@ describe("format", () => {
     expect(fleetState({ connectivity: "offline", location: { speedKph: 0, ignition: false }, vehicle: { type: "trailer" } })).toBe("parked");
     expect(fleetState({ connectivity: "offline", location: { speedKph: 0, ignition: false }, vehicle: { type: "truck" } })).toBe("offline");
     expect(fleetState({ connectivity: "never_seen", location: null, vehicle: { type: "trailer" } })).toBe("never_seen");
+    // Online, but uploading a two-day-old backlog record at 79 km/h: not "Moving" now.
+    const nowMs = Date.parse("2026-11-18T17:00:00Z");
+    const backlog = { speedKph: 79, ignition: true, recordedAt: "2026-11-16T17:54:00Z" };
+    expect(fleetState({ connectivity: "online", location: backlog }, { nowMs })).toBe("stopped");
+    expect(fleetState({ connectivity: "online", location: { ...backlog, recordedAt: "2026-11-18T16:59:00Z" } }, { nowMs })).toBe("moving");
+    expect(fleetState({ connectivity: "online", location: { ...backlog, recordedAt: "2026-11-18T16:50:00Z" } }, { nowMs, maxFixAgeSeconds: 300 })).toBe("stopped");
   });
 });

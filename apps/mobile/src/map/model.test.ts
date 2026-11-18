@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { FleetDevice } from "../fleet/model";
 import { hitchedTrailers, FOCUS_ZOOM, MAP_STYLES, focusZoom, TRAIL_POINTS, bearing, boundsOf, distanceKm, isMapStyleId, lerpLngLat, nextTrails, iconName, iconPrefix, positionOf, readTap, shapeOf, shouldAnimate, spriteName, styleUrl, toFeatures, trailFeatures, zoneFeatures, type Zone } from "./model";
+
+// Fixture positions are recorded at 2026-10-09T12:00Z; status depends on how old a fix is, so pin "now".
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(Date.parse("2026-10-09T12:00:30Z"));
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 const dev = (id: string, lat: number | null, lng: number | null, over: Partial<FleetDevice> = {}): FleetDevice => ({
   deviceId: id, model: "FTM880", name: null, deviceStatus: "active", vehicle: { id, name: `Truck ${id}`, licensePlate: null, type: "truck" }, connectivity: "online", lastSeenAt: "2026-10-09T12:00:00Z",

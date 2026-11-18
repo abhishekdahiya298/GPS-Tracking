@@ -1,3 +1,5 @@
+import { isFixStale } from "@rio-gps/core/freshness";
+
 /**
  * Fleet data as the server sends it (GET /api/v1/locations/current) and the pure logic the
  * screens share: status, search, filters, sorting and wording. No React Native imports.
@@ -38,11 +40,19 @@ export interface CurrentLocationsResponse {
 export type FleetState = "moving" | "idle" | "stopped" | "parked" | "offline" | "never_seen";
 export const MOVING_KPH = 5;
 
-export function fleetState(d: Pick<FleetDevice, "connectivity" | "location"> & { vehicle?: FleetDevice["vehicle"] }): FleetState {
+export function fleetState(d: Pick<FleetDevice, "connectivity" | "location"> & { vehicle?: FleetDevice["vehicle"] }, now: number = Date.now()): FleetState {
   if (d.connectivity === "never_seen" || !d.location) return d.connectivity === "offline" ? "offline" : "never_seen";
   if (d.connectivity !== "online") return d.vehicle?.type === "trailer" ? "parked" : "offline";
+  // Online, but the newest position is old (stored records uploading, or no GNSS fix): its speed
+  // and ignition are history, so never Moving or Idling from it. Same rule as the website.
+  if (isFixStale(d.location.recordedAt, now)) return "stopped";
   if ((d.location.speedKph ?? 0) >= MOVING_KPH) return "moving";
   return d.location.ignition === true ? "idle" : "stopped";
+}
+
+/** Reporting, but the newest GPS position is too old to say what the vehicle is doing now. */
+export function hasStaleFix(d: Pick<FleetDevice, "connectivity" | "location">, now: number = Date.now()): boolean {
+  return d.connectivity === "online" && !!d.location && isFixStale(d.location.recordedAt, now);
 }
 
 export const STATE_META: Record<FleetState, { label: string; color: string; soft: string }> = {
@@ -109,8 +119,9 @@ export function compassPoint(headingDeg: number | null): string | null {
 
 /** One line under the name: what the vehicle is doing and how fresh that is. */
 export function statusLine(d: FleetDevice, fmtSpeed: (kph: number | null) => string, now: number = Date.now()): string {
-  const state = fleetState(d);
+  const state = fleetState(d, now);
   if (state === "never_seen") return "Waiting for the first report";
+  if (hasStaleFix(d, now)) return `No current GPS · last fix ${timeAgo(d.location?.recordedAt ?? null, now)}`;
   if (state === "offline") return `Last seen ${timeAgo(d.lastSeenAt, now)}`;
   if (state === "parked") return `Unhooked · last seen ${timeAgo(d.lastSeenAt, now)}`;
   const fresh = timeAgo(d.location?.recordedAt ?? d.lastSeenAt, now);
@@ -130,8 +141,9 @@ export function coordsText(d: FleetDevice): string | null {
 
 /** How long the vehicle has been in its state, or how fresh the last report is: "Updated 30 sec ago", "Last seen 6 h ago". */
 export function freshnessLine(d: FleetDevice, now: number = Date.now()): string {
-  const state = fleetState(d);
+  const state = fleetState(d, now);
   if (state === "never_seen") return "Waiting for the first report";
+  if (hasStaleFix(d, now)) return `No current GPS · last fix ${timeAgo(d.location?.recordedAt ?? null, now)}`;
   if (state === "offline" || state === "parked") return `Last seen ${timeAgo(d.lastSeenAt, now)}`;
   return `Updated ${timeAgo(d.location?.recordedAt ?? d.lastSeenAt, now)}`;
 }
@@ -164,9 +176,18 @@ export function sheetFacts(d: FleetDevice, now: number = Date.now()): { ignition
   const l = d.location;
   const fixAge = l ? (now - new Date(l.recordedAt).getTime()) / 1000 : Infinity;
   const fresh = Number.isFinite(fixAge) && fixAge < 120;
+  if (hasStaleFix(d, now)) {
+    // The last position's ignition and motion are history: don't present them as current.
+    return {
+      ignition: "—",
+      motion: "—",
+      gps: { value: timeAgo(l!.recordedAt, now).replace(" ago", " old"), fresh: false },
+      tracker: { value: "Online", online: true }
+    };
+  }
   return {
     ignition: l?.ignition === true ? "On" : l?.ignition === false ? "Off" : "—",
-    motion: fleetState(d) === "moving" ? "Moving" : l?.motion === true ? "Moving" : l?.motion === false ? "Still" : "—",
+    motion: fleetState(d, now) === "moving" ? "Moving" : l?.motion === true ? "Moving" : l?.motion === false ? "Still" : "—",
     gps: { value: !l ? "No fix" : fresh ? "Live" : timeAgo(l.recordedAt, now).replace(" ago", " old"), fresh },
     tracker: { value: d.connectivity === "online" ? "Online" : d.connectivity === "offline" ? "Offline" : "Never seen", online: d.connectivity === "online" }
   };
@@ -174,8 +195,9 @@ export function sheetFacts(d: FleetDevice, now: number = Date.now()): { ignition
 
 /** The right side of the speed band: what the vehicle is doing, and the detail under it. */
 export function sheetHeadline(d: FleetDevice, now: number = Date.now()): { title: string; detail: string } {
-  const state = fleetState(d);
+  const state = fleetState(d, now);
   const point = compassPoint(d.location?.headingDeg ?? null);
+  if (hasStaleFix(d, now)) return { title: "No current GPS", detail: `Online · last fix ${timeAgo(d.location?.recordedAt ?? null, now)}` };
   if (state === "moving") return { title: point ? `Driving ${WORDS[point]}` : "Driving", detail: d.location?.headingDeg != null ? `Heading ${Math.round(((d.location.headingDeg % 360) + 360) % 360)}°` : freshnessLine(d, now) };
   if (state === "idle") return { title: "Engine on, standing", detail: freshnessLine(d, now) };
   if (state === "stopped") return { title: "Stopped", detail: freshnessLine(d, now) };

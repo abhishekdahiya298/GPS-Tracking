@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { compassPoint, coordsText, countByFilter, displayName, fleetState, freshnessLine, selectDevices, sheetFacts, sheetHeadline, statusLine, timeAgo, vehicleFacts, type FleetDevice } from "./model";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { compassPoint, coordsText, countByFilter, displayName, fleetState, freshnessLine, hasStaleFix, selectDevices, sheetFacts, sheetHeadline, statusLine, timeAgo, vehicleFacts, type FleetDevice } from "./model";
 
 const NOW = Date.parse("2026-10-09T12:00:00Z");
 const ago = (s: number) => new Date(NOW - s * 1000).toISOString();
@@ -17,6 +17,14 @@ function device(over: Partial<FleetDevice> & { speed?: number | null; ignition?:
     ...rest
   };
 }
+// fleetState defaults "now" to the clock: pin it to the fixtures' time.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 const fmt = (kph: number | null) => (kph === null ? "-" : `${Math.round(kph / 1.609344)} mph`);
 
 describe("fleetState (must match the web app)", () => {
@@ -137,5 +145,27 @@ describe("vehicle sheet", () => {
   it("says what the vehicle is doing", () => {
     expect(sheetHeadline(d, at)).toEqual({ title: "Driving north-east", detail: "Heading 62°" });
     expect(sheetHeadline({ ...d, location: { ...d.location!, speedKph: 0 } }, at).title).toBe("Engine on, standing");
+  });
+});
+
+describe("online tracker with an old GPS position", () => {
+  // TRAILER-203, 2026-11-18: reporting every few seconds while uploading two-day-old records at 49 mph.
+  const backlog = device({ speed: 79, ignition: true, location: { latitude: 43.02, longitude: -77.49, speedKph: 79, headingDeg: 305, altitudeM: null, ignition: true, motion: true, recordedAt: ago(2 * 86400), receivedAt: ago(4) } });
+  it("is never Moving or Idling, and says the GPS is not current", () => {
+    expect(fleetState(backlog, NOW)).toBe("stopped");
+    expect(hasStaleFix(backlog, NOW)).toBe(true);
+    expect(statusLine(backlog, fmt, NOW)).toBe("No current GPS · last fix 2 days ago");
+    expect(freshnessLine(backlog, NOW)).toBe("No current GPS · last fix 2 days ago");
+    expect(sheetHeadline(backlog, NOW).title).toBe("No current GPS");
+    const facts = sheetFacts(backlog, NOW);
+    expect(facts.ignition).toBe("—");
+    expect(facts.motion).toBe("—");
+    expect(facts.gps.fresh).toBe(false);
+    expect(facts.tracker.online).toBe(true);
+  });
+  it("an hourly record from a parked truck is still current; offline trackers stay offline", () => {
+    expect(hasStaleFix(device({ location: { ...device().location!, recordedAt: ago(55 * 60) } }), NOW)).toBe(false);
+    expect(hasStaleFix({ ...backlog, connectivity: "offline" }, NOW)).toBe(false);
+    expect(fleetState({ ...backlog, connectivity: "offline" }, NOW)).toBe("offline");
   });
 });
