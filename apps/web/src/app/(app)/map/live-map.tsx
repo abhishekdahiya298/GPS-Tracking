@@ -25,7 +25,7 @@ import { cn } from "@/lib/cn";
 import { MAP_STYLES, type MapStyleId, saveStyle, savedStyle, setBuildings3d, styleUrl } from "@/lib/map-style";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { FleetLayer, STATE_COLORS, type FleetPoint } from "./fleet-layer";
-import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, iconName, mapState, MAP_STATES, STATE_ORDER, stateBucket, type MapState } from "./fleet-model";
+import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, hasStaleFix, iconName, mapState, MAP_STATES, STATE_ORDER, stateBucket, type MapState } from "./fleet-model";
 import { useFleetStream } from "./use-fleet-stream";
 
 // Loaded on first use: most sessions never open history.
@@ -96,7 +96,7 @@ function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, 
   if (!d.location) return null;
   const state = mapState(d, now, offlineSeconds);
   return {
-    sub: state === "moving" ? (fmtSpeed && d.location.speedKph !== null ? fmtSpeed(d.location.speedKph) : "") : SUB[state],
+    sub: hasStaleFix(d, now, offlineSeconds) ? "No GPS" : state === "moving" ? (fmtSpeed && d.location.speedKph !== null ? fmtSpeed(d.location.speedKph) : "") : SUB[state],
     id: d.deviceId,
     name: deviceLabel(d),
     state,
@@ -106,10 +106,12 @@ function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, 
   };
 }
 
-function StatusBadge({ state }: { state: MapState }) {
+/** stale: online, but the newest position is old, so no status is claimed ("No GPS", grey). */
+function StatusBadge({ state, stale = false }: { state: MapState; stale?: boolean }) {
+  const look: MapState = stale ? "offline" : state;
   return (
-    <span className="inline-flex shrink-0 items-center rounded-full px-2 text-xs font-semibold leading-[18px]" style={{ background: STATE_TINT[state], color: ink(STATE_COLORS[state]) }}>
-      {STATE_BADGE[state]}
+    <span className="inline-flex shrink-0 items-center rounded-full px-2 text-xs font-semibold leading-[18px]" style={{ background: STATE_TINT[look], color: ink(STATE_COLORS[look]) }}>
+      {stale ? "No GPS" : STATE_BADGE[state]}
     </span>
   );
 }
@@ -408,7 +410,7 @@ export function LiveMap({
 
   // List (recomputed at most once per stream tick, not per GPS event).
   const all = useMemo(() => {
-    const rows = [...devices.current.values()].map((d) => ({ d, state: mapState(d, now, offlineSeconds), name: deviceLabel(d) }));
+    const rows = [...devices.current.values()].map((d) => ({ d, state: mapState(d, now, offlineSeconds), stale: hasStaleFix(d, now, offlineSeconds), name: deviceLabel(d) }));
     const byName = (a: (typeof rows)[number], b: (typeof rows)[number]) => a.name.localeCompare(b.name, undefined, { numeric: true });
     rows.sort(
       sort === "name"
@@ -460,7 +462,7 @@ export function LiveMap({
         r.name,
         r.d.vehicle?.licensePlate ?? "",
         r.d.vehicle ? VEHICLE_TYPE_LABEL[asVehicleType(r.d.vehicle.type)] : "",
-        STATE_LABEL[r.state],
+        r.stale ? "No current GPS" : STATE_LABEL[r.state],
         l?.speedKph === null || l?.speedKph === undefined ? "" : Math.round(u.speed_(l.speedKph)),
         l?.ignition === null || l?.ignition === undefined ? "" : l.ignition ? "on" : "off",
         l ? l.latitude.toFixed(6) : "",
@@ -491,6 +493,7 @@ export function LiveMap({
   // Selection: halo on the map; details show in the floating card.
   const sel = selected ? devices.current.get(selected) : undefined;
   const selState: MapState = sel ? mapState(sel, now, offlineSeconds) : "offline";
+  const selStale = sel ? hasStaleFix(sel, now, offlineSeconds) : false;
   useEffect(() => {
     layer.current?.select(selected);
   }, [selected, map]);
@@ -672,7 +675,9 @@ export function LiveMap({
                   const nm = splitName(r.name);
                   const detail = !d.location
                     ? "No position yet"
-                    : r.state === "offline" && d.lastSeenAt
+                    : r.stale
+                      ? `No current GPS · last fix ${ago(d.location.recordedAt, now)}`
+                      : r.state === "offline" && d.lastSeenAt
                       ? `Last signal ${ago(d.lastSeenAt, now)}`
                       : [d.vehicle?.licensePlate, r.state === "moving" ? u.fmtSpeed(d.location.speedKph) : STATE_HINT[r.state], !d.vehicle && "No vehicle linked"].filter(Boolean).join(" · ");
                   return (
@@ -700,7 +705,7 @@ export function LiveMap({
                           <span className="truncate text-xs text-muted-foreground">{detail}</span>
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-1">
-                          <StatusBadge state={r.state} />
+                          <StatusBadge state={r.state} stale={r.stale} />
                           <span className="text-[11px] leading-4 tabular-nums text-muted-foreground">{d.lastSeenAt ? ago(d.lastSeenAt, now) : "No data yet"}</span>
                         </span>
                       </button>
@@ -824,7 +829,7 @@ export function LiveMap({
             {splitName(deviceLabel(sel)).imei && <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{splitName(deviceLabel(sel)).imei}</span>}
           </h2>
           <p className="m-0 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <StatusBadge state={selState} />
+            <StatusBadge state={selState} stale={selStale} />
             <span className="truncate">{sel.vehicle ? [VEHICLE_TYPE_LABEL[asVehicleType(sel.vehicle.type)], sel.vehicle.licensePlate].filter(Boolean).join(" · ") : "GPS tracker · no vehicle linked"}</span>
           </p>
         </div>
@@ -850,7 +855,18 @@ export function LiveMap({
       </div>
       {sel.location ? (
         <>
-          {selState === "offline" || selState === "parked" ? (
+          {selStale ? (
+            // Reporting, but the newest position is old: never show its speed as current.
+            <div className="flex items-center gap-3 rounded-lg px-3 py-2.5" style={{ background: tint(STATE_COLORS.idle) }}>
+              <Satellite className="size-5 shrink-0" style={{ color: ink(STATE_COLORS.idle) }} aria-hidden="true" />
+              <div className="min-w-0">
+                <p className="m-0 text-sm font-bold">No current GPS position</p>
+                <p className="m-0 text-xs text-muted-foreground">
+                  The tracker is online, but its newest position is {durationText((now - Date.parse(sel.location.recordedAt)) / 60000)} old. It may be uploading stored records or have no GPS signal.
+                </p>
+              </div>
+            </div>
+          ) : selState === "offline" || selState === "parked" ? (
             // Not reporting: say so plainly instead of showing a speed that is no longer true.
             <div className="flex items-center gap-3 rounded-lg px-3 py-2.5" style={{ background: tint(STATE_COLORS.idle) }}>
               <Radio className="size-5 shrink-0" style={{ color: ink(STATE_COLORS.idle) }} aria-hidden="true" />
@@ -922,8 +938,8 @@ export function LiveMap({
             </a>
           </div>
           <div className="grid grid-cols-[repeat(4,minmax(0,1fr))] gap-1.5">
-            <Fact icon={KeyRound} label="Ignition" value={sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} color={sel.location.ignition === false ? STATE_COLORS.stopped : sel.location.ignition ? STATE_COLORS.moving : STATE_COLORS.offline} />
-            <Fact icon={Activity} label="Motion" value={STATE_BADGE[selState]} color={PRIMARY} />
+            <Fact icon={KeyRound} label="Ignition" value={selStale || sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} color={selStale ? STATE_COLORS.offline : sel.location.ignition === false ? STATE_COLORS.stopped : sel.location.ignition ? STATE_COLORS.moving : STATE_COLORS.offline} />
+            <Fact icon={Activity} label="Motion" value={selStale ? "Unknown" : STATE_BADGE[selState]} color={PRIMARY} />
             <Fact icon={Satellite} label="GPS" value={now - Date.parse(sel.location.recordedAt) < 120_000 ? "Live" : ago(sel.location.recordedAt, now)} color={now - Date.parse(sel.location.recordedAt) < 120_000 ? STATE_COLORS.parked : STATE_COLORS.idle} />
             <Fact icon={Wifi} label="Tracker" value={selState === "offline" || selState === "parked" ? "Offline" : "Online"} color={selState === "offline" || selState === "parked" ? STATE_COLORS.offline : STATE_COLORS.moving} />
           </div>

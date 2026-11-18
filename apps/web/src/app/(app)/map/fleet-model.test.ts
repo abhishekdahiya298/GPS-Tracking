@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bearing, compass, csvSafe, iconName, iconNames, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, stateBucket, trackStats } from "./fleet-model";
+import { bearing, compass, csvSafe, hasStaleFix, iconName, iconNames, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, stateBucket, trackStats } from "./fleet-model";
 
 const now = Date.parse("2026-09-25T12:00:00Z");
 const loc = (speedKph: number | null, ignition: boolean | null = null) => ({ latitude: 0, longitude: 0, speedKph, headingDeg: 0, altitudeM: null, ignition, motion: null, recordedAt: "2026-09-25T11:59:00Z", receivedAt: "2026-09-25T11:59:00Z" });
@@ -23,6 +23,19 @@ describe("fleet-model", () => {
     expect(mapState({ lastSeenAt: "2026-09-25T11:59:00Z", location: loc(2) }, now, 600)).toBe("stopped");
     expect(mapState({ lastSeenAt: "2026-09-25T11:40:00Z", location: loc(40) }, now, 600)).toBe("offline");
     expect(mapState({ lastSeenAt: null, location: null }, now, 600)).toBe("offline");
+  });
+  it("mapState: online with an old fix (backlog upload / no GNSS) never claims Moving or Idling", () => {
+    // TRAILER-203, 2026-11-18: reporting every few seconds, but uploading records from two days ago at 49 mph.
+    const old = { ...loc(79, true), recordedAt: "2026-09-23T12:00:00Z" };
+    const d = { lastSeenAt: "2026-09-25T11:59:56Z", location: old, vehicle: { type: "trailer" } };
+    expect(mapState(d, now, 3900)).toBe("stopped");
+    expect(hasStaleFix(d, now, 3900)).toBe(true);
+    // 55 min old fix from a parked truck on the hourly low-data profile is still current.
+    const hourly = { lastSeenAt: "2026-09-25T11:05:00Z", location: { ...loc(0, false), recordedAt: "2026-09-25T11:05:00Z" } };
+    expect(hasStaleFix(hourly, now, 3900)).toBe(false);
+    // Offline trackers are reported as offline/parked, not as "no GPS".
+    expect(hasStaleFix({ lastSeenAt: "2026-09-23T12:00:00Z", location: old }, now, 3900)).toBe(false);
+    expect(hasStaleFix({ lastSeenAt: "2026-09-25T11:59:00Z", location: null }, now, 3900)).toBe(false);
   });
   it("csvSafe quotes and defuses formulas", () => {
     expect(csvSafe("Truck 1")).toBe("Truck 1");
