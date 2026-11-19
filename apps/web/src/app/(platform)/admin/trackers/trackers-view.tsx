@@ -5,29 +5,30 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
+import { FilterTiles, IconCell, RowActions } from "@/components/app/list-kit";
 import { RelativeTime } from "@/components/app/local-time";
 import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useListParams } from "@/components/app/use-list-params";
-import { Button, IconButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toaster";
 import { api } from "@/lib/client/api";
 import { isValidImei } from "@/lib/imei-list";
-import { cn } from "@/lib/cn";
 import { deviceDisplayName, productName } from "@/lib/device-name";
 import type { PlatformTrackerQuery, PlatformTrackerRow } from "@/lib/platform";
 import { FormDialog } from "../_shared/form-dialog";
+import { modelOptions, TRACKER_MODELS } from "../_shared/tracker-models";
 import { DemoTag, HideDemoToggle } from "../_shared/hide-demo-toggle";
 import { PasteImportDialog } from "../_shared/paste-import";
 import { SIM_STATUS } from "../_shared/sim-meta";
 import { SimNumbers } from "../_shared/sim-numbers";
 import { TrackerActionDialog, type TrackerAction } from "../_shared/tracker-actions";
 
-type Data = { items: PlatformTrackerRow[]; total: number; page: number; pageSize: number; counts: Record<PlatformTrackerQuery["state"], number> };
+type Data = { items: PlatformTrackerRow[]; total: number; page: number; pageSize: number; counts: Record<PlatformTrackerQuery["state"], number>; customers: { id: string; name: string; isDemo: boolean; trackers: number }[] };
 
 const DAY = 86_400_000;
 
@@ -71,40 +72,6 @@ function rowColor(t: PlatformTrackerRow, now: number, onlineMs: number) {
   return "#15803d";
 }
 
-/** Coloured filter tiles: count, label and icon per state; the selected one is filled. */
-function StateTiles({ value, counts, onChange }: { value: State; counts: Record<State, number>; onChange: (v: State) => void }) {
-  return (
-    <div role="radiogroup" aria-label="Tracker status" className="mb-4 grid grid-cols-[repeat(auto-fill,minmax(158px,1fr))] gap-2.5">
-      {STATES.map((s) => {
-        const on = value === s.value;
-        const Icon = s.icon;
-        return (
-          <button
-            key={s.value}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            onClick={() => onChange(s.value)}
-            style={{
-              borderColor: on ? s.color : `color-mix(in srgb, ${s.color} 30%, transparent)`,
-              backgroundImage: on ? `linear-gradient(135deg, ${s.color}, color-mix(in srgb, ${s.color} 70%, #000))` : `linear-gradient(135deg, var(--color-background) 30%, color-mix(in srgb, ${s.color} 16%, var(--color-background)))`
-            }}
-            className={cn("flex cursor-pointer items-center gap-2.5 rounded-xl border p-3 text-left shadow-card transition-transform duration-150 hover:-translate-y-0.5", on ? "text-white" : "text-foreground")}
-          >
-            <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: on ? "rgb(255 255 255 / 0.18)" : `color-mix(in srgb, ${s.color} 18%, transparent)`, color: on ? "#fff" : s.color }}>
-              <Icon className="size-[18px]" aria-hidden="true" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-xl font-semibold leading-6 tabular-nums">{counts[s.value] ?? 0}</span>
-              <span className={cn("block truncate text-xs font-medium", on ? "text-white/85" : "text-muted-foreground")}>{s.label}</span>
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 /**
  * The tracker inventory: every unit RIO owns, in stock or with a customer, with its SIM.
  * Add units to stock as they arrive, assign them, move or take them back, retire faulty ones.
@@ -125,20 +92,14 @@ export function TrackersView({ data, query, onlineSeconds, hideDemo }: { data: D
         meta: { sortKey: "name" } as ColumnMeta,
         cell: ({ row }) => {
           const t = row.original;
-          const color = rowColor(t, now, onlineMs);
+          const product = productName(t.model);
           return (
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}>
-                <Cpu className="size-[18px]" aria-hidden="true" />
-              </span>
-              <div className="min-w-0">
-                <div className="font-medium">{label(t)}</div>
-                <div className="font-mono text-xs text-muted-foreground">{t.imei}</div>
-                <div className="text-xs text-muted-foreground">
-                  {[`${productName(t.model)}${t.model && productName(t.model) !== t.model ? ` (${t.model})` : ""}`, t.serialNumber ? `SN ${t.serialNumber}` : null].filter(Boolean).join(" · ")}
-                </div>
-              </div>
-            </div>
+            <IconCell
+              icon={Cpu}
+              color={rowColor(t, now, onlineMs)}
+              title={label(t)}
+              lines={[<span key="i" className="font-mono">{t.imei}</span>, label(t) !== product || t.serialNumber ? [label(t) !== product ? product : null, t.serialNumber ? `SN ${t.serialNumber}` : null].filter(Boolean).join(" · ") : null]}
+            />
           );
         }
       },
@@ -188,54 +149,21 @@ export function TrackersView({ data, query, onlineSeconds, hideDemo }: { data: D
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-0 text-right" } as ColumnMeta,
+        meta: { className: "w-0 whitespace-nowrap text-right" } as ColumnMeta,
         cell: ({ row }) => {
           const t = row.original;
-          const act = (action: TrackerAction) => setActing({ t, action });
+          const act = (action: TrackerAction) => () => setActing({ t, action });
           return (
-            <div onClick={(e) => e.stopPropagation()}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <IconButton label={`Actions for ${label(t)}`} size="icon-sm" variant="ghost">
-                    <MoreHorizontal aria-hidden="true" />
-                  </IconButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  {!t.customer && t.status !== "retired" && (
-                    <DropdownMenuItem onSelect={() => act("assign")}>
-                      <Building2 aria-hidden="true" /> Assign to customer…
-                    </DropdownMenuItem>
-                  )}
-                  {t.customer && (
-                    <>
-                      <DropdownMenuItem onSelect={() => act("move")}>
-                        <ArrowRightLeft aria-hidden="true" /> Move to another customer…
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => act("return")}>
-                        <Undo2 aria-hidden="true" /> Return to stock…
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  <DropdownMenuItem onSelect={() => act("edit")}>
-                    <Pencil aria-hidden="true" /> Edit details…
-                  </DropdownMenuItem>
-                  {!t.customer && (
-                    <>
-                      <DropdownMenuSeparator />
-                      {t.status === "retired" ? (
-                        <DropdownMenuItem onSelect={() => act("unretire")}>
-                          <ArchiveRestore aria-hidden="true" /> Put back in stock…
-                        </DropdownMenuItem>
-                      ) : (
-                        <DropdownMenuItem className="text-danger" onSelect={() => act("retire")}>
-                          <Archive aria-hidden="true" /> Retire…
-                        </DropdownMenuItem>
-                      )}
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <RowActions
+              actions={[
+                { icon: Building2, label: "Assign to a customer", onClick: act("assign"), hidden: !!t.customer || t.status === "retired" },
+                { icon: ArrowRightLeft, label: "Move to another customer", onClick: act("move"), hidden: !t.customer },
+                { icon: Undo2, label: "Return to RIO stock", onClick: act("return"), hidden: !t.customer },
+                { icon: Pencil, label: "Edit details", onClick: act("edit") },
+                { icon: ArchiveRestore, label: "Put back in stock", onClick: act("unretire"), hidden: !!t.customer || t.status !== "retired" },
+                { icon: Archive, label: "Retire", onClick: act("retire"), tone: "danger", hidden: !!t.customer || t.status === "retired" }
+              ]}
+            />
           );
         }
       }
@@ -247,7 +175,7 @@ export function TrackersView({ data, query, onlineSeconds, hideDemo }: { data: D
     <>
       <PageHeader
         title="Trackers"
-        description="Every tracker RIO owns: in stock, with a customer or retired, with its SIM. Search by IMEI, SIM number, phone, serial, model or customer."
+        description="Every RIO GPS unit: in stock, with customers or retired, with its SIM."
         breadcrumbs={[{ label: "Platform", href: "/admin" }, { label: "Trackers" }]}
         actions={
           <>
@@ -260,7 +188,7 @@ export function TrackersView({ data, query, onlineSeconds, hideDemo }: { data: D
           </>
         }
       />
-      <StateTiles value={query.state} counts={data.counts} onChange={(v) => set({ state: v === "all" ? null : v })} />
+      <FilterTiles label="Tracker status" value={query.state} options={STATES.map((s) => ({ ...s, count: data.counts[s.value] ?? 0 }))} onChange={(v) => set({ state: v === "all" ? null : v })} />
       <Card>
         <DataTable<PlatformTrackerRow>
           columns={columns}
@@ -273,12 +201,22 @@ export function TrackersView({ data, query, onlineSeconds, hideDemo }: { data: D
           direction={query.direction}
           onSort={(k, d) => set({ sort: k, direction: d })}
           onPage={(p) => set({ page: p })}
+          onPageSize={(n) => set({ pageSize: n })}
           onRowClick={(t) => (t.customer ? router.push(`/admin/customers/${t.customer.id}`) : setActing({ t, action: t.status === "retired" ? "edit" : "assign" }))}
           rowLabel={(t) => (t.customer ? `Open ${t.customer.name}` : `Assign ${label(t)}`)}
           loading={pending}
           toolbar={
             <>
               <SearchInput value={query.search} onChange={(v) => set({ search: v })} placeholder="IMEI, SIM, phone, customer…" label="Search trackers" className="sm:w-64" />
+              <Select aria-label="Customer" value={query.customer ?? ""} onChange={(e) => set({ customer: e.target.value || null })} className="sm:w-60">
+                <option value="">All customers</option>
+                {data.customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.isDemo ? " (demo)" : ""} · {c.trackers}
+                  </option>
+                ))}
+              </Select>
               <HideDemoToggle hidden={hideDemo} className="sm:ml-auto" />
             </>
           }
@@ -297,7 +235,7 @@ export function TrackersView({ data, query, onlineSeconds, hideDemo }: { data: D
           empty={
             <EmptyState
               icon={Cpu}
-              title={query.search || query.state !== "all" ? "No trackers match" : "No trackers yet"}
+              title={query.search || query.state !== "all" || query.customer ? "No trackers match" : "No trackers yet"}
               description="Add trackers to stock as they arrive (Bulk add takes a pasted list with their SIMs), then assign them to customers."
               action={
                 <Button size="sm" onClick={() => setAdding("bulk")}>
@@ -316,7 +254,7 @@ export function TrackersView({ data, query, onlineSeconds, hideDemo }: { data: D
           description="Paste the IMEIs from the box labels or the supplier's packing list. Add the SIM number (ICCID) and phone number on the same line to record which SIM is in each tracker."
           placeholder={"864361078566115, 8901260123456789012, +18055550101\n864361078566123, 8901260123456789020\n864361078566131"}
           needs="imei"
-          extras={[{ name: "model", label: "Model (all lines)", kind: "text", defaultValue: "FTM880", required: true }]}
+          extras={[{ name: "model", label: "Product (all lines)", kind: "select", defaultValue: "FTM880", required: true, options: TRACKER_MODELS }]}
           okStatuses={["added"]}
           statusLabels={{ added: "Added", already_in_stock: "Already in stock", with_customer: "With a customer", invalid: "Invalid", failed: "Failed" }}
           submit={async (text, v) => {
@@ -358,7 +296,7 @@ function AddTrackerDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
       description="Registers the IMEI on our GPS server now, so you can power it on and check it reports before it goes to a customer."
       fields={[
         { name: "imei", label: "IMEI", kind: "text", required: true, numeric: true, maxLength: 20, description: "15 digits, on the device label.", half: true },
-        { name: "model", label: "Model", kind: "text", required: true, defaultValue: "FTM880", maxLength: 60, half: true },
+        { name: "model", label: "Product", kind: "select", defaultValue: "FTM880", options: modelOptions(), half: true },
         { name: "iccid", label: "SIM number (ICCID)", kind: "text", numeric: true, maxLength: 30, description: "Optional: the SIM inside it (18-22 digits).", half: true },
         { name: "serialNumber", label: "Serial number", kind: "text", maxLength: 60, description: "Optional.", half: true },
         { name: "notes", label: "Notes", kind: "textarea", maxLength: 500 },

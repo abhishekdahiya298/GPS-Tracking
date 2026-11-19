@@ -63,7 +63,9 @@ export function VehiclePicture({ type, state, className }: { type: string | null
       </span>
     );
   }
-  const src = picture && state ? `/fleet-art/vehicles/3d-${picture}-${state}.png` : type === "trailer" ? "/fleet-art/vehicles/vehicle-trailer@2x.png" : "/fleet-art/vehicles/vehicle-truck@2x.png";
+  // No state (no device yet): the same 3D picture of its type, in neutral grey, so a tractor still looks like a tractor.
+  const known = PICTURE_OF[type ?? "truck"];
+  const src = picture && state ? `/fleet-art/vehicles/3d-${picture}-${state}.png` : known ? `/fleet-art/vehicles/3d-${known}-offline.png` : type === "trailer" ? "/fleet-art/vehicles/vehicle-trailer@2x.png" : "/fleet-art/vehicles/vehicle-truck@2x.png";
   return (
     <span
       aria-hidden="true"

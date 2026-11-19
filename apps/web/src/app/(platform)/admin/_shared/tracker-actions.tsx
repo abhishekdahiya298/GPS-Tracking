@@ -1,5 +1,6 @@
 "use client";
 import { toast } from "@/components/ui/toaster";
+import { modelOptions, modelValue } from "./tracker-models";
 import { api } from "@/lib/client/api";
 import { FormDialog, type FieldSpec, type FormValues } from "./form-dialog";
 
@@ -84,7 +85,7 @@ export function TrackerActionDialog({ action, tracker, onOpenChange, onDone }: {
       title: "Edit tracker details",
       intro: "Platform details only; the customer's name for the tracker is changed on their Devices page.",
       fields: [
-        { name: "model", label: "Model", kind: "text", required: true, maxLength: 60, defaultValue: tracker.model ?? "", half: true },
+        { name: "model", label: "Product", kind: "select", defaultValue: modelValue(tracker.model), options: modelOptions(tracker.model), half: true },
         { name: "serialNumber", label: "Serial number", kind: "text", maxLength: 60, defaultValue: tracker.serialNumber ?? "", half: true },
         { name: "notes", label: "Notes", kind: "textarea", maxLength: 500, defaultValue: tracker.notes ?? "", description: "Never shown to customers." }
       ],

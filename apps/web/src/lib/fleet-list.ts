@@ -177,7 +177,7 @@ export interface DeviceRow {
   state: DeviceState;
   imeiLast4?: string;
   lastSeenAt: string | null;
-  vehicle: { id: string; name: string; assignedAt: string } | null;
+  vehicle: { id: string; name: string; assignedAt: string; type: string; licensePlate: string | null } | null;
 }
 
 export async function listDevicesPage(
@@ -195,7 +195,7 @@ export async function listDevicesPage(
     : sql``;
   const inner = sql`
     select d.id, d.name, d.model, d.status, d.imei, d.last_seen_at, d.created_at,
-           v.id as vehicle_id, v.name as vehicle_name, a.assigned_at,
+           v.id as vehicle_id, v.name as vehicle_name, v.type as vehicle_type, v.license_plate, a.assigned_at,
            case
              when d.status = 'retired' then 'retired'
              when d.status <> 'active' then 'inactive'
@@ -239,7 +239,7 @@ export async function listDevicesPage(
       state: r.state as DeviceState,
       ...(opts.includeImeiLast4 ? { imeiLast4: String(r.imei).slice(-4) } : {}),
       lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at as string).toISOString() : null,
-      vehicle: r.vehicle_id ? { id: String(r.vehicle_id), name: String(r.vehicle_name), assignedAt: new Date(r.assigned_at as string).toISOString() } : null
+      vehicle: r.vehicle_id ? { id: String(r.vehicle_id), name: String(r.vehicle_name), assignedAt: new Date(r.assigned_at as string).toISOString(), type: String(r.vehicle_type ?? "truck"), licensePlate: (r.license_plate as string | null) ?? null } : null
     })),
     total: rows.length ? Number(rows[0]!.total) : 0,
     page: q.page,

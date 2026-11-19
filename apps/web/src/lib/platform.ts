@@ -120,6 +120,8 @@ export const PlatformTrackerQuery = z.object({
   pageSize: z.coerce.number().int().refine((n) => [10, 25, 50, 100].includes(n)).default(25),
   search: z.string().trim().max(100).default(""),
   state: z.enum(TRACKER_STATES).default("all"),
+  /** Only this customer's trackers (organization id). */
+  customer: z.string().uuid().optional(),
   sort: z.enum(["lastSeen", "customer", "name", "changed"]).default("lastSeen"),
   direction: z.enum(["asc", "desc"]).default("desc")
 });
@@ -172,10 +174,11 @@ export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresh
     name: sql`lower(coalesce(d.name, d.model, '')) ${dir}`,
     changed: sql`coalesce(d.inventory_changed_at, d.created_at) ${dir}`
   }[q.sort];
+  const forCustomer = q.customer ? sql`and d.organization_id = ${q.customer}` : sql``;
   const base = sql`from gps_devices d left join organizations o on o.id = d.organization_id left join sim_cards s on s.device_id = d.id
-    where (o.id is null or o.status <> 'archived') ${search}`;
+    where (o.id is null or o.status <> 'archived') ${search} ${forCustomer}`;
   const db = getDb();
-  const [rows, counts] = await Promise.all([
+  const [rows, counts, customers] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select d.id, d.name, d.model, d.imei, d.serial_number, d.platform_notes, d.status, d.last_seen_at, d.inventory_changed_at,
         o.id as org_id, o.name as org_name, o.status as org_status, o.is_demo as org_demo,
@@ -195,7 +198,13 @@ export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresh
         count(*) filter (where ${visible} and ${stateWhere.nosim})::int as nosim,
         count(*) filter (where ${visible} and ${stateWhere.retired})::int as retired,
         count(*) filter (where ${stateWhere.demo})::int as demo
-      ${base}`)
+      ${base}`),
+    // The customer filter's choices: every current customer with trackers, and how many.
+    db.execute<{ id: string; name: string; is_demo: boolean; n: number }>(sql`
+      select o.id, o.name, o.is_demo, count(d.id)::int as n
+      from organizations o join gps_devices d on d.organization_id = o.id
+      where o.status <> 'archived' and ${hideDemo ? sql`not o.is_demo` : sql`true`}
+      group by o.id order by lower(o.name)`)
   ]);
   const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
   return {
@@ -218,7 +227,8 @@ export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresh
     total: rows.length ? Number(rows[0]!.total) : 0,
     page: q.page,
     pageSize: q.pageSize,
-    counts: counts[0] ?? { all: 0, stock: 0, deployed: 0, online: 0, silent: 0, never: 0, nosim: 0, retired: 0, demo: 0 }
+    counts: counts[0] ?? { all: 0, stock: 0, deployed: 0, online: 0, silent: 0, never: 0, nosim: 0, retired: 0, demo: 0 },
+    customers: customers.map((c) => ({ id: c.id, name: c.name, isDemo: Boolean(c.is_demo), trackers: c.n }))
   };
 }
 

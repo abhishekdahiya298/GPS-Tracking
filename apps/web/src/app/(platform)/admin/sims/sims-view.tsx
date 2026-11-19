@@ -1,19 +1,18 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, CardSim, RefreshCw, Link2, Link2Off, ListPlus, MoreHorizontal, Pencil, Plus } from "lucide-react";
+import { AlertTriangle, Ban, CardSim, CircleDollarSign, CirclePause, Layers, Link2, Link2Off, ListPlus, Pencil, Plus, RefreshCw, Warehouse } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
-import { SegmentedFilter } from "@/components/app/filter-bar";
+import { FilterTiles, IconCell, RowActions } from "@/components/app/list-kit";
 import { PageHeader } from "@/components/app/page-header";
 import { RelativeTime } from "@/components/app/local-time";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useListParams } from "@/components/app/use-list-params";
-import { Button, IconButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toaster";
 import { api } from "@/lib/client/api";
 import type { SimListQuery, SimRow } from "@/lib/sims";
@@ -31,6 +30,9 @@ const ATTENTION: Record<NonNullable<SimRow["attention"]>, string> = {
   active_unused: "Billed but not in use: suspend or cancel it, or put it in a tracker",
   deployed_not_active: "In a customer's tracker but not active: the tracker can't report"
 };
+
+/** Status colours, the same family as the tracker list. */
+const SIM_COLOR: Record<string, string> = { active: "#15803d", inventory: "#0369a1", suspended: "#c2410c", cancelled: "#475569" };
 
 function simFields(s?: SimRow): FieldSpec[] {
   return [
@@ -83,20 +85,27 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
         id: "iccid",
         header: "SIM",
         meta: { sortKey: "iccid" } as ColumnMeta,
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <SimNumbers msisdn={row.original.msisdn} iccid={row.original.iccid} />
-            {row.original.providerName && <div className="truncate text-xs text-muted-foreground" title="Name in Hologram">“{row.original.providerName}”</div>}
-          </div>
-        )
+        cell: ({ row }) => {
+          const r = row.original;
+          return (
+            <IconCell
+              icon={CardSim}
+              color={r.attention ? "#b91c1c" : (SIM_COLOR[r.status] ?? "#475569")}
+              title={<span className="font-mono">{r.msisdn ?? "No phone number"}</span>}
+              lines={[<span key="i" className="font-mono" title="ICCID: printed on the SIM card">ICCID {r.iccid}</span>]}
+            />
+          );
+        }
       },
       {
         id: "carrier",
-        header: "Carrier / plan",
+        header: "Carrier",
         cell: ({ row }) => (
-          <div className="text-sm">
-            <div>{row.original.carrier ?? <span className="text-muted-foreground">—</span>}</div>
-            <div className="text-xs text-muted-foreground">{[row.original.plan, row.original.monthlyCostCents != null ? `${money(row.original.monthlyCostCents)}/mo` : null].filter(Boolean).join(" · ")}</div>
+          <div className="min-w-0 text-sm">
+            <div className="font-medium">{row.original.carrier ?? <span className="text-muted-foreground">—</span>}</div>
+            <div className="max-w-56 truncate text-xs text-muted-foreground" title={row.original.plan ?? undefined}>
+              {[row.original.plan, row.original.monthlyCostCents != null ? `${money(row.original.monthlyCostCents)}/mo` : null].filter(Boolean).join(" · ")}
+            </div>
           </div>
         )
       },
@@ -107,12 +116,11 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
         cell: ({ row }) => {
           const m = SIM_STATUS[row.original.status];
           return (
-            <div className="grid justify-items-start gap-1">
+            <div className="flex items-center gap-1.5">
               <StatusBadge tone={m.tone} label={m.label} />
               {row.original.attention && (
-                <span className="flex max-w-56 items-start gap-1 text-xs text-danger">
-                  <AlertTriangle className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
-                  {ATTENTION[row.original.attention]}
+                <span title={ATTENTION[row.original.attention]} className="inline-flex items-center gap-1 rounded-md bg-danger/10 px-1.5 py-0.5 text-[11px] font-semibold text-danger">
+                  <AlertTriangle className="size-3" aria-hidden="true" /> Check
                 </span>
               )}
             </div>
@@ -121,25 +129,21 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
       },
       {
         id: "customer",
-        header: "Tracker / customer",
+        header: "Customer / tracker",
         meta: { sortKey: "customer" } as ColumnMeta,
         cell: ({ row }) => {
           const d = row.original.device;
-          if (!d) return <span className="text-muted-foreground">Not in a tracker</span>;
+          if (!d) return <span className="text-sm text-muted-foreground">Not in a tracker</span>;
           return (
             <div className="min-w-0 text-sm">
-              <div className="font-mono text-xs">{d.imei}</div>
-              <div className="text-xs text-muted-foreground">
-                {row.original.customer ? (
-                  <Link href={`/admin/customers/${row.original.customer.id}`} className="text-foreground no-underline hover:underline">
-                    {row.original.customer.name}
-                  </Link>
-                ) : d.status === "retired" ? (
-                  "Retired tracker"
-                ) : (
-                  "Tracker in RIO stock"
-                )}
-              </div>
+              {row.original.customer ? (
+                <Link href={`/admin/customers/${row.original.customer.id}`} onClick={(e) => e.stopPropagation()} className="font-medium text-foreground no-underline hover:underline">
+                  {row.original.customer.name}
+                </Link>
+              ) : (
+                <span className="text-muted-foreground">{d.status === "retired" ? "Retired tracker" : "RIO stock"}</span>
+              )}
+              <div className="font-mono text-xs text-muted-foreground">IMEI {d.imei}</div>
             </div>
           );
         }
@@ -147,38 +151,29 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-0 text-right" } as ColumnMeta,
+        meta: { className: "w-0 whitespace-nowrap text-right" } as ColumnMeta,
         cell: ({ row }) => (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <IconButton label={`Actions for SIM ${row.original.iccid}`} size="icon-sm" variant="ghost">
-                <MoreHorizontal aria-hidden="true" />
-              </IconButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onSelect={() => setDialog({ kind: "edit", sim: row.original })}>
-                <Pencil aria-hidden="true" /> Edit / change status…
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setDialog({ kind: "link", sim: row.original })}>
-                <Link2 aria-hidden="true" /> {row.original.device ? "Move to another tracker…" : "Put in a tracker…"}
-              </DropdownMenuItem>
-              {row.original.device && (
-                <DropdownMenuItem
-                  onSelect={async () => {
-                    try {
-                      await api(`/api/admin/sims/${row.original.id}/link`, { method: "POST", json: { imei: null } });
-                      toast.success("SIM taken out of the tracker");
-                      refresh();
-                    } catch (err) {
-                      toast.error((err as Error).message);
-                    }
-                  }}
-                >
-                  <Link2Off aria-hidden="true" /> Take out of tracker
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <RowActions
+            actions={[
+              { icon: Pencil, label: "Edit SIM", onClick: () => setDialog({ kind: "edit", sim: row.original }) },
+              { icon: Link2, label: row.original.device ? "Move to another tracker" : "Put in a tracker", onClick: () => setDialog({ kind: "link", sim: row.original }) },
+              {
+                icon: Link2Off,
+                label: "Take out of tracker",
+                tone: "danger",
+                hidden: !row.original.device,
+                onClick: async () => {
+                  try {
+                    await api(`/api/admin/sims/${row.original.id}/link`, { method: "POST", json: { imei: null } });
+                    toast.success("SIM taken out of the tracker");
+                    refresh();
+                  } catch (err) {
+                    toast.error((err as Error).message);
+                  }
+                }
+              }
+            ]}
+          />
         )
       }
     ],
@@ -193,6 +188,9 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
         breadcrumbs={[{ label: "Platform", href: "/admin" }, { label: "SIM cards" }]}
         actions={
           <>
+            <Button variant="secondary" onClick={() => setDialog({ kind: "cost" })}>
+              <CircleDollarSign /> Monthly cost
+            </Button>
             <Button variant="secondary" onClick={() => setDialog({ kind: "bulk" })}>
               <ListPlus /> Import list
             </Button>
@@ -202,26 +200,19 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
           </>
         }
       />
-      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border bg-background px-4 py-3 text-sm shadow-card">
-        <RefreshCw className="size-4 shrink-0 text-primary" aria-hidden="true" />
-        {hologram.configured ? (
-          <span className="min-w-0 flex-1">
-            <strong>Synced with Hologram</strong> every 6 hours{hologram.lastSync ? <> · last <RelativeTime iso={hologram.lastSync} /></> : " · not yet"}. Status, plan and tracker come from Hologram; manage SIMs there. Tip: put the tracker&apos;s IMEI in the SIM&apos;s name in Hologram (spaces or dashes are fine) and it links to that tracker on its own.
-          </span>
-        ) : (
-          <span className="min-w-0 flex-1">
-            <strong>Hologram isn&apos;t connected yet.</strong> Add a Hologram API key to the server settings and this list fills itself in and stays up to date.
-          </span>
-        )}
-        {hologram.configured && (
-          <Button size="sm" variant="secondary" loading={syncing} onClick={() => void syncNow()}>
-            Sync now
-          </Button>
-        )}
-        <Button size="sm" variant="ghost" onClick={() => setDialog({ kind: "cost" })}>
-          Set monthly cost…
-        </Button>
-      </div>
+      <FilterTiles
+        label="SIM status"
+        value={query.view}
+        onChange={(v) => set({ view: v === "all" ? null : v })}
+        options={[
+          { value: "all", label: "All SIMs", count: data.counts.all, icon: Layers, color: "#133a8f" },
+          { value: "attention", label: "Needs attention", count: data.counts.attention, icon: AlertTriangle, color: "#b91c1c" },
+          { value: "active", label: "Active", count: data.counts.active, icon: CardSim, color: "#15803d" },
+          { value: "inventory", label: "Not activated", count: data.counts.inventory, icon: Warehouse, color: "#0369a1" },
+          { value: "suspended", label: "Suspended", count: data.counts.suspended, icon: CirclePause, color: "#c2410c" },
+          { value: "cancelled", label: "Cancelled", count: data.counts.cancelled, icon: Ban, color: "#475569" }
+        ]}
+      />
       <Card>
         <DataTable<SimRow>
           columns={columns}
@@ -234,25 +225,27 @@ export function SimsView({ data, query, hologram }: { data: Data; query: SimList
           direction={query.direction}
           onSort={(k, d) => set({ sort: k, direction: d })}
           onPage={(p) => set({ page: p })}
+          onPageSize={(n) => set({ pageSize: n })}
           onRowClick={(s) => setDialog({ kind: "edit", sim: s })}
           rowLabel={(s) => `Edit SIM ${s.iccid}`}
           loading={pending}
           toolbar={
             <>
               <SearchInput value={query.search} onChange={(v) => set({ search: v })} placeholder="ICCID, phone, carrier, IMEI, customer…" label="Search SIMs" className="sm:w-64" />
-              <SegmentedFilter
-                label="SIM status"
-                value={query.view}
-                onChange={(v) => set({ view: v === "all" ? null : v })}
-                options={[
-                  { value: "all", label: "All", count: data.counts.all },
-                  { value: "attention", label: "Needs attention", count: data.counts.attention },
-                  { value: "active", label: "Active", count: data.counts.active },
-                  { value: "inventory", label: "Not activated", count: data.counts.inventory },
-                  { value: "suspended", label: "Suspended", count: data.counts.suspended },
-                  { value: "cancelled", label: "Cancelled", count: data.counts.cancelled }
-                ]}
-              />
+              <div className="flex items-center gap-2 text-[13px] text-muted-foreground sm:ml-auto">
+                <span
+                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-muted/50 px-3"
+                  title={hologram.configured ? "Status, plan and tracker come from Hologram; manage SIMs there. Put the tracker's IMEI in the SIM's name in Hologram and it links on its own." : "Add a Hologram API key to the server settings and this list fills itself in."}
+                >
+                  <span className={hologram.configured ? "size-2 rounded-full bg-[#15803d]" : "size-2 rounded-full bg-[#c2410c]"} aria-hidden="true" />
+                  {hologram.configured ? <>Hologram · synced {hologram.lastSync ? <RelativeTime iso={hologram.lastSync} /> : "not yet"}</> : "Hologram not connected"}
+                </span>
+                {hologram.configured && (
+                  <Button size="sm" variant="secondary" loading={syncing} onClick={() => void syncNow()}>
+                    <RefreshCw /> Sync
+                  </Button>
+                )}
+              </div>
             </>
           }
           mobileRow={(s) => (

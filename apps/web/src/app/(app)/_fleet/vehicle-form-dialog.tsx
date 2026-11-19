@@ -1,5 +1,6 @@
 "use client";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { VehiclePicture } from "@/components/app/vehicle-picture";
 import { cn } from "@/lib/cn";
+import { deviceDisplayName } from "@/lib/device-name";
 import { asVehicleType, DEFAULT_VEHICLE_TYPE, VEHICLE_TYPE_LABEL, VEHICLE_TYPES, VehicleInputSchema } from "@/lib/schemas/vehicle";
 
 type Values = z.input<typeof VehicleInputSchema>;
@@ -30,13 +32,42 @@ export function VehicleFormDialog({ open, onOpenChange, vehicle, onSaved }: { op
   });
   const { errors, isSubmitting } = form.formState;
   const type = form.watch("type") ?? DEFAULT_VEHICLE_TYPE;
+  // Adding a vehicle: offer the GPS devices not on a vehicle yet, so it is tracked in one step.
+  const [freeDevices, setFreeDevices] = useState<{ id: string; label: string; imeiLast4?: string }[] | null>(null);
+  const [deviceId, setDeviceId] = useState("");
+  useEffect(() => {
+    if (!open || editing) return;
+    let live = true;
+    api<{ items: { id: string; name: string | null; model: string | null; imeiLast4?: string }[] }>(`/api/devices?${new URLSearchParams({ state: "unassigned", pageSize: "100", sort: "name" })}`)
+      .then((r) => {
+        if (!live) return;
+        const list = r.items.map((d) => ({ id: d.id, label: deviceDisplayName(d.name, d.model), imeiLast4: d.imeiLast4 }));
+        setFreeDevices(list);
+        setDeviceId(list.length === 1 ? list[0]!.id : "");
+      })
+      .catch(() => live && setFreeDevices([]));
+    return () => {
+      live = false;
+    };
+  }, [open, editing]);
 
   async function submit(values: Values) {
     try {
       const body = VehicleInputSchema.parse(values);
-      if (editing) await api(`/api/vehicles/${vehicle!.id}`, { method: "PATCH", json: body });
-      else await api("/api/vehicles", { method: "POST", json: body });
-      toast.success(editing ? "Vehicle updated." : `${body.name} added. Assign a GPS device to start tracking it.`);
+      if (editing) {
+        await api(`/api/vehicles/${vehicle!.id}`, { method: "PATCH", json: body });
+        toast.success("Vehicle updated.");
+      } else {
+        const out = await api<{ vehicle: { id: string } }>("/api/vehicles", { method: "POST", json: body });
+        if (deviceId) {
+          try {
+            await api(`/api/devices/${deviceId}/assignment`, { method: "PUT", json: { vehicleId: out.vehicle.id } });
+            toast.success(`${body.name} added and tracking with its GPS device.`);
+          } catch (err) {
+            toast.error(`${body.name} added, but the device could not be assigned: ${errorMessage(err)}`);
+          }
+        } else toast.success(`${body.name} added. Assign a GPS device to start tracking it.`);
+      }
       onOpenChange(false);
       onSaved();
     } catch (err) {
@@ -73,6 +104,19 @@ export function VehicleFormDialog({ open, onOpenChange, vehicle, onSaved }: { op
             </div>
             <p className="m-0 text-xs text-muted-foreground">Sets the picture shown on the map and in lists, here and in the phone app.</p>
           </fieldset>
+          {!editing && freeDevices && freeDevices.length > 0 && (
+            <Field id="v-device" label="GPS device" description={`${freeDevices.length} free device${freeDevices.length === 1 ? "" : "s"}. You can also assign one later.`}>
+              <Select id="v-device" value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
+                <option value="">No device for now</option>
+                {freeDevices.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.label}
+                    {d.imeiLast4 ? ` · IMEI …${d.imeiLast4}` : ""}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           {editing && (
             <Field id="v-status" label="Status">
               <Select id="v-status" {...form.register("status")}>
