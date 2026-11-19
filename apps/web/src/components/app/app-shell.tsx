@@ -23,7 +23,6 @@ import {
   ReceiptText,
   type LucideIcon,
   Inbox,
-  ChevronRight,
   Home,
   Target,
   Layers,
@@ -277,7 +276,7 @@ function SidebarContent({ nav, pathname, orgName, user, home, hideBrand, theme }
           <div key={section.title ?? si} className={cn(si > 0 && "mt-4")}>
             {section.title && <p className={cn("m-0 mb-2 px-1.5 text-[11px] font-semibold uppercase tracking-[0.09em]", t.sectionTitle)}>{section.title}</p>}
             {/* Titled sections are one group; a lone item (home) stands on its own. */}
-            <ul className={cn("m-0 list-none p-0", section.title && cn("overflow-hidden rounded-xl p-1", t.group))}>
+            <ul className={cn("m-0 list-none p-0", section.title ? cn("overflow-hidden rounded-xl p-1", t.group) : "space-y-1.5")}>
               {section.items.map((item, ii) => {
                 const Icon = ICONS[item.icon];
                 const active = isActive(pathname, item);
@@ -298,7 +297,6 @@ function SidebarContent({ nav, pathname, orgName, user, home, hideBrand, theme }
                         <Icon className="size-[17px] transition-transform duration-200 group-hover:scale-110" aria-hidden="true" />
                       </span>
                       <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                      {section.title && <ChevronRight className={cn("size-4 shrink-0 transition-transform duration-150 group-hover:translate-x-0.5", active ? t.chevronActive : t.chevronIdle)} aria-hidden="true" />}
                     </Link>
                   </li>
                 );

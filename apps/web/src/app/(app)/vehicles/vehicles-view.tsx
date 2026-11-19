@@ -1,6 +1,6 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Layers, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2, Truck } from "lucide-react";
+import { History, Layers, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2, Truck } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
@@ -23,7 +23,7 @@ import { relativeTime } from "@/lib/format";
 import { RelativeTime } from "@/components/app/local-time";
 import { useTime } from "@/components/app/time-context";
 import dynamic from "next/dynamic";
-import { VehiclePicture } from "@/components/app/vehicle-picture";
+import { pictureState, VehiclePicture } from "@/components/app/vehicle-picture";
 import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 import type { EditableVehicle } from "../_fleet/vehicle-form-dialog";
 
@@ -34,6 +34,7 @@ const ShareDialog = dynamic(() => import("./share-dialog").then((m) => m.ShareDi
 const GroupsDialog = dynamic(() => import("./groups-dialog").then((m) => m.GroupsDialog));
 const VehicleFormDialog = dynamic(() => import("../_fleet/vehicle-form-dialog").then((m) => m.VehicleFormDialog));
 import { VehicleStateBadge } from "../_fleet/vehicle-state";
+import { deviceDisplayName } from "@/lib/device-name";
 
 /** States whose last reading is old: no live speed is shown for them. */
 const SILENT = new Set<string>(["offline", "never_seen", "inactive", "parked"]);
@@ -55,6 +56,8 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
   const [sharing, setSharing] = useState<VehicleRow | null>(null);
   const filtered = query.search !== "" || query.state !== "all" || !!query.group;
 
+  /** Midnight today in the viewer's zone, for the "today's trips" link. */
+  const todayStart = () => new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
   const openEdit = (v: VehicleRow) => {
     setEditing({ id: v.id, name: v.name, licensePlate: v.licensePlate, type: v.type, vehicleStatus: v.vehicleStatus });
     setFormOpen(true);
@@ -118,7 +121,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         meta: { sortKey: "name" } satisfies ColumnMeta,
         cell: ({ row: { original: v } }) => (
           <div className="flex min-w-0 items-center gap-3">
-            <VehiclePicture type={v.type} className="h-9 w-12" />
+            <VehiclePicture type={v.type} state={pictureState(v.device ? v.state : null)} className="h-11 w-16" />
             <div className="min-w-0">
               <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
               <p className="m-0 truncate text-xs text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(v.type)], v.licensePlate, ...v.groups].filter(Boolean).join(" · ")}</p>
@@ -131,7 +134,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         id: "device",
         header: "Device",
         meta: { hideable: true, label: "Device" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) => (v.device ? <span className="text-foreground">{v.device.name ?? v.device.model ?? "Device"}</span> : <span className="text-muted-foreground">—</span>)
+        cell: ({ row: { original: v } }) => (v.device ? <span className="text-foreground">{deviceDisplayName(v.device.name, v.device.model)}</span> : <span className="text-muted-foreground">No device</span>)
       },
       {
         id: "speed",
@@ -152,7 +155,41 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         meta: { sortKey: "lastSeen", hideable: true, label: "Last seen" } satisfies ColumnMeta,
         cell: ({ row: { original: v } }) => <span className="whitespace-nowrap text-muted-foreground">{v.device ? <RelativeTime iso={v.lastSeenAt} /> : "—"}</span>
       },
-      { id: "actions", header: () => <span className="sr-only">Actions</span>, meta: { className: "w-12 text-right" } satisfies ColumnMeta, cell: ({ row }) => <RowMenu v={row.original} /> }
+      {
+        id: "actions",
+        header: () => <span className="sr-only">Actions</span>,
+        meta: { className: "w-[172px] text-right" } satisfies ColumnMeta,
+        // The common actions one click away; the rest stay in the ⋯ menu.
+        cell: ({ row: { original: v } }) => (
+          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+            {can.map && v.device && v.location ? (
+              <IconButton asChild label={`Show ${v.name} on the map`} size="icon-sm" variant="ghost" className="text-primary hover:bg-primary-soft">
+                <Link href={`/map?focus=${v.device.id}`}>
+                  <MapIcon aria-hidden="true" />
+                </Link>
+              </IconButton>
+            ) : null}
+            {can.map && v.device && v.location ? (
+              <IconButton asChild label={`${v.name}: today's trips`} size="icon-sm" variant="ghost" className="text-primary hover:bg-primary-soft">
+                <Link href={`/map?device=${v.device.id}&from=${encodeURIComponent(todayStart())}&to=${encodeURIComponent(new Date().toISOString())}`}>
+                  <History aria-hidden="true" />
+                </Link>
+              </IconButton>
+            ) : null}
+            {can.update && (
+              <IconButton label={`Edit ${v.name}`} size="icon-sm" variant="ghost" className="text-primary hover:bg-primary-soft" onClick={() => openEdit(v)}>
+                <Pencil aria-hidden="true" />
+              </IconButton>
+            )}
+            {can.assign && !v.device && (
+              <IconButton label={`Assign a device to ${v.name}`} size="icon-sm" variant="ghost" className="text-primary hover:bg-primary-soft" onClick={() => setAssignFor(v)}>
+                <Link2 aria-hidden="true" />
+              </IconButton>
+            )}
+            <RowMenu v={v} />
+          </div>
+        )
+      }
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [u, can]
@@ -231,11 +268,11 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
           }
           mobileRow={(v) => (
             <div className="flex items-start gap-3">
-              <VehiclePicture type={v.type} className="mt-0.5" />
+              <VehiclePicture type={v.type} state={pictureState(v.device ? v.state : null)} className="mt-0.5" />
               <div className="min-w-0 flex-1">
                 <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
                 <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground">
-                  {[v.licensePlate, v.device ? (v.device.name ?? v.device.model) : "No device", v.location && !SILENT.has(v.state) ? u.fmtSpeed(v.location.speedKph) : null, v.device ? relativeTime(v.lastSeenAt, Date.now(), t.timeZone) : null].filter(Boolean).join(" · ")}
+                  {[v.licensePlate, v.device ? deviceDisplayName(v.device.name, v.device.model) : "No device", v.location && !SILENT.has(v.state) ? u.fmtSpeed(v.location.speedKph) : null, v.device ? relativeTime(v.lastSeenAt, Date.now(), t.timeZone) : null].filter(Boolean).join(" · ")}
                 </p>
                 <div className="mt-1.5">
                   <VehicleStateBadge state={v.state} />

@@ -30,6 +30,7 @@ import { getLoadDashboard } from "@/lib/load-dashboard";
 import { currentUsage } from "@/lib/plans";
 import { FleetTrends, TrendsSkeleton } from "./fleet-trends";
 import { IconTitle } from "@/components/app/icon-title";
+import { deviceDisplayName } from "@/lib/device-name";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard · RIO GPS" };
@@ -240,7 +241,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                   <Link href={`/map?focus=${d.deviceId}`} className="flex items-center gap-3 px-4 py-3 text-foreground no-underline hover:bg-canvas sm:px-5">
                     <VehiclePicture type={d.vehicle?.type} state={s === "never_seen" ? "offline" : s} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? d.name ?? d.model ?? "Device"}</span>
+                      <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? deviceDisplayName(d.name, d.model)}</span>
                       <span className="block truncate text-xs text-muted-foreground">
                         {staleFix(d) ? `No current GPS · last fix ${relativeTime(d.location!.recordedAt, now.getTime(), rc.timeZone)} · last report ` : d.location && s !== "offline" && s !== "parked" ? `${u.fmtSpeed(d.location.speedKph)} · engine ${d.location.ignition === true ? "on" : d.location.ignition === false ? "off" : "unknown"} · last update ` : "last seen "}
                         {relativeTime(d.lastSeenAt, now.getTime(), rc.timeZone)}
@@ -401,7 +402,7 @@ const tripsLast24h = cache(async (ctx: TenantContext, devices: CurrentDeviceLoca
     .sort((a, b) => Date.parse(b.lastSeenAt!) - Date.parse(a.lastSeenAt!))
     .slice(0, TRIP_SUMMARY_MAX_DEVICES);
   const reports = await Promise.all(recent.map((d) => buildTripReport(ctx.organizationId, d.deviceId, from, now, "UTC").then((r) => ({ d, r }))));
-  const trips = reports.flatMap(({ d, r }) => r.trips.map((t) => ({ ...t, vehicle: d.vehicle?.name ?? d.name ?? d.model ?? "Device", deviceId: d.deviceId })));
+  const trips = reports.flatMap(({ d, r }) => r.trips.map((t) => ({ ...t, vehicle: d.vehicle?.name ?? deviceDisplayName(d.name, d.model), deviceId: d.deviceId })));
   return { trips: trips.sort((a, b) => Date.parse(b.startAt) - Date.parse(a.startAt)), partial: devices.length > TRIP_SUMMARY_MAX_DEVICES, from };
 });
 

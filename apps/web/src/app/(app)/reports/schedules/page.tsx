@@ -8,6 +8,7 @@ import { listSchedules } from "@/lib/report-schedules";
 import { listMembers } from "@/lib/team";
 import { listDevices } from "@/lib/vehicles";
 import { SchedulesManager } from "./schedules-manager";
+import { deviceDisplayName } from "@/lib/device-name";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Report emails · RIO GPS" };
@@ -27,7 +28,7 @@ export default async function SchedulesPage() {
     <SchedulesManager
       initial={schedules}
       members={members.map((m) => ({ id: m.userId, label: `${m.name} <${m.email}>` }))}
-      devices={devices.map((d) => ({ id: d.id, label: d.vehicle ? `${d.vehicle.name} (${d.name ?? d.model ?? "device"})` : (d.name ?? d.model ?? "Device") }))}
+      devices={devices.map((d) => ({ id: d.id, label: d.vehicle ? `${d.vehicle.name} (${deviceDisplayName(d.name, d.model)})` : deviceDisplayName(d.name, d.model) }))}
       myUserId={ctx.userId}
       emailEnabled={isEmailEnabled()}
     />

@@ -32,30 +32,32 @@ export interface PlatformOverview {
   recentCustomers: { id: string; name: string; createdAt: string; trackers: number; status: OrganizationStatus }[];
 }
 
-export async function getPlatformOverview(onlineThresholdSeconds: number, now = new Date()): Promise<PlatformOverview> {
+export async function getPlatformOverview(onlineThresholdSeconds: number, now = new Date(), hideDemo = false): Promise<PlatformOverview> {
   const db = getDb();
   const at = now.toISOString();
+  // "Hide demo accounts": leave demo / test customers out of every number below.
+  const nd = hideDemo ? sql`not o.is_demo` : sql`true`;
   const [[cust], [trk], [usr], [misc], attentionRows, recent, [inv]] = await Promise.all([
     db.execute<{ active: number; suspended: number; archived: number; new30: number }>(sql`
       select count(*) filter (where status = 'active')::int as active,
              count(*) filter (where status = 'suspended')::int as suspended,
              count(*) filter (where status = 'archived')::int as archived,
              count(*) filter (where created_at > ${at}::timestamptz - interval '30 days' and status <> 'archived')::int as new30
-      from organizations`),
+      from organizations o where ${nd}`),
     db.execute<{ total: number; online: number; silent: number; never: number; deactivated: number }>(sql`
       select count(*)::int as total,
              count(*) filter (where d.status = 'active' and d.last_seen_at > ${at}::timestamptz - make_interval(secs => ${onlineThresholdSeconds}))::int as online,
              count(*) filter (where d.status = 'active' and d.last_seen_at <= ${at}::timestamptz - interval '24 hours')::int as silent,
              count(*) filter (where d.status = 'active' and d.last_seen_at is null)::int as never,
              count(*) filter (where d.status <> 'active')::int as deactivated
-      from gps_devices d join organizations o on o.id = d.organization_id and o.status <> 'archived'`),
+      from gps_devices d join organizations o on o.id = d.organization_id and o.status <> 'archived' and ${nd}`),
     db.execute<{ total: number; recent: number }>(sql`
       select count(distinct u.id)::int as total,
              count(distinct u.id) filter (where exists (select 1 from sessions s where s.user_id = u.id and s.created_at > ${at}::timestamptz - interval '7 days'))::int as recent
-      from users u join memberships m on m.user_id = u.id join organizations o on o.id = m.organization_id and o.status <> 'archived'
+      from users u join memberships m on m.user_id = u.id join organizations o on o.id = m.organization_id and o.status <> 'archived' and ${nd}
       where not u.is_super_admin`),
     db.execute<{ loads: number; alerts: number; leads: number }>(sql`
-      select (select count(*)::int from loads l join organizations o on o.id = l.organization_id and o.status = 'active'
+      select (select count(*)::int from loads l join organizations o on o.id = l.organization_id and o.status = 'active' and ${nd}
                 where l.status in ('invited', 'tracking', 'at_pickup', 'in_transit', 'at_delivery')) as loads,
              (select count(*)::int from alert_events where occurred_at > ${at}::timestamptz - interval '24 hours') as alerts,
              (select count(*)::int from leads where status = 'new') as leads`),
@@ -70,13 +72,13 @@ export async function getPlatformOverview(onlineThresholdSeconds: number, now = 
            where m.organization_id = o.id and not u.is_super_admin and exists (select 1 from sessions s where s.user_id = u.id)) as signed_in_ever,
         (select count(*)::int from memberships m join users u on u.id = m.user_id
            where m.organization_id = o.id and not u.is_super_admin and exists (select 1 from sessions s where s.user_id = u.id and s.created_at > ${at}::timestamptz - interval '14 days')) as signed_in_14d
-      from organizations o where o.status <> 'archived'`),
+      from organizations o where o.status <> 'archived' and ${nd}`),
     db.execute<{ id: string; name: string; created_at: Date; trackers: number; status: OrganizationStatus }>(sql`
       select o.id, o.name, o.created_at, o.status, (select count(*)::int from gps_devices d where d.organization_id = o.id) as trackers
-      from organizations o where o.status <> 'archived' order by o.created_at desc limit 5`),
+      from organizations o where o.status <> 'archived' and ${nd} order by o.created_at desc limit 5`),
     db.execute<{ in_stock: number; no_sim: number; unused: number; wasted: number; off: number }>(sql`
       select (select count(*)::int from gps_devices where organization_id is null and status <> 'retired') as in_stock,
-        (select count(*)::int from gps_devices d join organizations o on o.id = d.organization_id and o.status <> 'archived'
+        (select count(*)::int from gps_devices d join organizations o on o.id = d.organization_id and o.status <> 'archived' and ${nd}
            where d.status = 'active' and not exists (select 1 from sim_cards s where s.device_id = d.id)) as no_sim,
         count(*) filter (where s.status = 'active' and (d.id is null or d.organization_id is null or d.status = 'retired'))::int as unused,
         coalesce(sum(s.monthly_cost_cents) filter (where s.status = 'active' and (d.id is null or d.organization_id is null or d.status = 'retired')), 0)::int as wasted,
@@ -112,7 +114,7 @@ export async function getPlatformOverview(onlineThresholdSeconds: number, now = 
 
 // ---------- tracker inventory: every tracker, in stock or with a customer ----------
 
-export const TRACKER_STATES = ["all", "stock", "deployed", "online", "silent", "never", "nosim", "retired"] as const;
+export const TRACKER_STATES = ["all", "stock", "deployed", "online", "silent", "never", "nosim", "retired", "demo"] as const;
 export const PlatformTrackerQuery = z.object({
   page: z.coerce.number().int().min(1).max(100_000).default(1),
   pageSize: z.coerce.number().int().refine((n) => [10, 25, 50, 100].includes(n)).default(25),
@@ -135,13 +137,16 @@ export interface PlatformTrackerRow {
   lastSeenAt: string | null;
   inventoryChangedAt: string | null;
   /** null = in RIO's stock. */
-  customer: { id: string; name: string; status: OrganizationStatus } | null;
+  customer: { id: string; name: string; status: OrganizationStatus; isDemo: boolean } | null;
   vehicleName: string | null;
   sim: { id: string; iccid: string; msisdn: string | null; status: string; carrier: string | null } | null;
 }
 
-/** Every tracker, in stock or with a (non-archived) customer, with its SIM. */
-export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresholdSeconds: number, now = new Date()) {
+/**
+ * Every tracker, in stock or with a (non-archived) customer, with its SIM.
+ * hideDemo leaves out trackers of demo customers (except on the Demo filter, which lists only them).
+ */
+export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresholdSeconds: number, now = new Date(), hideDemo = false) {
   const at = now.toISOString();
   const digits = /^\d{3,22}$/.test(q.search) ? sql` or d.imei like ${likeP(q.search)} or coalesce(s.iccid, '') like ${likeP(q.search)} or coalesce(s.msisdn, '') like ${likeP(q.search)}` : sql``;
   const search = q.search
@@ -156,8 +161,10 @@ export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresh
     silent: sql`${deployed} and d.status = 'active' and d.last_seen_at <= ${at}::timestamptz - interval '24 hours'`,
     never: sql`${deployed} and d.status = 'active' and d.last_seen_at is null`,
     nosim: sql`d.status <> 'retired' and s.id is null`,
-    retired: sql`d.status = 'retired'`
+    retired: sql`d.status = 'retired'`,
+    demo: sql`coalesce(o.is_demo, false)`
   };
+  const visible = hideDemo ? sql`not coalesce(o.is_demo, false)` : sql`true`;
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
   const order = {
     lastSeen: sql`d.last_seen_at ${dir} nulls last`,
@@ -171,22 +178,23 @@ export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresh
   const [rows, counts] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select d.id, d.name, d.model, d.imei, d.serial_number, d.platform_notes, d.status, d.last_seen_at, d.inventory_changed_at,
-        o.id as org_id, o.name as org_name, o.status as org_status,
+        o.id as org_id, o.name as org_name, o.status as org_status, o.is_demo as org_demo,
         s.id as sim_id, s.iccid, s.msisdn, s.status as sim_status, s.carrier,
         (select v.name from device_assignments a join vehicles v on v.id = a.vehicle_id and v.organization_id = a.organization_id
            where a.device_id = d.id and a.organization_id = d.organization_id and a.unassigned_at is null limit 1) as vehicle_name,
         count(*) over()::int as total
-      ${base} and ${stateWhere[q.state]}
+      ${base} and ${q.state === "demo" ? sql`true` : visible} and ${stateWhere[q.state]}
       order by ${order}, d.id limit ${q.pageSize} offset ${(q.page - 1) * q.pageSize}`),
     db.execute<Record<(typeof TRACKER_STATES)[number], number>>(sql`
-      select count(*)::int as all,
-        count(*) filter (where ${stateWhere.stock})::int as stock,
-        count(*) filter (where ${stateWhere.deployed})::int as deployed,
-        count(*) filter (where ${stateWhere.online})::int as online,
-        count(*) filter (where ${stateWhere.silent})::int as silent,
-        count(*) filter (where ${stateWhere.never})::int as never,
-        count(*) filter (where ${stateWhere.nosim})::int as nosim,
-        count(*) filter (where ${stateWhere.retired})::int as retired
+      select count(*) filter (where ${visible})::int as all,
+        count(*) filter (where ${visible} and ${stateWhere.stock})::int as stock,
+        count(*) filter (where ${visible} and ${stateWhere.deployed})::int as deployed,
+        count(*) filter (where ${visible} and ${stateWhere.online})::int as online,
+        count(*) filter (where ${visible} and ${stateWhere.silent})::int as silent,
+        count(*) filter (where ${visible} and ${stateWhere.never})::int as never,
+        count(*) filter (where ${visible} and ${stateWhere.nosim})::int as nosim,
+        count(*) filter (where ${visible} and ${stateWhere.retired})::int as retired,
+        count(*) filter (where ${stateWhere.demo})::int as demo
       ${base}`)
   ]);
   const iso = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
@@ -202,7 +210,7 @@ export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresh
         status: String(r.status),
         lastSeenAt: iso(r.last_seen_at),
         inventoryChangedAt: iso(r.inventory_changed_at),
-        customer: r.org_id ? { id: String(r.org_id), name: String(r.org_name), status: r.org_status as OrganizationStatus } : null,
+        customer: r.org_id ? { id: String(r.org_id), name: String(r.org_name), status: r.org_status as OrganizationStatus, isDemo: Boolean(r.org_demo) } : null,
         vehicleName: (r.vehicle_name as string | null) ?? null,
         sim: r.sim_id ? { id: String(r.sim_id), iccid: String(r.iccid), msisdn: (r.msisdn as string | null) ?? null, status: String(r.sim_status), carrier: (r.carrier as string | null) ?? null } : null
       })
@@ -210,7 +218,7 @@ export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresh
     total: rows.length ? Number(rows[0]!.total) : 0,
     page: q.page,
     pageSize: q.pageSize,
-    counts: counts[0] ?? { all: 0, stock: 0, deployed: 0, online: 0, silent: 0, never: 0, nosim: 0, retired: 0 }
+    counts: counts[0] ?? { all: 0, stock: 0, deployed: 0, online: 0, silent: 0, never: 0, nosim: 0, retired: 0, demo: 0 }
   };
 }
 

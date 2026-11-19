@@ -24,31 +24,35 @@ export interface NavSection {
 type Rule = NavItem & { permission?: Permission; superAdminOnly?: boolean };
 
 const SECTIONS: { title?: string; items: Rule[] }[] = [
-  // Every plan has a dashboard: fleet, loads, or both.
-  { items: [{ href: "/dashboard", label: "Dashboard", icon: "home" }] },
+  // The two pages people open every day stand on their own at the top.
   {
-    title: "Tracking",
     items: [
-      { href: "/map", label: "Live tracking", icon: "map", permission: "locations.read" },
-      { href: "/loads", label: "Loads", icon: "package", permission: "loads.read" },
+      { href: "/dashboard", label: "Dashboard", icon: "home" },
+      { href: "/map", label: "Live map", icon: "map", permission: "locations.read" }
+    ]
+  },
+  {
+    title: "Fleet",
+    items: [
       { href: "/vehicles", label: "Vehicles", icon: "truck", permission: "vehicles.read" },
-      { href: "/devices", label: "Devices", icon: "cpu", permission: "devices.read" }
+      { href: "/devices", label: "GPS devices", icon: "cpu", permission: "devices.read" },
+      { href: "/maintenance", label: "Maintenance", icon: "wrench", permission: "maintenance.read" }
     ]
   },
   {
     title: "Operations",
     items: [
+      { href: "/loads", label: "Loads", icon: "package", permission: "loads.read" },
       { href: "/geofences", label: "Zones", icon: "zones", permission: "geofences.read", match: ["/zones"] },
       { href: "/alerts", label: "Alerts", icon: "bell", permission: "alerts.read" },
-      { href: "/reports", label: "Reports", icon: "reports", permission: "history.read" },
-      { href: "/maintenance", label: "Maintenance", icon: "wrench", permission: "maintenance.read" }
+      { href: "/reports", label: "Reports", icon: "reports", permission: "history.read" }
     ]
   },
   {
-    title: "Administration",
+    title: "Account",
     items: [
       { href: "/settings/team", label: "Team", icon: "users", permission: "users.read" },
-      { href: "/settings/plan", label: "Plan & usage", icon: "receipt", permission: "billing.read" },
+      { href: "/settings/plan", label: "Plan & billing", icon: "receipt", permission: "billing.read" },
       { href: "/settings/organization", label: "Settings", icon: "settings", permission: "organization.manage" }
     ]
   }

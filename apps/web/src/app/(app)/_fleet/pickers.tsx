@@ -5,6 +5,7 @@ import { SearchInput } from "@/components/app/search-input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
+import { deviceDisplayName, productName } from "@/lib/device-name";
 
 interface Option {
   id: string;
@@ -70,13 +71,13 @@ const fetchDevices = async (search: string) => {
   const r = await api<{ items: DeviceItem[] }>(`/api/devices?${new URLSearchParams({ search, pageSize: "10", sort: "name" })}`);
   return r.items.map((d) => ({
     id: d.id,
-    label: d.name ?? d.model ?? "Device",
-    hint: [d.model && d.name ? d.model : null, d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null, d.vehicle ? `on ${d.vehicle.name}` : "not assigned"].filter(Boolean).join(" · ")
+    label: deviceDisplayName(d.name, d.model),
+    hint: [deviceDisplayName(d.name, d.model) !== productName(d.model) ? productName(d.model) : null, d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null, d.vehicle ? `on ${d.vehicle.name}` : "not assigned"].filter(Boolean).join(" · ")
   }));
 };
 const fetchVehicles = async (search: string) => {
   const r = await api<{ items: VehicleItem[] }>(`/api/vehicles?${new URLSearchParams({ search, pageSize: "10", sort: "name" })}`);
-  return r.items.map((v) => ({ id: v.id, label: v.name, hint: [v.licensePlate, v.device ? `has ${v.device.name ?? v.device.model ?? "a device"}` : "no device"].filter(Boolean).join(" · ") }));
+  return r.items.map((v) => ({ id: v.id, label: v.name, hint: [v.licensePlate, v.device ? `has ${deviceDisplayName(v.device.name, v.device.model)}` : "no device"].filter(Boolean).join(" · ") }));
 };
 
 export function DevicePicker(props: { value: string | null; onChange: (id: string) => void }) {

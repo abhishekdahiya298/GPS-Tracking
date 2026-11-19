@@ -12,7 +12,7 @@ import { shapeRing } from "@rio-gps/core/geo";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
 import { Select } from "@/components/ui/input";
-import { VehiclePicture } from "@/components/app/vehicle-picture";
+import { VehiclePicture, vehiclePictureSrc } from "@/components/app/vehicle-picture";
 import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
@@ -43,8 +43,8 @@ const STATE_HINT: Record<MapState, string> = {
 };
 /** Badge grounds: the status colour's soft tint (text uses the status colour itself). */
 /** Soft status fill that also works in dark mode (mixed with the page background). */
-const tint = (c: string, pct = 20) => `color-mix(in srgb, ${c} ${pct}%, var(--color-background))`;
-const STATE_TINT: Record<MapState, string> = { moving: tint("#136c35"), idle: tint("#a3470a"), stopped: tint("#ad1f1f"), parked: tint("#6526d1"), offline: tint("#6b7280") };
+const tint = (c: string, pct = 26) => `color-mix(in srgb, ${c} ${pct}%, var(--color-background))`;
+const STATE_TINT: Record<MapState, string> = { moving: tint("#0f5c2c"), idle: tint("#8f3d06"), stopped: tint("#9c1818"), parked: tint("#5a1fc0"), offline: tint("#6b7280") };
 const PRIMARY = "#1d4ed8";
 /** A status colour used as text or an icon: a touch darker on light pages, brighter in dark mode, so it always reads. */
 const ink = (c: string) => `color-mix(in srgb, ${c} 62%, var(--color-foreground))`;
@@ -58,7 +58,7 @@ function durationText(minutes: number): string {
 /** One of the four live facts under the speed: coloured like the phone app. */
 function Fact({ icon: Icon, label, value, color }: { icon: typeof Truck; label: string; value: string; color: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden rounded-lg border px-2 py-1.5" style={{ background: tint(color, 16), borderColor: tint(color, 35) }}>
+    <div className="flex min-w-0 items-center gap-1.5 overflow-hidden rounded-lg border px-2 py-1.5" style={{ background: tint(color, 22), borderColor: tint(color, 45) }}>
       <Icon className="size-3.5 shrink-0" style={{ color: ink(color) }} aria-hidden="true" />
       <span className="flex min-w-0 flex-col">
         <span className="text-[10px] font-semibold leading-3 text-muted-foreground">{label}</span>
@@ -121,9 +121,12 @@ export function LiveMap({
   groups = [],
   canShare = false,
   defaultStyle = "streets",
-  addresses = false
+  addresses = false,
+  platformAdmin = false
 }: {
   offlineSeconds: number;
+  /** RIO staff (super admin): also sees tracker diagnostics and IMEIs. Customers see plain status. */
+  platformAdmin?: boolean;
   /** The map look chosen in the platform console (Maps & addresses). */
   defaultStyle?: MapStyleId;
   /** Whether an address service is on: then the selected vehicle shows its street address. */
@@ -212,8 +215,11 @@ export function LiveMap({
       for (const d of devices.current.values()) if (d.location) b.extend([d.location.longitude, d.location.latitude]);
       if (b.isEmpty()) return;
       if (!animate && fitted.current) return;
+      const opening = !fitted.current;
       fitted.current = true;
-      m.fitBounds(b, { padding: { top: 80, bottom: 80, left: 80, right: 80 }, maxZoom: 14, duration: animate ? 600 : 0 });
+      // Opening: one smooth flight from the wide view down onto the fleet (like the phone app);
+      // afterwards "Fit all" is a short move.
+      m.fitBounds(b, { padding: { top: 90, bottom: 70, left: 80, right: 90 }, maxZoom: 13, duration: opening ? 1800 : 600, essential: true });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [map]
@@ -527,6 +533,33 @@ export function LiveMap({
     const d = devices.current.get(id);
     if (d?.location) mapRef.current?.easeTo({ center: [d.location.longitude, d.location.latitude], padding: cardPadding(), duration: 500 });
   };
+  // Trip replay: the moving marker is the vehicle itself (its Live 3D picture, turned to its
+  // heading), not a generic arrow. Re-applied after a base-map switch, which drops our layers.
+  useEffect(() => {
+    const m = map;
+    if (!m || !historyFor) return;
+    const d = devices.current.get(historyFor);
+    const id = iconName(d?.vehicle?.type, "moving", { style: "top", color: "status" });
+    const apply = () => {
+      if (!m.getLayer("track-pos")) return;
+      m.setLayoutProperty("track-pos", "icon-image", m.hasImage(id) ? id : "veh-moving");
+      m.setLayoutProperty("track-pos", "icon-size", m.hasImage(id) ? 0.6 : 1.15);
+    };
+    if (m.hasImage(id)) apply();
+    else
+      m.loadImage(`/fleet-art/map/icons/${id}.png`)
+        .then((res) => {
+          if (!m.hasImage(id)) m.addImage(id, res.data, { pixelRatio: 3 });
+          apply();
+        })
+        .catch(() => undefined);
+    m.on("style.load", apply);
+    return () => {
+      m.off("style.load", apply);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, historyFor, mapStyle]);
+
   // Card closed (or history opened): give the map its full area back.
   useEffect(() => {
     if ((selected && !historyFor) || !paddedRef.current) return;
@@ -565,7 +598,7 @@ export function LiveMap({
     <>
       <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
         <div className="min-w-0">
-          <h1 className="m-0 text-xl font-bold tracking-tight">Live tracking</h1>
+          <h1 className="m-0 text-xl font-bold tracking-tight">Live map</h1>
           <p className="m-0 text-xs text-muted-foreground">
             {counts.all} vehicle{counts.all === 1 ? "" : "s"}
             {counts.offline > 0 && ` · ${counts.offline} not reporting`}
@@ -690,7 +723,7 @@ export function LiveMap({
                           "relative flex h-full w-full cursor-pointer items-center gap-3 overflow-hidden rounded-lg border-0 bg-transparent px-3 text-left transition-colors hover:bg-muted",
                           active && "bg-primary-soft shadow-[inset_0_0_0_1px_var(--color-primary)] hover:bg-primary-soft"
                         )}
-                        style={active ? undefined : { backgroundImage: `linear-gradient(110deg, transparent 50%, ${tint(STATE_COLORS[r.state], 16)} 100%)` }}
+                        style={active ? undefined : { backgroundImage: `linear-gradient(110deg, transparent 15%, ${tint(STATE_COLORS[r.state], 24)} 100%)` }}
                       >
                         <span aria-hidden="true" className="absolute inset-y-1.5 left-0 w-1 rounded-r" style={{ background: STATE_COLORS[r.state] }} />
                         <span className="relative shrink-0">
@@ -724,8 +757,6 @@ export function LiveMap({
   const located = rows.filter((r) => r.d.location);
   const selIdx = located.findIndex((r) => r.d.deviceId === selected);
   const neighbour = (by: -1 | 1) => (selIdx < 0 || located.length < 2 ? undefined : located[(selIdx + by + located.length) % located.length]);
-  const prevRow = located.length > 2 || selIdx === 1 ? neighbour(-1) : undefined;
-  const nextRow = located.length > 2 || selIdx === 0 ? neighbour(1) : undefined;
   const stepTo = (by: -1 | 1) => {
     const n = neighbour(by);
     if (n) focus(n.d.deviceId);
@@ -746,8 +777,8 @@ export function LiveMap({
   // Redraw the edge hints while the map moves (one update per frame at most).
   const [, setViewTick] = useState(0);
   useEffect(() => {
-    const m = mapRef.current;
-    if (!m || !selected) return;
+    const m = map;
+    if (!m) return;
     let raf = 0;
     const onMove = () => {
       if (raf) return;
@@ -761,52 +792,82 @@ export function LiveMap({
       m.off("move", onMove);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [selected]);
+  }, [map]);
   /**
-   * Life360-style hint for the previous / next vehicle when it is off screen: a small round icon on
-   * the left edge (previous) or right edge (next), with an arrow pointing to where it really is. A vehicle
-   * already on screen needs no hint: its own icon is there to click.
+   * Nearby vehicles, the way the phone app shows them: every vehicle just off the screen gets a round
+   * chip on the left or right edge of the map (the side it is on, at the height it is), with its 3D
+   * picture in a ring of its status colour, a small arrow pointing at it and its name. Up to 6, nearest
+   * first. Zoomed out to a continent everything is on screen anyway, so none are shown.
    */
-  const edgeChip = (r: (typeof rows)[number] | undefined, by: -1 | 1) => {
+  const nearbyChips = () => {
     const m = mapRef.current;
-    const loc = r?.d.location;
-    if (!r || !m || !loc) return null;
+    if (!m || historyFor) return null;
     const box = m.getContainer();
     const w = box.clientWidth;
     const h = box.clientHeight;
-    const p = m.project([loc.longitude, loc.latitude]);
-    const card = w >= 768 ? { right: 416, top: h - 470 } : null;
-    const pad = { left: 30, right: 96, top: 92, bottom: 40 };
-    const inside = p.x > pad.left && p.x < w - pad.right && p.y > pad.top && p.y < h - pad.bottom && !(card && p.x < card.right && p.y > card.top);
-    if (inside) return null;
-    // Previous on the left edge, next on the right; up or down that edge by where it really is.
+    const bounds = m.getBounds();
+    if (bounds.getEast() - bounds.getWest() >= 60 || bounds.getNorth() - bounds.getSouth() >= 40) return null;
     const cx = w / 2;
     const cy = h / 2;
-    const dx = p.x - cx;
-    const dy = p.y - cy;
-    const reach = Math.max(Math.abs(dx), Math.abs(dy)) || 1;
-    const x = by === -1 ? (card && cy + (dy / reach) * (h / 2 - 60) > card.top ? card.right + 30 : pad.left + 6) : w - pad.right + 18;
-    let y = Math.min(Math.max(cy + (dy / reach) * (h / 2 - 60), pad.top + 10), h - pad.bottom - 24);
-    if (card && x < card.right && y > card.top) y = card.top - 30;
-    const deg = (Math.atan2(dx, -dy) * 180) / Math.PI;
-    return (
-      <button
-        key={`${by}-${r.d.deviceId}`}
-        type="button"
-        onClick={() => focus(r.d.deviceId)}
-        title={`${by === -1 ? "Previous" : "Next"} vehicle: ${r.name} (${by === -1 ? "←" : "→"})`}
-        aria-label={`${by === -1 ? "Previous" : "Next"} vehicle: ${r.name}`}
-        className="group absolute z-[1] grid size-9 -translate-x-1/2 -translate-y-1/2 animate-in cursor-pointer place-items-center rounded-full border-0 bg-transparent p-0"
-        style={{ left: x, top: y }}
-      >
-        <span aria-hidden="true" className="absolute inset-[-7px] flex justify-center" style={{ transform: `rotate(${deg}deg)` }}>
-          <span className="h-0 w-0 border-x-[5px] border-b-[7px] border-x-transparent" style={{ borderBottomColor: STATE_COLORS[r.state] }} />
-        </span>
-        {/* eslint-disable-next-line @next/next/no-img-element -- small static icon from /public */}
-        <img src={`/fleet-art/map/icons/${iconName(r.d.vehicle?.type, r.state, { style: "circle", color: icons.color })}.png`} alt="" className="size-9 rounded-full bg-background shadow-pop ring-2 transition-transform group-hover:scale-110" style={{ ["--tw-ring-color" as string]: STATE_COLORS[r.state] }} />
-        <span className="pointer-events-none absolute top-full mt-1 max-w-[110px] truncate rounded bg-background/90 px-1.5 text-[11px] font-bold leading-4 text-foreground shadow-card">{splitName(r.name).main}</span>
-      </button>
-    );
+    const top = 74;
+    const bottom = h - 48;
+    const card = sel && w >= 768 ? { right: 416, top: h - 480 } : null;
+    const GAP = 70;
+    const off = located
+      .filter((r) => r.d.deviceId !== selected)
+      .map((r) => ({ r, p: m.project([r.d.location!.longitude, r.d.location!.latitude]) }))
+      .filter(({ p }) => p.x < 0 || p.x > w || p.y < 0 || p.y > h)
+      .map((o) => ({ ...o, dist: Math.hypot(o.p.x - cx, o.p.y - cy) }))
+      .sort((x, y) => x.dist - y.dist)
+      .slice(0, 6);
+    const lay = (side: "left" | "right") => {
+      const list = off
+        .filter(({ p }) => (side === "left" ? p.x < cx : p.x >= cx))
+        .map((o) => ({ ...o, y: Math.min(Math.max(o.p.y, top), bottom - GAP) }))
+        .sort((x, y) => x.y - y.y);
+      for (let i = 1; i < list.length; i++) if (list[i]!.y - list[i - 1]!.y < GAP) list[i]!.y = list[i - 1]!.y + GAP;
+      const limit = side === "left" && card ? card.top - GAP : bottom - GAP + 10;
+      return list.filter((o) => o.y <= limit).map((o) => ({ ...o, side }));
+    };
+    return [...lay("left"), ...lay("right")].map(({ r, p, y, side }) => {
+      const x = side === "left" ? 40 : w - 104;
+      const deg = (Math.atan2(p.x - x, -(p.y - y)) * 180) / Math.PI;
+      const color = STATE_COLORS[r.state];
+      const src = vehiclePictureSrc(r.d.vehicle?.type, r.state);
+      const name = splitName(r.name).main;
+      return (
+        <button
+          key={`near-${r.d.deviceId}`}
+          type="button"
+          onClick={() => focus(r.d.deviceId)}
+          title={`${name}: ${STATE_BADGE[r.state]}. Show on the map`}
+          aria-label={`${name}, ${STATE_BADGE[r.state]}. Show on the map`}
+          className="group absolute z-[1] flex -translate-x-1/2 animate-in cursor-pointer flex-col items-center gap-1 border-0 bg-transparent p-0"
+          style={{ left: x, top: y }}
+        >
+          <span className="relative grid size-[50px] place-items-center">
+            <span aria-hidden="true" className="absolute inset-[-8px] flex justify-center transition-transform" style={{ transform: `rotate(${deg}deg)` }}>
+              <span className="h-0 w-0 border-x-[6px] border-b-[8px] border-x-transparent" style={{ borderBottomColor: color }} />
+            </span>
+            <span
+              className="grid size-[50px] place-items-center overflow-hidden rounded-full border-[3px] bg-background shadow-pop transition-transform group-hover:scale-110"
+              style={{ borderColor: color, background: `radial-gradient(circle at 50% 35%, var(--color-background) 40%, ${tint(color, 30)} 100%)` }}
+            >
+              {src ? (
+                // eslint-disable-next-line @next/next/no-img-element -- small static picture from /public
+                <img src={src} alt="" className="w-[40px] object-contain" />
+              ) : (
+                <Truck className="size-5" style={{ color: ink(color) }} aria-hidden="true" />
+              )}
+            </span>
+          </span>
+          <span className="max-w-[112px] truncate rounded-full bg-background px-2 py-0.5 text-[11px] font-bold leading-4 text-foreground shadow-card">{name}</span>
+          <span className="-mt-0.5 rounded-full px-1.5 text-[10px] font-semibold leading-4" style={{ background: tint(color, 30), color: ink(color) }}>
+            {r.state === "moving" && r.d.location ? u.fmtSpeed(r.d.location.speedKph) : STATE_BADGE[r.state]}
+          </span>
+        </button>
+      );
+    });
   };
 
   const address = useAddress(addresses && sel?.location ? sel.location.latitude : null, addresses && sel?.location ? sel.location.longitude : null, selState === "moving");
@@ -816,17 +877,19 @@ export function LiveMap({
       key={sel.deviceId}
       aria-label="Selected vehicle"
       className={cn(
-        "absolute inset-x-3 z-[2] grid animate-in grid-cols-[minmax(0,1fr)] gap-3 rounded-xl border border-border bg-background p-4 shadow-pop",
+        "absolute inset-x-3 z-[2] grid animate-in grid-cols-[minmax(0,1fr)] gap-3 overflow-hidden rounded-xl border border-border bg-background p-4 shadow-pop",
         "bottom-[160px] md:inset-x-auto md:bottom-6 md:left-4 md:w-[384px]",
         sheetOpen && "hidden md:grid"
       )}
+      style={{ backgroundImage: `linear-gradient(150deg, var(--color-background) 35%, ${tint(STATE_COLORS[selState], 22)} 100%)` }}
     >
+      <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1" style={{ background: STATE_COLORS[selState] }} />
       <div className="flex items-start gap-3">
         <VehiclePicture type={sel.vehicle?.type} state={selState ?? undefined} className="h-11 w-14 shrink-0" />
         <div className="min-w-0 flex-1">
           <h2 className="m-0 flex min-w-0 items-baseline gap-1.5 text-base font-semibold">
             <span className="truncate">{splitName(deviceLabel(sel)).main}</span>
-            {splitName(deviceLabel(sel)).imei && <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{splitName(deviceLabel(sel)).imei}</span>}
+            {platformAdmin && splitName(deviceLabel(sel)).imei && <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{splitName(deviceLabel(sel)).imei}</span>}
           </h2>
           <p className="m-0 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
             <StatusBadge state={selState} stale={selStale} />
@@ -860,9 +923,11 @@ export function LiveMap({
             <div className="flex items-center gap-3 rounded-lg px-3 py-2.5" style={{ background: tint(STATE_COLORS.idle) }}>
               <Satellite className="size-5 shrink-0" style={{ color: ink(STATE_COLORS.idle) }} aria-hidden="true" />
               <div className="min-w-0">
-                <p className="m-0 text-sm font-bold">No current GPS position</p>
+                <p className="m-0 text-sm font-bold">{platformAdmin ? "No current GPS position" : "Location may be out of date"}</p>
                 <p className="m-0 text-xs text-muted-foreground">
-                  The tracker is online, but its newest position is {durationText((now - Date.parse(sel.location.recordedAt)) / 60000)} old. It may be uploading stored records or have no GPS signal.
+                  {platformAdmin
+                    ? `The tracker is online, but its newest position is ${durationText((now - Date.parse(sel.location.recordedAt)) / 60000)} old. It may be uploading stored records or have no GPS signal.`
+                    : `Last known position, ${durationText((now - Date.parse(sel.location.recordedAt)) / 60000)} ago.`}
                 </p>
               </div>
             </div>
@@ -872,7 +937,15 @@ export function LiveMap({
               <Radio className="size-5 shrink-0" style={{ color: ink(STATE_COLORS.idle) }} aria-hidden="true" />
               <div className="min-w-0">
                 <p className="m-0 text-sm font-bold">{sel.lastSeenAt ? `Not reporting for ${durationText((now - Date.parse(sel.lastSeenAt)) / 60000)}` : "No report yet"}</p>
-                <p className="m-0 text-xs text-muted-foreground">{selState === "parked" ? "Unhooked trailer: it reports only on its own battery." : "Usually no power or no mobile signal."}</p>
+                <p className="m-0 text-xs text-muted-foreground">
+                  {platformAdmin
+                    ? selState === "parked"
+                      ? "Unhooked trailer: it reports only on its own battery."
+                      : "Usually no power or no mobile signal."
+                    : selState === "parked"
+                      ? "Parked trailer. Its position updates when it moves."
+                      : "Showing its last known position."}
+                </p>
               </div>
             </div>
           ) : (
@@ -937,15 +1010,15 @@ export function LiveMap({
               <ExternalLink className="size-3.5" aria-hidden="true" />
             </a>
           </div>
-          <div className="grid grid-cols-[repeat(4,minmax(0,1fr))] gap-1.5">
+          <div className={cn("grid gap-1.5", platformAdmin ? "grid-cols-[repeat(4,minmax(0,1fr))]" : "grid-cols-[repeat(3,minmax(0,1fr))]")}>
             <Fact icon={KeyRound} label="Ignition" value={selStale || sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} color={selStale ? STATE_COLORS.offline : sel.location.ignition === false ? STATE_COLORS.stopped : sel.location.ignition ? STATE_COLORS.moving : STATE_COLORS.offline} />
-            <Fact icon={Activity} label="Motion" value={selStale ? "Unknown" : STATE_BADGE[selState]} color={PRIMARY} />
-            <Fact icon={Satellite} label="GPS" value={now - Date.parse(sel.location.recordedAt) < 120_000 ? "Live" : ago(sel.location.recordedAt, now)} color={now - Date.parse(sel.location.recordedAt) < 120_000 ? STATE_COLORS.parked : STATE_COLORS.idle} />
-            <Fact icon={Wifi} label="Tracker" value={selState === "offline" || selState === "parked" ? "Offline" : "Online"} color={selState === "offline" || selState === "parked" ? STATE_COLORS.offline : STATE_COLORS.moving} />
+            <Fact icon={Activity} label="Status" value={selStale ? "Unknown" : STATE_BADGE[selState]} color={PRIMARY} />
+            <Fact icon={Satellite} label={platformAdmin ? "GPS" : "Updated"} value={now - Date.parse(sel.location.recordedAt) < 120_000 ? "Live" : ago(sel.location.recordedAt, now)} color={now - Date.parse(sel.location.recordedAt) < 120_000 ? STATE_COLORS.parked : STATE_COLORS.idle} />
+            {platformAdmin && <Fact icon={Wifi} label="Tracker" value={selState === "offline" || selState === "parked" ? "Offline" : "Online"} color={selState === "offline" || selState === "parked" ? STATE_COLORS.offline : STATE_COLORS.moving} />}
           </div>
         </>
       ) : (
-        <p className="m-0 text-xs text-muted-foreground">This tracker hasn&apos;t reported a position yet.</p>
+        <p className="m-0 text-xs text-muted-foreground">{platformAdmin ? "This tracker hasn't reported a position yet." : "No position yet. It appears here as soon as the vehicle reports."}</p>
       )}
       <div className="flex gap-2">
         <Button
@@ -1105,8 +1178,7 @@ export function LiveMap({
         </div>
 
         {vehicleCard}
-        {sel && !historyFor && edgeChip(prevRow, -1)}
-        {sel && !historyFor && edgeChip(nextRow, 1)}
+        {nearbyChips()}
 
         {follow && sel && (
           <div className="pointer-events-none absolute inset-x-0 top-16 z-[1] flex justify-center">

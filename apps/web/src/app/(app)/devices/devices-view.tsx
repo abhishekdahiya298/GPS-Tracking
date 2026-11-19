@@ -1,5 +1,4 @@
 "use client";
-import { deviceName } from "@/lib/device-name";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Cpu, Link2, Link2Off, MoreHorizontal, Pencil, Power, PowerOff, RefreshCw } from "lucide-react";
 import Link from "next/link";
@@ -22,6 +21,7 @@ import { relativeTime } from "@/lib/format";
 import { RelativeTime } from "@/components/app/local-time";
 import { useTime } from "@/components/app/time-context";
 import dynamic from "next/dynamic";
+import { deviceDisplayName, productName } from "@/lib/device-name";
 
 // Dialogs (and their form/validation code) load on first use, not with the page.
 const AssignDialog = dynamic(() => import("../_fleet/assign-dialog").then((m) => m.AssignDialog));
@@ -36,7 +36,7 @@ const STATE: Record<DeviceState, { label: string; tone: StatusTone }> = {
   inactive: { label: "Deactivated", tone: "warning" },
   retired: { label: "Retired", tone: "neutral" }
 };
-const label = (d: DeviceRow) => deviceName(d.name, d.model) ?? d.model ?? "Device";
+const label = (d: DeviceRow) => deviceDisplayName(d.name, d.model);
 
 export function DevicesView({ data, query, can }: { data: Page<DeviceRow, DeviceState | "unassigned">; query: DeviceListQuery; can: Can }) {
   const t = useTime();
@@ -100,7 +100,7 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
         cell: ({ row: { original: d } }) => (
           <div className="min-w-0">
             <p className="m-0 truncate font-medium text-foreground">{label(d)}</p>
-            <p className="m-0 truncate text-xs text-muted-foreground">{[deviceName(d.name, d.model) && d.model ? d.model : null, d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null].filter(Boolean).join(" · ") || " "}</p>
+            <p className="m-0 truncate text-xs text-muted-foreground">{[label(d) !== productName(d.model) ? productName(d.model) : null, d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null].filter(Boolean).join(" · ") || " "}</p>
           </div>
         )
       },

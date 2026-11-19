@@ -29,13 +29,20 @@ const ANIM_MS = 900;
 const MAX_ANIMATING = 400;
 const MIN_FRAME_MS = 33; // ~30 fps is plenty for smooth marker glides
 
-export const STATE_COLORS: Record<MapState, string> = { moving: "#136c35", idle: "#a3470a", stopped: "#ad1f1f", parked: "#6526d1", offline: "#6b7280" };
+export const STATE_COLORS: Record<MapState, string> = { moving: "#0f5c2c", idle: "#8f3d06", stopped: "#9c1818", parked: "#5a1fc0", offline: "#6b7280" };
 /** Below this zoom nearby vehicles merge into one counted bubble, so a large fleet stays readable. */
 const CLUSTER_MAX_ZOOM = 8;
 const NOT_CLUSTER = ["!", ["has", "point_count"]];
 const HALO_R = 18;
 /** Below this zoom every vehicle is a small status dot: with 50+ vehicles, detailed icons would pile up. */
 const DETAIL_ZOOM = 9;
+/**
+ * Where a vehicle's name tag sits: beside a photo pin (like the phone app and Life360), under the
+ * other icons. Offsets are in ems of the 11 px label text.
+ */
+function labelPlace(style: IconPrefs["style"]): { "text-anchor": "left" | "top"; "text-offset": [number, number] } {
+  return style === "photo" ? { "text-anchor": "left", "text-offset": [2.4, -3.1] } : { "text-anchor": "top", "text-offset": [0, 0.5] };
+}
 
 interface Anim {
   from: [number, number];
@@ -291,6 +298,11 @@ export class FleetLayer {
       m.setLayoutProperty("fleet-icons", "icon-rotate", prefs.style === "top" ? ["to-number", ["get", "rot"]] : 0);
       m.setLayoutProperty("fleet-icons", "icon-rotation-alignment", prefs.style === "top" ? "map" : "viewport");
     }
+    if (m.getLayer("fleet-labels")) {
+      const place = labelPlace(prefs.style);
+      m.setLayoutProperty("fleet-labels", "text-anchor", place["text-anchor"]);
+      m.setLayoutProperty("fleet-labels", "text-offset", place["text-offset"]);
+    }
     this.structural = true;
     this.schedule();
   }
@@ -468,8 +480,7 @@ export class FleetLayer {
             "text-font": ["Noto Sans Regular"],
             "text-size": 11,
             "text-line-height": 1.25,
-            "text-anchor": "top",
-            "text-offset": [0, 0.5],
+            ...labelPlace(this.prefs.style),
             "text-optional": true,
             "icon-image": "veh-chip",
             "icon-text-fit": "both",

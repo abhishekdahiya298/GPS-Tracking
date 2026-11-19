@@ -5,6 +5,7 @@ import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib
 import { AppError } from "@/lib/errors";
 import { listDevices } from "@/lib/vehicles";
 import { TripReports } from "./trip-reports";
+import { deviceDisplayName } from "@/lib/device-name";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Trip reports · RIO GPS" };
@@ -19,6 +20,6 @@ export default async function ReportsPage() {
     throw err;
   }
   if (!contextHasPermission(ctx, "history.read")) redirect("/dashboard");
-  const devices = (await listDevices(ctx.organizationId)).map((d) => ({ id: d.id, label: d.vehicle ? `${d.vehicle.name} (${d.name ?? d.model ?? "device"})` : (d.name ?? d.model ?? "Device") + (d.status === "active" ? "" : " — inactive") }));
+  const devices = (await listDevices(ctx.organizationId)).map((d) => ({ id: d.id, label: d.vehicle ? `${d.vehicle.name} (${deviceDisplayName(d.name, d.model)})` : deviceDisplayName(d.name, d.model) + (d.status === "active" ? "" : " — inactive") }));
   return <TripReports devices={devices} canSchedule={contextHasPermission(ctx, "reports.manage")} />;
 }

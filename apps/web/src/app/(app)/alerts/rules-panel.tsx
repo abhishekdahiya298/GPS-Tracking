@@ -224,7 +224,7 @@ function NewRuleDialog({ open, onOpenChange, geofences, vehicles, onCreated }: {
               </Field>
             )}
             {type === "device_offline" && (
-              <Field id="ar-off" label="Offline for (minutes)" required description="A parked FTM880 reports about hourly; 90+ avoids false alarms.">
+              <Field id="ar-off" label="Offline for (minutes)" required description="A parked tracker reports about hourly; 90+ avoids false alarms.">
                 <Input id="ar-off" name="offlineMinutes" type="number" required min={5} max={10080} defaultValue={90} />
               </Field>
             )}

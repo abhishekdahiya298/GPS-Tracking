@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /** Display units only; stored GPS values are always metric. */
 export const unitSystemEnum = pgEnum("unit_system", ["imperial", "metric"]);
@@ -40,6 +40,8 @@ export const organizations = pgTable("organizations", {
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
   platformNotes: text("platform_notes"),
+  /** Demo or internal test account (store review, sales demos). Platform admins can hide these from their lists. */
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });

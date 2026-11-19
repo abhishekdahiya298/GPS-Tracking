@@ -31,7 +31,8 @@ export function EditCustomerDialog({ c, onOpenChange, onDone }: { c: CustomerDet
         { name: "timeZone", label: "Time zone", kind: "timezone", defaultValue: c.timeZone },
         { name: "unitSystem", label: "Units", kind: "select", defaultValue: c.unitSystem, options: [{ value: "imperial", label: "Miles, mph" }, { value: "metric", label: "Kilometres, km/h" }], half: true },
         { name: "timeFormat", label: "Clock", kind: "select", defaultValue: c.timeFormat, options: [{ value: "12h", label: "12-hour (3:45 PM)" }, { value: "24h", label: "24-hour (15:45)" }], half: true },
-        { name: "notes", label: "Internal notes", kind: "textarea", maxLength: 2000, defaultValue: c.notes ?? "", description: "Platform admins only; never shown to the customer." }
+        { name: "notes", label: "Internal notes", kind: "textarea", maxLength: 2000, defaultValue: c.notes ?? "", description: "Platform admins only; never shown to the customer." },
+        { name: "isDemo", label: "Demo or test account", kind: "checkbox", defaultValue: c.isDemo, description: "Marked Demo in the console, and left out when “Hide demo accounts” is on." }
       ]}
       confirmLabel="Save"
       onSubmit={async (v) => {
@@ -46,7 +47,8 @@ export function EditCustomerDialog({ c, onOpenChange, onDone }: { c: CustomerDet
             timeZone: v.timeZone,
             unitSystem: v.unitSystem,
             timeFormat: v.timeFormat,
-            notes: String(v.notes)
+            notes: String(v.notes),
+            isDemo: Boolean(v.isDemo)
           }
         });
         toast.success(out.changed.length ? "Customer updated" : "Nothing changed");

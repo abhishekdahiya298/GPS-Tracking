@@ -9,7 +9,7 @@ import { listGroups } from "@/lib/vehicle-groups";
 import { LiveMap } from "./live-map";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Live tracking · RIO GPS" };
+export const metadata = { title: "Live map · RIO GPS" };
 
 export default async function MapPage() {
   let ctx;
@@ -27,5 +27,5 @@ export default async function MapPage() {
   const groups = contextHasPermission(ctx, "vehicles.read") ? await listGroups(ctx.organizationId) : [];
   const canShare = contextHasPermission(ctx, "vehicles.update") && contextHasPermission(ctx, "locations.read");
   const maps = await getMapsSettings();
-  return <LiveMap offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} groups={groups} canShare={canShare} defaultStyle={maps.mapStyle} addresses={maps.addressProvider !== "off"} />;
+  return <LiveMap offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} groups={groups} canShare={canShare} defaultStyle={maps.mapStyle} addresses={maps.addressProvider !== "off"} platformAdmin={ctx.isSuperAdmin} />;
 }

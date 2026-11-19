@@ -20,7 +20,29 @@ const PICTURE_OF: Record<string, string> = {
   bus: "bus",
   school_bus: "school_bus"
 };
-const STATE_TINT: Record<PictureState, string> = { moving: "#136c35", idle: "#a3470a", stopped: "#ad1f1f", parked: "#6526d1", offline: "#4b5563" };
+/** A vehicle list/detail state as a picture colour (no device: no colour, the plain picture). */
+export function pictureState(state: string | null | undefined): PictureState | undefined {
+  switch (state) {
+    case "moving":
+    case "idle":
+    case "stopped":
+    case "parked":
+    case "offline":
+      return state;
+    case "never_seen":
+    case "inactive":
+      return "offline";
+    default:
+      return undefined;
+  }
+}
+
+/** The 3D picture file for a vehicle type in a state, or null for types drawn as a symbol. */
+export function vehiclePictureSrc(type: string | null | undefined, state: PictureState): string | null {
+  const picture = PICTURE_OF[type ?? "truck"];
+  return picture ? `/fleet-art/vehicles/3d-${picture}-${state}.png` : null;
+}
+const STATE_TINT: Record<PictureState, string> = { moving: "#0f5c2c", idle: "#8f3d06", stopped: "#9c1818", parked: "#5a1fc0", offline: "#4b5563" };
 
 /**
  * The vehicle picture used on lists and cards, the same as the phone app. With a `state` it is
@@ -46,11 +68,11 @@ export function VehiclePicture({ type, state, className }: { type: string | null
     <span
       aria-hidden="true"
       className={cn("grid h-10 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border", state ? "border-border" : "border-[#c6d2e4] bg-[#d6e0f1] dark:border-border dark:bg-muted", className)}
-      style={state ? { background: `color-mix(in srgb, ${STATE_TINT[state]} 14%, var(--color-background))` } : undefined}
+      style={state ? { background: `linear-gradient(160deg, var(--color-background), color-mix(in srgb, ${STATE_TINT[state]} 26%, var(--color-background)))` } : undefined}
     >
       {/* A plain <img>: a small fixed file from /public, no resizing needed. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" className="h-[86%] w-[90%] object-contain" />
+      <img src={src} alt="" loading="eager" decoding="async" className="h-[86%] w-[90%] object-contain" />
     </span>
   );
 }

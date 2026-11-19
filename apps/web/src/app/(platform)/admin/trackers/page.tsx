@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { hideDemoAccounts } from "@/lib/demo-pref";
 import { getServerEnv } from "@/lib/env";
 import { parseListQuery } from "@/lib/fleet-list";
 import { listPlatformTrackers, PlatformTrackerQuery } from "@/lib/platform";
@@ -14,5 +15,6 @@ export default async function PlatformTrackersPage({ searchParams }: { searchPar
   if (!rc.user.isSuperAdmin) redirect("/dashboard");
   const q = parseListQuery(PlatformTrackerQuery, await searchParams);
   const onlineSeconds = getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS;
-  return <TrackersView data={await listPlatformTrackers(q, onlineSeconds)} query={q} onlineSeconds={onlineSeconds} />;
+  const hideDemo = await hideDemoAccounts();
+  return <TrackersView data={await listPlatformTrackers(q, onlineSeconds, new Date(), hideDemo)} query={q} onlineSeconds={onlineSeconds} hideDemo={hideDemo} />;
 }

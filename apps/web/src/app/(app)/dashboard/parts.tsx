@@ -48,14 +48,14 @@ export function Hero({ greeting, orgName, dateLabel, summary, action }: { greeti
 
 /** Solid colour per status. Every pair is white text on a background of at least 4.5:1 contrast. */
 export const TILE_LOOK = {
-  moving: "bg-[linear-gradient(135deg,#136c35,#166534)]",
-  idle: "bg-[linear-gradient(135deg,#a3470a,#9a3412)]",
-  stopped: "bg-[linear-gradient(135deg,#ad1f1f,#991b1b)]",
+  moving: "bg-[linear-gradient(135deg,#0f5c2c,#166534)]",
+  idle: "bg-[linear-gradient(135deg,#8f3d06,#9a3412)]",
+  stopped: "bg-[linear-gradient(135deg,#9c1818,#991b1b)]",
   offline: "bg-[linear-gradient(135deg,#526079,#3b4558)]",
   alert: "bg-[linear-gradient(135deg,#c81e2b,#991b1b)]",
   calm: "bg-[linear-gradient(135deg,#0a2463,#12357f)]",
   waiting: "bg-[linear-gradient(135deg,#526079,#3b4558)]",
-  pickup: "bg-[linear-gradient(135deg,#6526d1,#4527b8)]"
+  pickup: "bg-[linear-gradient(135deg,#5a1fc0,#4527b8)]"
 } as const;
 
 export function Tile({ label, value, total, icon: Icon, look, hint, href, className, totalNoun = "fleet" }: { label: string; value: number; total?: number; icon: typeof Truck; look: keyof typeof TILE_LOOK; hint?: string; href: string; className?: string; /** "34% of fleet" / "34% of active loads". */ totalNoun?: string }) {
@@ -81,7 +81,7 @@ export function Tile({ label, value, total, icon: Icon, look, hint, href, classN
 export const QA_TONE = {
   navy: "bg-primary-soft text-primary group-hover:bg-primary group-hover:text-white",
   green: "bg-success-soft text-success group-hover:bg-success group-hover:text-white",
-  purple: "bg-[#e3d6fb] text-[#6526d1] dark:bg-white/10 dark:text-foreground group-hover:bg-[#6526d1] group-hover:text-white",
+  purple: "bg-[#e3d6fb] text-[#5a1fc0] dark:bg-white/10 dark:text-foreground group-hover:bg-[#5a1fc0] group-hover:text-white",
   amber: "bg-warning-soft text-warning group-hover:bg-warning group-hover:text-white",
   red: "bg-danger-soft text-danger group-hover:bg-danger group-hover:text-white"
 } as const;

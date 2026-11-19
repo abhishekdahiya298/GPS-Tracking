@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { SIM_STATUS } from "../../_shared/sim-meta";
 import { SimNumbers } from "../../_shared/sim-numbers";
 import { TrackerActionDialog } from "../../_shared/tracker-actions";
+import { DemoTag } from "../../_shared/hide-demo-toggle";
 import { EditCustomerDialog, MemberDialog, type MemberAction } from "./customer-dialogs";
 import { CustomerPlanCard, type CustomerBilling } from "./customer-plan";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +48,7 @@ export function CustomerDetailView({ c, billing }: { c: CustomerDetail; billing:
         title={
           <span className="flex flex-wrap items-center gap-2">
             {c.name}
+            {c.isDemo && <DemoTag />}
             {c.status !== "active" && <StatusBadge tone={CUSTOMER_STATUS[c.status].tone} label={CUSTOMER_STATUS[c.status].label} className="bg-white" />}
           </span>
         }
@@ -105,7 +107,7 @@ export function CustomerDetailView({ c, billing }: { c: CustomerDetail; billing:
             <EmptyState
               icon={Cpu}
               title="No trackers yet"
-              description="Add a tracker by IMEI: one from RIO stock is handed over, a new one is registered in Traccar. Bulk import takes a whole list."
+              description="Add a tracker by IMEI: one from RIO stock is handed over, a new one is registered on our GPS server. Bulk import takes a whole list."
               action={
                 !archived && (
                   <div className="flex flex-wrap justify-center gap-2">
@@ -397,7 +399,7 @@ function RegisterDeviceDialog({ open, onOpenChange, customerId, onDone }: { open
         method: "POST",
         json: { imei: digits, model: f.get("model"), ...(name ? { name } : {}), ...(unchecked && confirmed ? { allowUncheckedImei: true } : {}) }
       });
-      toast.success(out.fromStock ? "Tracker handed over from RIO stock." : out.traccarCreated ? "Tracker registered in Traccar and RIO." : "Tracker already existed in Traccar; linked to this customer.");
+      toast.success(out.fromStock ? "Tracker handed over from RIO stock." : out.traccarCreated ? "Tracker registered and ready." : "Tracker was already registered on our GPS server; linked to this customer.");
       setImei("");
       setConfirmed(false);
       onOpenChange(false);
@@ -410,7 +412,7 @@ function RegisterDeviceDialog({ open, onOpenChange, customerId, onDone }: { open
   }
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
-      <DialogContent title="Add a tracker" description="If the IMEI is in RIO stock, that unit (and its SIM) is handed to this customer. A new IMEI is registered in Traccar first; nothing is saved if Traccar rejects it.">
+      <DialogContent title="Add a tracker" description="If the IMEI is in RIO stock, that unit (and its SIM) is handed to this customer. A new IMEI is registered on our GPS server first; nothing is saved if the server rejects it.">
         <form method="post" onSubmit={submit} className="grid gap-4">
           <Field id="rd-imei" label="IMEI" required description="15 digits, printed on the device label." error={digits.length > 0 && digits.length !== 15 ? `${digits.length} of 15 digits` : null}>
             <Input id="rd-imei" value={imei} onChange={(e) => { setImei(e.target.value); setConfirmed(false); setError(null); }} inputMode="numeric" autoComplete="off" maxLength={20} aria-invalid={digits.length > 0 && digits.length !== 15} autoFocus />

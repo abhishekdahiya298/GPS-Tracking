@@ -23,11 +23,12 @@ import { CUSTOMER_STATUS } from "./_shared/status-meta";
 
 import type { PlanOption } from "./_shared/create-wizard";
 
+import { DemoTag, HideDemoToggle } from "../_shared/hide-demo-toggle";
 const CreateCustomerWizard = dynamic(() => import("./_shared/create-wizard").then((m) => m.CreateCustomerWizard));
 
 type Data = { items: CustomerRow[]; total: number; page: number; pageSize: number; counts: Record<CustomerListQuery["view"], number> };
 
-export function CustomersView({ data, query, startCreating, plans }: { data: Data; query: CustomerListQuery; startCreating: boolean; plans: PlanOption[] }) {
+export function CustomersView({ data, query, startCreating, plans, hideDemo }: { data: Data; query: CustomerListQuery; startCreating: boolean; plans: PlanOption[]; hideDemo: boolean }) {
   const router = useRouter();
   const { set, refresh, pending } = useListParams();
   const [creating, setCreating] = useState(startCreating);
@@ -41,7 +42,10 @@ export function CustomersView({ data, query, startCreating, plans }: { data: Dat
         meta: { sortKey: "name" } as ColumnMeta,
         cell: ({ row }) => (
           <div className="min-w-0">
-            <div className="font-medium">{row.original.name}</div>
+            <div className="flex items-center gap-1.5 font-medium">
+              {row.original.name}
+              {row.original.isDemo && <DemoTag />}
+            </div>
             <div className="text-xs text-muted-foreground">{row.original.slug}</div>
           </div>
         )
@@ -161,12 +165,16 @@ export function CustomersView({ data, query, startCreating, plans }: { data: Dat
                   { value: "all", label: "All", count: data.counts.all }
                 ]}
               />
+              <HideDemoToggle hidden={hideDemo} className="sm:ml-auto" />
             </>
           }
           mobileRow={(c) => (
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0 text-sm">
-                <div className="font-medium">{c.name}</div>
+                <div className="flex items-center gap-1.5 font-medium">
+                  {c.name}
+                  {c.isDemo && <DemoTag />}
+                </div>
                 <div className="text-xs text-muted-foreground">
                   {c.members} users · {c.devices} trackers · <LocalDate iso={c.createdAt} />
                 </div>

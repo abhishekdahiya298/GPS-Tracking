@@ -7,7 +7,9 @@ import { LocalDate, RelativeTime } from "@/components/app/local-time";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/cn";
+import { hideDemoAccounts } from "@/lib/demo-pref";
 import { getServerEnv } from "@/lib/env";
+import { HideDemoToggle } from "./_shared/hide-demo-toggle";
 import { ingestSnapshot } from "@/lib/ingest-stats";
 import { getLiveHub } from "@/lib/live-hub";
 import { getPlatformOverview, listActivity, type AttentionItem } from "@/lib/platform";
@@ -30,9 +32,10 @@ export default async function PlatformOverviewPage() {
   if (!rc.user.isSuperAdmin) redirect("/dashboard");
   const env = getServerEnv();
   const now = new Date();
+  const hideDemo = await hideDemoAccounts();
 
   const [o, activity, redisOk, lastPosition] = await Promise.all([
-    getPlatformOverview(env.GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS, now),
+    getPlatformOverview(env.GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS, now, hideDemo),
     listActivity({ page: 1, pageSize: 25, search: "", kind: "all", who: "platform" }),
     timed(async () => (await (await getReadyRedisPublisher()).ping()) === "PONG", 2000),
     timed(async () => {
@@ -65,7 +68,8 @@ export default async function PlatformOverviewPage() {
               {o.attention.length > 0 ? ` · ${o.attention.length} need${o.attention.length === 1 ? "s" : ""} a look` : ""}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <HideDemoToggle hidden={hideDemo} onDark />
             <Link href="/admin/customers?new=1" className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-4 text-sm font-semibold text-[#0a2463] no-underline shadow-card hover:bg-white/90">
               <Plus className="size-4" aria-hidden="true" /> New customer
             </Link>

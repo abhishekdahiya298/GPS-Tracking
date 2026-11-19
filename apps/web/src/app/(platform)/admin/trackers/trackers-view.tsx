@@ -1,11 +1,10 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Archive, ArchiveRestore, ArrowRightLeft, Building2, Cpu, ListPlus, MoreHorizontal, Pencil, Plus, Undo2 } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowRightLeft, Boxes, Building2, CardSim, CircleOff, Cpu, FlaskConical, ListPlus, MoreHorizontal, Pencil, Plus, Radio, Undo2, Warehouse, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
-import { SegmentedFilter } from "@/components/app/filter-bar";
 import { RelativeTime } from "@/components/app/local-time";
 import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
@@ -18,8 +17,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { toast } from "@/components/ui/toaster";
 import { api } from "@/lib/client/api";
 import { isValidImei } from "@/lib/imei-list";
+import { cn } from "@/lib/cn";
+import { deviceDisplayName, productName } from "@/lib/device-name";
 import type { PlatformTrackerQuery, PlatformTrackerRow } from "@/lib/platform";
 import { FormDialog } from "../_shared/form-dialog";
+import { DemoTag, HideDemoToggle } from "../_shared/hide-demo-toggle";
 import { PasteImportDialog } from "../_shared/paste-import";
 import { SIM_STATUS } from "../_shared/sim-meta";
 import { SimNumbers } from "../_shared/sim-numbers";
@@ -40,13 +42,74 @@ function connectivity(t: PlatformTrackerRow, now: number, onlineMs: number) {
   return <StatusBadge tone="success" label="Online" />;
 }
 
-const label = (t: PlatformTrackerRow) => t.name ?? t.model ?? "Tracker";
+const label = (t: PlatformTrackerRow) => deviceDisplayName(t.name, t.model);
+
+type State = PlatformTrackerQuery["state"];
+
+/** One colour per tracker state, used by the filter tiles and the row icon. */
+const STATES: { value: State; label: string; icon: LucideIcon; color: string }[] = [
+  { value: "all", label: "All trackers", icon: Cpu, color: "#133a8f" },
+  { value: "stock", label: "In stock", icon: Warehouse, color: "#0369a1" },
+  { value: "deployed", label: "With customers", icon: Boxes, color: "#0f766e" },
+  { value: "online", label: "Online", icon: Radio, color: "#15803d" },
+  { value: "silent", label: "Silent 24 h+", icon: CircleOff, color: "#c2410c" },
+  { value: "never", label: "Never reported", icon: CircleOff, color: "#b45309" },
+  { value: "nosim", label: "No SIM", icon: CardSim, color: "#b91c1c" },
+  { value: "demo", label: "Demo", icon: FlaskConical, color: "#5a1fc0" },
+  { value: "retired", label: "Retired", icon: Archive, color: "#475569" }
+];
+
+/** The colour of a tracker's row icon: green online, amber silent, red never/no SIM, blue stock. */
+function rowColor(t: PlatformTrackerRow, now: number, onlineMs: number) {
+  if (t.status === "retired") return "#475569";
+  if (!t.customer) return "#0369a1";
+  if (t.status !== "active") return "#64748b";
+  if (!t.lastSeenAt) return "#b45309";
+  const age = now - new Date(t.lastSeenAt).getTime();
+  if (age > DAY) return "#c2410c";
+  if (age > onlineMs) return "#64748b";
+  return "#15803d";
+}
+
+/** Coloured filter tiles: count, label and icon per state; the selected one is filled. */
+function StateTiles({ value, counts, onChange }: { value: State; counts: Record<State, number>; onChange: (v: State) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Tracker status" className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9">
+      {STATES.map((s) => {
+        const on = value === s.value;
+        const Icon = s.icon;
+        return (
+          <button
+            key={s.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(s.value)}
+            style={{
+              borderColor: on ? s.color : `color-mix(in srgb, ${s.color} 30%, transparent)`,
+              backgroundImage: on ? `linear-gradient(135deg, ${s.color}, color-mix(in srgb, ${s.color} 70%, #000))` : `linear-gradient(135deg, var(--color-background) 30%, color-mix(in srgb, ${s.color} 16%, var(--color-background)))`
+            }}
+            className={cn("flex cursor-pointer items-center gap-2.5 rounded-xl border p-3 text-left shadow-card transition-transform duration-150 hover:-translate-y-0.5", on ? "text-white" : "text-foreground")}
+          >
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: on ? "rgb(255 255 255 / 0.18)" : `color-mix(in srgb, ${s.color} 18%, transparent)`, color: on ? "#fff" : s.color }}>
+              <Icon className="size-[18px]" aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-xl font-semibold leading-6 tabular-nums">{counts[s.value] ?? 0}</span>
+              <span className={cn("block truncate text-xs font-medium", on ? "text-white/85" : "text-muted-foreground")}>{s.label}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 /**
  * The tracker inventory: every unit RIO owns, in stock or with a customer, with its SIM.
  * Add units to stock as they arrive, assign them, move or take them back, retire faulty ones.
  */
-export function TrackersView({ data, query, onlineSeconds }: { data: Data; query: PlatformTrackerQuery; onlineSeconds: number }) {
+export function TrackersView({ data, query, onlineSeconds, hideDemo }: { data: Data; query: PlatformTrackerQuery; onlineSeconds: number; hideDemo: boolean }) {
   const router = useRouter();
   const { set, refresh, pending } = useListParams();
   const [adding, setAdding] = useState<"one" | "bulk" | null>(null);
@@ -60,17 +123,24 @@ export function TrackersView({ data, query, onlineSeconds }: { data: Data; query
         id: "name",
         header: "Tracker",
         meta: { sortKey: "name" } as ColumnMeta,
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <div className="font-medium">{label(row.original)}</div>
-            <div className="font-mono text-xs text-muted-foreground">{row.original.imei}</div>
-            {(row.original.model && row.original.name) || row.original.serialNumber ? (
-              <div className="text-xs text-muted-foreground">
-                {[row.original.name ? row.original.model : null, row.original.serialNumber ? `SN ${row.original.serialNumber}` : null].filter(Boolean).join(" · ")}
+        cell: ({ row }) => {
+          const t = row.original;
+          const color = rowColor(t, now, onlineMs);
+          return (
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}>
+                <Cpu className="size-[18px]" aria-hidden="true" />
+              </span>
+              <div className="min-w-0">
+                <div className="font-medium">{label(t)}</div>
+                <div className="font-mono text-xs text-muted-foreground">{t.imei}</div>
+                <div className="text-xs text-muted-foreground">
+                  {[`${productName(t.model)}${t.model ? ` (${t.model})` : ""}`, t.serialNumber ? `SN ${t.serialNumber}` : null].filter(Boolean).join(" · ")}
+                </div>
               </div>
-            ) : null}
-          </div>
-        )
+            </div>
+          );
+        }
       },
       {
         id: "customer",
@@ -84,6 +154,7 @@ export function TrackersView({ data, query, onlineSeconds }: { data: Data; query
               <Link href={`/admin/customers/${c.id}`} onClick={(e) => e.stopPropagation()} className="font-medium text-foreground no-underline hover:underline">
                 {c.name}
               </Link>
+              {c.isDemo && <DemoTag className="ml-1.5" />}
               {c.status === "suspended" && <StatusBadge tone="warning" label="Suspended" className="ml-1.5" />}
               <div className="text-xs text-muted-foreground">{row.original.vehicleName ?? "Not on a vehicle"}</div>
             </div>
@@ -189,6 +260,7 @@ export function TrackersView({ data, query, onlineSeconds }: { data: Data; query
           </>
         }
       />
+      <StateTiles value={query.state} counts={data.counts} onChange={(v) => set({ state: v === "all" ? null : v })} />
       <Card>
         <DataTable<PlatformTrackerRow>
           columns={columns}
@@ -207,20 +279,7 @@ export function TrackersView({ data, query, onlineSeconds }: { data: Data; query
           toolbar={
             <>
               <SearchInput value={query.search} onChange={(v) => set({ search: v })} placeholder="IMEI, SIM, phone, customer…" label="Search trackers" className="sm:w-64" />
-              <SegmentedFilter
-                label="Tracker status"
-                value={query.state}
-                onChange={(v) => set({ state: v === "all" ? null : v })}
-                options={[
-                  { value: "all", label: "All", count: data.counts.all },
-                  { value: "stock", label: "In stock", count: data.counts.stock },
-                  { value: "deployed", label: "With customers", count: data.counts.deployed },
-                  { value: "silent", label: "Silent 24 h+", count: data.counts.silent },
-                  { value: "never", label: "Never reported", count: data.counts.never },
-                  { value: "nosim", label: "No SIM", count: data.counts.nosim },
-                  { value: "retired", label: "Retired", count: data.counts.retired }
-                ]}
-              />
+              <HideDemoToggle hidden={hideDemo} className="sm:ml-auto" />
             </>
           }
           mobileRow={(t) => (
@@ -229,7 +288,7 @@ export function TrackersView({ data, query, onlineSeconds }: { data: Data; query
                 <div className="truncate font-medium">{label(t)}</div>
                 <div className="truncate font-mono text-xs text-muted-foreground">{t.imei}</div>
                 <div className="truncate text-xs text-muted-foreground">
-                  {t.customer?.name ?? "RIO stock"} · {t.sim?.msisdn ?? (t.sim ? `SIM …${t.sim.iccid.slice(-4)}` : "no SIM")}
+                  {t.customer?.isDemo ? "Demo · " : ""}{t.customer?.name ?? "RIO stock"} · {t.sim?.msisdn ?? (t.sim ? `SIM …${t.sim.iccid.slice(-4)}` : "no SIM")}
                 </div>
               </div>
               {connectivity(t, now, onlineMs)}
@@ -296,7 +355,7 @@ function AddTrackerDialog({ onClose, onDone }: { onClose: () => void; onDone: ()
   return (
     <FormDialog
       title="Add a tracker to stock"
-      description="Registers the IMEI in Traccar now, so you can power it on and check it reports before it goes to a customer."
+      description="Registers the IMEI on our GPS server now, so you can power it on and check it reports before it goes to a customer."
       fields={[
         { name: "imei", label: "IMEI", kind: "text", required: true, numeric: true, maxLength: 20, description: "15 digits, on the device label.", half: true },
         { name: "model", label: "Model", kind: "text", required: true, defaultValue: "FTM880", maxLength: 60, half: true },
