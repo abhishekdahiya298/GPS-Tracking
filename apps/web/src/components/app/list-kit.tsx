@@ -21,7 +21,7 @@ export interface TileOption<T extends string> {
 /** One row of compact, colour-coded filter tiles (count + label). Acts as a radio group. */
 export function FilterTiles<T extends string>({ value, options, onChange, label }: { value: T; options: TileOption<T>[]; onChange: (v: T) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="mb-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
+    <div role="radiogroup" aria-label={label} className="mb-3 flex flex-wrap gap-2">
       {options.map((o) => {
         const on = o.value === value;
         const Icon = o.icon;
