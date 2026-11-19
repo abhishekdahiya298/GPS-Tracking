@@ -123,8 +123,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const states = devices.map((d) => ({ d, s: fleetState(d, fixOpts) }));
   const count = (s: FleetState) => states.filter((x) => x.s === s).length;
   const firstName = (user.name || "").split(" ")[0];
-  // Moving, Idling, Stopped, Offline, and Alerts for people who can see them.
-  const tileCount = 4 + (can("alerts.read") ? 1 : 0);
 
   if (devices.length === 0) {
     return (
@@ -168,12 +166,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         action={can("locations.read") ? { href: "/map", label: "Open live map" } : undefined}
       />
 
-      <section aria-label="Fleet summary" className={cn("stagger-in mb-5 grid grid-cols-2 gap-3", tileCount === 5 ? "md:grid-cols-5" : "md:grid-cols-4")}>
+      <section aria-label="Fleet summary" className="stagger-in mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <Tile label="Total vehicles" value={devices.length} icon={Truck} look="total" hint={unack > 0 ? `${unack} unread alert${unack === 1 ? "" : "s"}` : "All tracked"} href="/vehicles" className="col-span-2 md:col-span-1" />
         <Tile label="Moving" value={count("moving")} total={devices.length} icon={Navigation} look="moving" href="/vehicles?state=moving" />
         <Tile label="Idling" value={count("idle")} total={devices.length} icon={Activity} look="idle" hint="engine on" href="/vehicles?state=idle" />
         <Tile label="Stopped" value={count("stopped") + count("parked")} total={devices.length} icon={CircleParking} look="stopped" href="/vehicles?state=stopped" />
         <Tile label="Offline" value={count("offline") + count("never_seen")} total={devices.length} icon={CircleOff} look="offline" href="/vehicles?state=offline" />
-        {can("alerts.read") && <Tile label="Unread alerts" value={unack} icon={Bell} look={unack > 0 ? "alert" : "calm"} href="/alerts" className="col-span-2 md:col-span-1" />}
       </section>
 
       {/* Things that need attention sit side by side on wide screens instead of stacking. */}
@@ -213,10 +211,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       )}
       </div>
 
-      {can("locations.read") && <FleetGlance offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} />}
-
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-        <Card className="min-w-0 lg:col-span-3">
+      {/* Map and status side by side, like the phone app: where they are, and how many of each. */}
+      <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {can("locations.read") && <FleetGlance offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} className="min-w-0 overflow-hidden lg:col-span-2" />}
+        <Card className="min-w-0">
           <CardHeader>
             <IconTitle icon={PieChart}>Fleet status</IconTitle>
             <Link href="/vehicles" className="text-sm text-primary no-underline hover:underline">
@@ -235,15 +233,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <ul className="m-0 list-none divide-y divide-border border-t border-border p-0">
             {states
               .sort((a, b) => rank(a.s) - rank(b.s))
-              .slice(0, 8)
+              .slice(0, 3)
               .map(({ d, s }) => (
                 <li key={d.deviceId}>
-                  <Link href={`/map?focus=${d.deviceId}`} className="flex items-center gap-3 px-4 py-3 text-foreground no-underline hover:bg-canvas sm:px-5">
-                    <VehiclePicture type={d.vehicle?.type} state={s === "never_seen" ? "offline" : s} />
+                  <Link href={`/map?focus=${d.deviceId}`} className="flex items-center gap-3 px-4 py-2.5 text-foreground no-underline hover:bg-canvas sm:px-5">
+                    <VehiclePicture type={d.vehicle?.type} state={s === "never_seen" ? "offline" : s} className="h-8 w-11" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? deviceDisplayName(d.name, d.model)}</span>
                       <span className="block truncate text-xs text-muted-foreground">
-                        {staleFix(d) ? `No current GPS · last fix ${relativeTime(d.location!.recordedAt, now.getTime(), rc.timeZone)} · last report ` : d.location && s !== "offline" && s !== "parked" ? `${u.fmtSpeed(d.location.speedKph)} · engine ${d.location.ignition === true ? "on" : d.location.ignition === false ? "off" : "unknown"} · last update ` : "last seen "}
+                        {staleFix(d) ? "No current GPS · " : d.location && s === "moving" ? `${u.fmtSpeed(d.location.speedKph)} · ` : ""}
                         {relativeTime(d.lastSeenAt, now.getTime(), rc.timeZone)}
                       </span>
                     </span>
@@ -252,26 +250,31 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 </li>
               ))}
           </ul>
-          {devices.length > 8 && <p className="m-0 border-t border-border px-5 py-2.5 text-xs text-muted-foreground">Showing 8 of {devices.length}. Moving vehicles first.</p>}
         </Card>
+      </div>
 
-        <div className="grid min-w-0 grid-cols-1 content-start gap-5 lg:col-span-2">
-          {can("alerts.read") && <RecentAlertsCard alerts={recentAlerts} now={now} timeZone={rc.timeZone} canWrite={can("alerts.write")} emptyHint={loadsDash ? "Speeding, zone, offline and load alerts will appear here." : "Speeding, zone and offline alerts will appear here."} />}
-
-          <Card>
-            <CardHeader>
-              <IconTitle icon={Zap}>Quick actions</IconTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
-              {can("locations.read") && <QuickAction href="/map" icon={MapIcon} label="Live map" hint="Every vehicle now" tone="navy" />}
-              {can("loads.write") && <QuickAction href="/loads/new" icon={Package} label="New load" hint="Track a shipment" tone="red" />}
-              {can("vehicles.create") && <QuickAction href="/vehicles" icon={Plus} label="Add vehicle" hint="Truck, trailer, van" tone="green" />}
-              {can("geofences.write") && <QuickAction href="/geofences" icon={Hexagon} label="Create zone" hint="Yards and sites" tone="purple" />}
-              {can("history.read") && <QuickAction href="/reports" icon={Route} label="Trip reports" hint="Trips, stops, miles" tone="amber" />}
-              {can("alerts.write") && !can("vehicles.create") && <QuickAction href="/alerts" icon={Bell} label="Alert rules" hint="Speed, zones, offline" tone="red" />}
-            </CardContent>
-          </Card>
-        </div>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {can("history.read") ? (
+          <Suspense fallback={<TripsSkeleton />}>
+            <RecentTrips ctx={ctx} devices={devices} now={now} u={u} />
+          </Suspense>
+        ) : (
+          <div className="hidden lg:block" />
+        )}
+        <Card className="min-w-0">
+          <CardHeader>
+            <IconTitle icon={Zap}>Quick actions</IconTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-2.5">
+            {can("locations.read") && <QuickAction href="/map" icon={MapIcon} label="Live map" hint="Every vehicle now" tone="navy" />}
+            {can("history.read") && <QuickAction href="/reports" icon={Route} label="Reports" hint="Trips, stops, miles" tone="amber" />}
+            {can("vehicles.create") && <QuickAction href="/vehicles" icon={Plus} label="Add vehicle" hint="Truck, trailer, van" tone="green" />}
+            {can("vehicles.create") && <QuickAction href="/drivers" icon={Users} label="Drivers" hint="Who drives what" tone="purple" />}
+            {can("geofences.write") && <QuickAction href="/geofences" icon={Hexagon} label="Create zone" hint="Yards and sites" tone="purple" />}
+            {can("loads.write") && <QuickAction href="/loads/new" icon={Package} label="New load" hint="Track a shipment" tone="red" />}
+          </CardContent>
+        </Card>
+        {can("alerts.read") && <RecentAlertsCard alerts={recentAlerts} now={now} timeZone={rc.timeZone} canWrite={can("alerts.write")} emptyHint={loadsDash ? "Speeding, zone, offline and load alerts will appear here." : "Speeding, zone and offline alerts will appear here."} />}
       </div>
 
       {loadsSection}
@@ -282,11 +285,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </Suspense>
       )}
 
-      {can("history.read") && (
-        <Suspense fallback={<TripsSkeleton />}>
-          <RecentTrips ctx={ctx} devices={devices} now={now} u={u} />
-        </Suspense>
-      )}
     </>
   );
 }
@@ -410,7 +408,7 @@ async function RecentTrips({ ctx, devices, now, u }: { ctx: TenantContext; devic
   const { trips, partial, from } = await tripsLast24h(ctx, devices, now);
   const km = trips.reduce((a, t) => a + t.distanceKm, 0);
   return (
-    <Card className="mt-5">
+    <Card className="min-w-0">
       <CardHeader>
         <IconTitle
           icon={Route}
@@ -432,7 +430,7 @@ async function RecentTrips({ ctx, devices, now, u }: { ctx: TenantContext; devic
         <CardContent className="text-sm text-muted-foreground">No trips in the last 24 hours.</CardContent>
       ) : (
         <ul className="m-0 list-none divide-y divide-border p-0">
-          {trips.slice(0, 6).map((t) => (
+          {trips.slice(0, 5).map((t) => (
             <li key={`${t.deviceId}-${t.startAt}`}>
               <Link
                 href={`/map?device=${t.deviceId}&from=${encodeURIComponent(t.startAt)}&to=${encodeURIComponent(new Date(Date.parse(t.endAt) + 60_000).toISOString())}`}
@@ -465,7 +463,7 @@ async function RecentTrips({ ctx, devices, now, u }: { ctx: TenantContext; devic
 
 function TripsSkeleton() {
   return (
-    <Card className="mt-5" aria-busy="true">
+    <Card aria-busy="true">
       <CardHeader>
         <CardTitle>Recent trips</CardTitle>
       </CardHeader>

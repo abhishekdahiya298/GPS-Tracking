@@ -52,7 +52,7 @@ export function parseListQuery<T extends z.ZodTypeAny>(schema: T, params: Record
 }
 
 /** LIKE pattern with user input escaped (no wildcards injected by the user). */
-function likePattern(s: string) {
+export function likePattern(s: string) {
   return `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
@@ -68,6 +68,8 @@ export interface VehicleRow {
   location: { latitude: number; longitude: number; speedKph: number | null; headingDeg: number | null; ignition: boolean | null; recordedAt: string } | null;
   /** Names of the groups this vehicle is in. */
   groups: string[];
+  /** Who drives it now (an active driver), if anyone. */
+  driver: { id: string; name: string; phone: string | null } | null;
 }
 
 export interface Page<T, S extends string> {
@@ -85,6 +87,8 @@ const vehicleBase = (organizationId: string, offlineSeconds: number, now: Date) 
          (select coalesce(array_agg(g.name order by lower(g.name)), '{}')
             from vehicle_group_members gm join vehicle_groups g on g.id = gm.group_id
            where gm.vehicle_id = v.id and gm.organization_id = ${organizationId}) as group_names,
+         (select json_build_object('id', dr.id, 'name', dr.name, 'phone', dr.phone) from drivers dr
+           where dr.vehicle_id = v.id and dr.organization_id = ${organizationId} and dr.status = 'active' limit 1) as driver,
          case
            when d.id is null then 'no_device'
            when d.status <> 'active' then 'inactive'
@@ -112,7 +116,7 @@ const STATE_RANK = sql`case state when 'moving' then 0 when 'idle' then 1 when '
 export async function listVehiclesPage(organizationId: string, q: VehicleListQuery, now: Date, offlineSeconds: number): Promise<Page<VehicleRow, VehicleState>> {
   const db = getDb();
   const search = q.search
-    ? sql` and (v.name ilike ${likePattern(q.search)} or coalesce(v.license_plate, '') ilike ${likePattern(q.search)} or coalesce(d.name, '') ilike ${likePattern(q.search)} or coalesce(d.model, '') ilike ${likePattern(q.search)})`
+    ? sql` and (v.name ilike ${likePattern(q.search)} or coalesce(v.license_plate, '') ilike ${likePattern(q.search)} or coalesce(d.name, '') ilike ${likePattern(q.search)} or coalesce(d.model, '') ilike ${likePattern(q.search)} or exists (select 1 from drivers dr where dr.vehicle_id = v.id and dr.organization_id = ${organizationId} and dr.name ilike ${likePattern(q.search)}))`
     : sql``;
   // Tenant-scoped membership check: a group id from another organization matches nothing.
   const group = q.group ? sql` and exists (select 1 from vehicle_group_members gm where gm.group_id = ${q.group} and gm.vehicle_id = v.id and gm.organization_id = ${organizationId})` : sql``;
@@ -147,6 +151,7 @@ export async function listVehiclesPage(organizationId: string, q: VehicleListQue
       vehicleStatus: String(r.vehicle_status),
       state: r.state as VehicleState,
       groups: (r.group_names as string[] | null) ?? [],
+      driver: (r.driver as VehicleRow["driver"]) ?? null,
       device: r.device_id ? { id: String(r.device_id), name: (r.device_name as string | null) ?? null, model: (r.device_model as string | null) ?? null } : null,
       lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at as string).toISOString() : null,
       location:
@@ -254,6 +259,7 @@ export interface VehicleDetail {
   lastSeenAt: string | null;
   state: VehicleState;
   location: VehicleRow["location"];
+  driver: VehicleRow["driver"];
 }
 
 /** One vehicle with its current device and position (tenant-scoped; null when not found). */
@@ -280,6 +286,7 @@ export async function getVehicleDetail(organizationId: string, vehicleId: string
       : null,
     lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at as string).toISOString() : null,
     state: r.state as VehicleState,
+    driver: (r.driver as VehicleRow["driver"]) ?? null,
     location:
       r.latitude !== null && r.latitude !== undefined
         ? {

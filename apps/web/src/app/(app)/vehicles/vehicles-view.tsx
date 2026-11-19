@@ -1,11 +1,13 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CircleStop, History, Layers, Navigation, Timer, Unplug, WifiOff, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2, Truck } from "lucide-react";
+import { CircleStop, Clock, Gauge, MapPin, Power, History, Layers, Navigation, Timer, Unplug, WifiOff, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2, Truck } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
-import { FilterTiles } from "@/components/app/list-kit";
+import { ACTION_COLOR, FilterTiles, RowActions } from "@/components/app/list-kit";
+import { useAddress } from "@/lib/use-address";
+import { DriverAvatar } from "../drivers/drivers-view";
 import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
@@ -35,6 +37,18 @@ const GroupsDialog = dynamic(() => import("./groups-dialog").then((m) => m.Group
 const VehicleFormDialog = dynamic(() => import("../_fleet/vehicle-form-dialog").then((m) => m.VehicleFormDialog));
 import { VehicleStateBadge } from "../_fleet/vehicle-state";
 import { deviceDisplayName } from "@/lib/device-name";
+
+/** Street address (or coordinates while it loads) with a pin; one short line. */
+function LocationCell({ lat, lon, moving }: { lat: number; lon: number; moving: boolean }) {
+  const a = useAddress(lat, lon, moving);
+  const text = a ? [a.line1, a.line2].filter(Boolean).join(", ") : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+  return (
+    <span className="flex min-w-0 max-w-64 items-center gap-1.5 text-sm" title={a?.label ?? text}>
+      <MapPin className="size-4 shrink-0 text-[#2563eb]" aria-hidden="true" />
+      <span className="truncate">{text}</span>
+    </span>
+  );
+}
 
 /** States whose last reading is old: no live speed is shown for them. */
 const SILENT = new Set<string>(["offline", "never_seen", "inactive", "parked"]);
@@ -124,17 +138,33 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
             <VehiclePicture type={v.type} state={pictureState(v.device ? v.state : null)} className="h-11 w-16" />
             <div className="min-w-0">
               <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
-              <p className="m-0 truncate text-xs text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(v.type)], v.licensePlate, ...v.groups].filter(Boolean).join(" · ")}</p>
+              <p className="m-0 truncate text-xs text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(v.type)], v.licensePlate, v.device ? deviceDisplayName(v.device.name, v.device.model) : "No GPS device", ...v.groups].filter(Boolean).join(" · ")}</p>
             </div>
           </div>
         )
       },
       { id: "status", header: "Status", meta: { sortKey: "state" } satisfies ColumnMeta, cell: ({ row }) => <VehicleStateBadge state={row.original.state} /> },
       {
-        id: "device",
-        header: "Device",
-        meta: { hideable: true, label: "Device" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) => (v.device ? <span className="text-foreground">{deviceDisplayName(v.device.name, v.device.model)}</span> : <span className="text-muted-foreground">No device</span>)
+        id: "driver",
+        header: "Driver",
+        meta: { hideable: true, label: "Driver" } satisfies ColumnMeta,
+        cell: ({ row: { original: v } }) =>
+          v.driver ? (
+            <Link href={`/drivers?search=${encodeURIComponent(v.driver.name)}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-2 text-foreground no-underline hover:underline">
+              <DriverAvatar name={v.driver.name} className="size-7 text-[11px]" />
+              <span className="truncate">{v.driver.name}</span>
+            </Link>
+          ) : (
+            <Link href="/drivers" onClick={(e) => e.stopPropagation()} className="text-sm text-muted-foreground no-underline hover:text-primary hover:underline">
+              No driver
+            </Link>
+          )
+      },
+      {
+        id: "location",
+        header: "Location",
+        meta: { hideable: true, label: "Location" } satisfies ColumnMeta,
+        cell: ({ row: { original: v } }) => (v.location ? <LocationCell lat={v.location.latitude} lon={v.location.longitude} moving={v.state === "moving"} /> : <span className="text-muted-foreground">{v.device ? "No position yet" : "—"}</span>)
       },
       {
         id: "speed",
@@ -143,7 +173,10 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         // A silent tracker's last speed is history, not now: show a dash, never "65 mph" for a truck that stopped reporting days ago.
         cell: ({ row: { original: v } }) =>
           v.location && !SILENT.has(v.state) ? (
-            <span className={v.state === "moving" ? "font-semibold text-[#15803d] dark:text-[#4ade80]" : "text-muted-foreground"}>{u.fmtSpeed(v.location.speedKph)}</span>
+            <span className={v.state === "moving" ? "inline-flex items-center gap-1.5 font-semibold text-[#15803d] dark:text-[#4ade80]" : "inline-flex items-center gap-1.5 text-muted-foreground"}>
+              <Gauge className="size-4 text-[#1d4ed8]" aria-hidden="true" />
+              {u.fmtSpeed(v.location.speedKph)}
+            </span>
           ) : (
             <span className="text-muted-foreground">—</span>
           )
@@ -157,7 +190,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
             <span className="text-muted-foreground">—</span>
           ) : (
             <span className={v.location.ignition ? "inline-flex items-center gap-1.5 font-medium text-[#15803d] dark:text-[#4ade80]" : "inline-flex items-center gap-1.5 text-muted-foreground"}>
-              <span aria-hidden="true" className={v.location.ignition ? "size-2 rounded-full bg-[#16a34a] shadow-[0_0_0_3px_rgb(22_163_74/0.18)]" : "size-2 rounded-full bg-[#94a3b8]"} />
+              <Power aria-hidden="true" className={v.location.ignition ? "size-4 text-[#16a34a]" : "size-4 text-[#94a3b8]"} />
               {v.location.ignition ? "On" : "Off"}
             </span>
           )
@@ -166,41 +199,29 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         id: "lastSeen",
         header: "Last seen",
         meta: { sortKey: "lastSeen", hideable: true, label: "Last seen" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) => <span className="whitespace-nowrap text-muted-foreground">{v.device ? <RelativeTime iso={v.lastSeenAt} /> : "—"}</span>
+        cell: ({ row: { original: v } }) => (
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
+            <Clock className="size-4 text-[#64748b]" aria-hidden="true" />
+            {v.device ? <RelativeTime iso={v.lastSeenAt} /> : "—"}
+          </span>
+        )
       },
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-[172px] text-right" } satisfies ColumnMeta,
-        // The common actions one click away; the rest stay in the ⋯ menu.
+        meta: { className: "w-0 whitespace-nowrap text-right" } satisfies ColumnMeta,
+        // The common actions one click away (each in its own colour); the rest stay in the ⋯ menu.
         cell: ({ row: { original: v } }) => (
-          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-            {can.map && v.device && v.location ? (
-              <IconButton asChild label={`Show ${v.name} on the map`} size="icon-sm" variant="ghost" className="text-primary hover:bg-primary-soft">
-                <Link href={`/map?focus=${v.device.id}`}>
-                  <MapIcon aria-hidden="true" />
-                </Link>
-              </IconButton>
-            ) : null}
-            {can.map && v.device && v.location ? (
-              <IconButton asChild label={`${v.name}: today's trips`} size="icon-sm" variant="ghost" className="text-primary hover:bg-primary-soft">
-                <Link href={`/map?device=${v.device.id}&from=${encodeURIComponent(todayStart())}&to=${encodeURIComponent(new Date().toISOString())}`}>
-                  <History aria-hidden="true" />
-                </Link>
-              </IconButton>
-            ) : null}
-            {can.update && (
-              <IconButton label={`Edit ${v.name}`} size="icon-sm" variant="ghost" className="text-primary hover:bg-primary-soft" onClick={() => openEdit(v)}>
-                <Pencil aria-hidden="true" />
-              </IconButton>
-            )}
-            {can.assign && !v.device && (
-              <IconButton label={`Assign a device to ${v.name}`} size="icon-sm" variant="ghost" className="text-primary hover:bg-primary-soft" onClick={() => setAssignFor(v)}>
-                <Link2 aria-hidden="true" />
-              </IconButton>
-            )}
+          <RowActions
+            actions={[
+              { icon: MapIcon, label: `Show ${v.name} on the map`, color: ACTION_COLOR.map, href: v.device ? `/map?focus=${v.device.id}` : undefined, hidden: !can.map || !v.device || !v.location },
+              { icon: History, label: `${v.name}: today's trips`, color: ACTION_COLOR.history, href: v.device ? `/map?device=${v.device.id}&from=${encodeURIComponent(todayStart())}&to=${encodeURIComponent(new Date().toISOString())}` : undefined, hidden: !can.map || !v.device || !v.location },
+              { icon: Pencil, label: `Edit ${v.name}`, color: ACTION_COLOR.edit, onClick: () => openEdit(v), hidden: !can.update },
+              { icon: Link2, label: `Assign a device to ${v.name}`, color: ACTION_COLOR.link, onClick: () => setAssignFor(v), hidden: !can.assign || !!v.device }
+            ]}
+          >
             <RowMenu v={v} />
-          </div>
+          </RowActions>
         )
       }
     ],

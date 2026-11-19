@@ -17,7 +17,7 @@ export function greeting(now: Date, timeZone: string): string {
 /** Page banner in the brand colours: navy field, red and white stripes echoing the logo. */
 export function Hero({ greeting, orgName, dateLabel, summary, action }: { greeting: string; orgName: string; dateLabel: string; summary: ReactNode; action?: { href: string; label: string; icon?: typeof Truck } }) {
   return (
-    <header className="relative mb-5 overflow-hidden rounded-xl bg-[linear-gradient(120deg,#0a2463_0%,#12357f_55%,#1d4fb8_100%)] px-5 py-5 text-white shadow-card sm:px-7 sm:py-6">
+    <header className="relative mb-4 overflow-hidden rounded-xl bg-[linear-gradient(120deg,#0a2463_0%,#12357f_55%,#1d4fb8_100%)] px-5 py-4 text-white shadow-card sm:px-6">
       <svg aria-hidden="true" viewBox="0 0 400 160" preserveAspectRatio="xMaxYMid slice" className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-1/2 sm:block">
         <path d="M150 160 230 0h34l-80 160z" fill="#ffffff" opacity="0.07" />
         <path d="M214 160 294 0h22l-80 160z" fill="#d81e2c" opacity="0.85" />
@@ -29,7 +29,7 @@ export function Hero({ greeting, orgName, dateLabel, summary, action }: { greeti
           <p className="m-0 text-[13px] font-medium text-white/75">
             {dateLabel} · {orgName}
           </p>
-          <h1 className="m-0 mt-1 text-2xl font-semibold tracking-tight sm:text-[28px] sm:leading-9">{greeting}</h1>
+          <h1 className="m-0 mt-0.5 text-xl font-semibold tracking-tight sm:text-2xl">{greeting} 👋</h1>
           <p className="m-0 mt-1.5 text-sm text-white/85">{summary}</p>
         </div>
         {action && (
@@ -54,6 +54,7 @@ export const TILE_LOOK = {
   offline: "bg-[linear-gradient(135deg,#526079,#3b4558)]",
   alert: "bg-[linear-gradient(135deg,#c81e2b,#991b1b)]",
   calm: "bg-[linear-gradient(135deg,#0a2463,#12357f)]",
+  total: "bg-[linear-gradient(135deg,#1d4ed8,#12357f)]",
   waiting: "bg-[linear-gradient(135deg,#526079,#3b4558)]",
   pickup: "bg-[linear-gradient(135deg,#5a1fc0,#4527b8)]"
 } as const;
@@ -63,17 +64,17 @@ export function Tile({ label, value, total, icon: Icon, look, hint, href, classN
   return (
     <Link
       href={href}
-      className={cn("group relative block overflow-hidden rounded-xl p-4 text-white no-underline shadow-card transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-offset-2", TILE_LOOK[look], className)}
+      className={cn("group relative flex items-center gap-3.5 overflow-hidden rounded-xl p-4 text-white no-underline shadow-card transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-offset-2", TILE_LOOK[look], className)}
     >
-      <Icon aria-hidden="true" className="pointer-events-none absolute -bottom-3 -right-2 size-20 text-white/15 transition-transform duration-300 group-hover:scale-110" strokeWidth={1.5} />
-      <p className="m-0 text-xs font-semibold uppercase tracking-wide text-white/85">{label}</p>
-      <p className="m-0 mt-1.5 text-[34px] font-semibold leading-10 tabular-nums">{value}</p>
-      <p className="m-0 mt-1 min-h-4 text-xs text-white/85">{pct !== null ? `${pct}% of ${totalNoun}${hint ? ` · ${hint}` : ""}` : value === 0 ? "All caught up" : "Need a look"}</p>
-      {pct !== null && (
-        <span aria-hidden="true" className="relative mt-2.5 block h-1 overflow-hidden rounded-full bg-white/25">
-          <span className="block h-full origin-left animate-grow-x rounded-full bg-white" style={{ width: `${pct}%` }} />
-        </span>
-      )}
+      <Icon aria-hidden="true" className="pointer-events-none absolute -bottom-4 -right-3 size-24 text-white/10 transition-transform duration-300 group-hover:scale-110" strokeWidth={1.5} />
+      <span aria-hidden="true" className="grid size-12 shrink-0 place-items-center rounded-full bg-white/20 ring-1 ring-white/30">
+        <Icon className="size-6" />
+      </span>
+      <span className="relative min-w-0">
+        <span className="block text-[30px] font-bold leading-8 tabular-nums">{value}</span>
+        <span className="block truncate text-sm font-semibold text-white/95">{label}</span>
+        <span className="block truncate text-[11px] text-white/80">{pct !== null ? `${pct}% of ${totalNoun}${hint ? ` · ${hint}` : ""}` : (hint ?? (value === 0 ? "All caught up" : "Need a look"))}</span>
+      </span>
     </Link>
   );
 }

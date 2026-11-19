@@ -1,10 +1,10 @@
 "use client";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { readMapIcons, useMapIcons } from "@/lib/map-icons";
+import { readMapIcons, saveMapIcons, useMapIcons } from "@/lib/map-icons";
 import { useAddress } from "@/lib/use-address";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Activity, Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Crosshair, Download, Expand, ExternalLink, Gauge, History, KeyRound, Layers, Locate, LocateFixed, MapPin, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Plus, Radio, Satellite, Share2, Shrink, Truck, Wifi, X } from "lucide-react";
+import { Activity, Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Crosshair, Download, Expand, ExternalLink, Gauge, History, IdCard, KeyRound, Layers, Locate, LocateFixed, MapPin, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Phone, Plus, Radio, Satellite, Share2, Shrink, Truck, Wifi, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +25,7 @@ import { cn } from "@/lib/cn";
 import { MAP_STYLES, type MapStyleId, saveStyle, savedStyle, setBuildings3d, styleUrl } from "@/lib/map-style";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { FleetLayer, STATE_COLORS, type FleetPoint } from "./fleet-layer";
-import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, hasStaleFix, iconName, mapState, MAP_STATES, STATE_ORDER, stateBucket, type MapState } from "./fleet-model";
+import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, hasStaleFix, iconName, mapState, MAP_STATES, STATE_ORDER, stateBucket, type IconStyle, type MapState } from "./fleet-model";
 import { useFleetStream } from "./use-fleet-stream";
 
 // Loaded on first use: most sessions never open history.
@@ -116,14 +116,29 @@ function StatusBadge({ state, stale = false }: { state: MapState; stale?: boolea
   );
 }
 
+/** Up to this many vehicles, icons show at every zoom instead of dots and count bubbles. */
+const SMALL_FLEET = 60;
+
+/** The same icon styles as Settings → Map icons and the phone app. */
+const ICON_CHOICES: ReadonlyArray<{ value: IconStyle; label: string }> = [
+  { value: "photo", label: "3D photo" },
+  { value: "pin", label: "3D pin" },
+  { value: "circle", label: "Circle" },
+  { value: "square", label: "Square" },
+  { value: "top", label: "Top" }
+];
+
 export function LiveMap({
   offlineSeconds,
   groups = [],
   canShare = false,
   defaultStyle = "streets",
   addresses = false,
-  platformAdmin = false
+  platformAdmin = false,
+  drivers = {}
 }: {
+  /** Who drives each vehicle now (vehicle id → driver), from the Drivers page. */
+  drivers?: Record<string, { name: string; phone: string | null }>;
   offlineSeconds: number;
   /** RIO staff (super admin): also sees tracker diagnostics and IMEIs. Customers see plain status. */
   platformAdmin?: boolean;
@@ -443,7 +458,7 @@ export function LiveMap({
   }, [scoped]);
   const q = search.trim().toLowerCase();
   const rows = useMemo(
-    () => scoped.filter((r) => (filter === "all" || stateBucket(r.state) === filter) && (!q || r.name.toLowerCase().includes(q) || (r.d.vehicle?.licensePlate ?? "").toLowerCase().includes(q))),
+    () => scoped.filter((r) => (filter === "all" || stateBucket(r.state) === filter) && (!q || r.name.toLowerCase().includes(q) || (r.d.vehicle?.licensePlate ?? "").toLowerCase().includes(q) || (r.d.vehicle ? (drivers[r.d.vehicle.id]?.name ?? "") : "").toLowerCase().includes(q))),
     [scoped, filter, q]
   );
 
@@ -458,6 +473,11 @@ export function LiveMap({
   useEffect(() => {
     layer.current?.setClustering(clustered);
   }, [clustered, map]);
+  // A small fleet shows its vehicle icons at every zoom (no dots or count bubbles on the first view).
+  const smallFleet = counts.all <= SMALL_FLEET;
+  useEffect(() => {
+    layer.current?.setSmallFleet(smallFleet);
+  }, [smallFleet, map]);
 
   /** Download what the list shows right now (after search and filters) as a spreadsheet file. */
   const exportCsv = () => {
@@ -712,7 +732,7 @@ export function LiveMap({
                       ? `No current GPS · last fix ${ago(d.location.recordedAt, now)}`
                       : r.state === "offline" && d.lastSeenAt
                       ? `Last signal ${ago(d.lastSeenAt, now)}`
-                      : [d.vehicle?.licensePlate, r.state === "moving" ? u.fmtSpeed(d.location.speedKph) : STATE_HINT[r.state], !d.vehicle && "No vehicle linked"].filter(Boolean).join(" · ");
+                      : [d.vehicle ? drivers[d.vehicle.id]?.name : null, d.vehicle?.licensePlate, r.state === "moving" ? u.fmtSpeed(d.location.speedKph) : STATE_HINT[r.state], !d.vehicle && "No vehicle linked"].filter(Boolean).join(" · ");
                   return (
                     <li key={d.deviceId} className="absolute inset-x-0 py-0.5" style={{ top: (start + i) * ROW_H, height: ROW_H }}>
                       <button
@@ -723,7 +743,7 @@ export function LiveMap({
                           "relative flex h-full w-full cursor-pointer items-center gap-3 overflow-hidden rounded-lg border-0 bg-transparent px-3 text-left transition-colors hover:bg-muted",
                           active && "bg-primary-soft shadow-[inset_0_0_0_1px_var(--color-primary)] hover:bg-primary-soft"
                         )}
-                        style={active ? undefined : { backgroundImage: `linear-gradient(110deg, transparent 15%, ${tint(STATE_COLORS[r.state], 24)} 100%)` }}
+                        style={active ? undefined : { backgroundImage: `linear-gradient(110deg, ${tint(STATE_COLORS[r.state], 8)} 0%, ${tint(STATE_COLORS[r.state], 34)} 100%)` }}
                       >
                         <span aria-hidden="true" className="absolute inset-y-1.5 left-0 w-1 rounded-r" style={{ background: STATE_COLORS[r.state] }} />
                         <span className="relative shrink-0">
@@ -881,7 +901,7 @@ export function LiveMap({
         "bottom-[160px] md:inset-x-auto md:bottom-6 md:left-4 md:w-[384px]",
         sheetOpen && "hidden md:grid"
       )}
-      style={{ backgroundImage: `linear-gradient(150deg, var(--color-background) 35%, ${tint(STATE_COLORS[selState], 22)} 100%)` }}
+      style={{ backgroundImage: `linear-gradient(150deg, ${tint(STATE_COLORS[selState], 6)} 20%, ${tint(STATE_COLORS[selState], 32)} 100%)` }}
     >
       <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1" style={{ background: STATE_COLORS[selState] }} />
       <div className="flex items-start gap-3">
@@ -895,6 +915,26 @@ export function LiveMap({
             <StatusBadge state={selState} stale={selStale} />
             <span className="truncate">{sel.vehicle ? [VEHICLE_TYPE_LABEL[asVehicleType(sel.vehicle.type)], sel.vehicle.licensePlate].filter(Boolean).join(" · ") : "GPS tracker · no vehicle linked"}</span>
           </p>
+          {sel.vehicle && (
+            <p className="m-0 mt-1 flex min-w-0 items-center gap-1.5 text-xs">
+              <IdCard className="size-3.5 shrink-0 text-[#0f766e]" aria-hidden="true" />
+              {drivers[sel.vehicle.id] ? (
+                <>
+                  <span className="truncate font-semibold text-foreground">{drivers[sel.vehicle.id]!.name}</span>
+                  {drivers[sel.vehicle.id]!.phone && (
+                    <a href={`tel:${drivers[sel.vehicle.id]!.phone}`} className="inline-flex shrink-0 items-center gap-1 text-primary no-underline hover:underline">
+                      <Phone className="size-3" aria-hidden="true" />
+                      {drivers[sel.vehicle.id]!.phone}
+                    </a>
+                  )}
+                </>
+              ) : (
+                <Link href="/drivers" className="text-muted-foreground no-underline hover:text-primary hover:underline">
+                  No driver · assign one
+                </Link>
+              )}
+            </p>
+          )}
         </div>
         {located.length > 1 && selIdx >= 0 && (
           <span className="flex shrink-0 items-center rounded-full bg-primary-soft text-primary">
@@ -1113,6 +1153,28 @@ export function LiveMap({
                       {label}
                     </Menu.CheckboxItem>
                   ))}
+                  <Menu.Separator className="my-1 h-px bg-border" />
+                  <Menu.Label className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Vehicle icons</Menu.Label>
+                  <div role="radiogroup" aria-label="Vehicle icon style" className="grid grid-cols-5 gap-1 px-1.5 pb-1.5">
+                    {ICON_CHOICES.map((c) => {
+                      const on = icons.style === c.value;
+                      return (
+                        <button
+                          key={c.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={on}
+                          title={c.label}
+                          onClick={() => saveMapIcons({ style: c.value })}
+                          className={cn("flex cursor-pointer flex-col items-center gap-0.5 rounded-lg border-2 bg-transparent p-1 text-[10px] font-semibold", on ? "border-primary bg-primary-soft text-primary" : "border-transparent text-muted-foreground hover:bg-muted")}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element -- small static icon */}
+                          <img src={`/fleet-art/map/icons/${iconName("semi", "moving", { style: c.value, color: icons.color })}.png`} alt="" className="h-8 w-auto" />
+                          {c.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </Menu.Content>
               </Menu.Portal>
             </Menu.Root>

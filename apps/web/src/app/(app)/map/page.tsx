@@ -2,6 +2,7 @@ import { contextHasPermission } from "@rio-gps/core";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib/authz";
+import { driversByVehicle } from "@/lib/drivers";
 import { getServerEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { getMapsSettings } from "@/lib/maps-settings";
@@ -27,5 +28,6 @@ export default async function MapPage() {
   const groups = contextHasPermission(ctx, "vehicles.read") ? await listGroups(ctx.organizationId) : [];
   const canShare = contextHasPermission(ctx, "vehicles.update") && contextHasPermission(ctx, "locations.read");
   const maps = await getMapsSettings();
-  return <LiveMap offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} groups={groups} canShare={canShare} defaultStyle={maps.mapStyle} addresses={maps.addressProvider !== "off"} platformAdmin={ctx.isSuperAdmin} />;
+  const drivers = contextHasPermission(ctx, "vehicles.read") ? Object.fromEntries([...(await driversByVehicle(ctx.organizationId))].map(([v, d]) => [v, { name: d.name, phone: d.phone }])) : {};
+  return <LiveMap offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} groups={groups} canShare={canShare} defaultStyle={maps.mapStyle} addresses={maps.addressProvider !== "off"} platformAdmin={ctx.isSuperAdmin} drivers={drivers} />;
 }

@@ -1,5 +1,6 @@
 "use client";
 import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { IconButton } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
@@ -75,33 +76,65 @@ export function IconCell({ icon: Icon, color, title, lines }: { icon: LucideIcon
 export interface RowAction {
   icon: LucideIcon;
   label: string;
-  onClick: () => void;
-  /** "danger" for destructive actions (red on hover). */
+  onClick?: () => void;
+  /** "danger" for destructive actions (red). */
   tone?: "danger";
+  /** Icon colour; defaults to a meaning-based colour from ACTION_COLOR or the brand blue. */
+  color?: string;
   hidden?: boolean;
+  /** Renders a link instead of a button. */
+  href?: string;
 }
 
-/** Inline icon buttons at the end of a row (each with a tooltip), instead of a hidden "…" menu. */
-export function RowActions({ actions }: { actions: RowAction[] }) {
+/** One colour per kind of action, the same on every page. */
+export const ACTION_COLOR = {
+  map: "#1d4ed8",
+  history: "#6d28d9",
+  edit: "#b45309",
+  link: "#0f766e",
+  unlink: "#c2410c",
+  share: "#0369a1",
+  danger: "#b91c1c",
+  neutral: "#475569"
+} as const;
+
+/** Meaning-based colour from the action's label, so every page colours the same action the same way. */
+function colorFor(label: string): string {
+  const l = label.toLowerCase();
+  if (/unassign|take (out|off)|return|unlink|remove from/.test(l)) return ACTION_COLOR.unlink;
+  if (/map/.test(l)) return ACTION_COLOR.map;
+  if (/trip|history|track/.test(l)) return ACTION_COLOR.history;
+  if (/edit|rename/.test(l)) return ACTION_COLOR.edit;
+  if (/assign|move|put |link|stock/.test(l)) return ACTION_COLOR.link;
+  if (/share/.test(l)) return ACTION_COLOR.share;
+  if (/deactivate|retire|delete/.test(l)) return ACTION_COLOR.danger;
+  return ACTION_COLOR.neutral;
+}
+
+/** Inline icon buttons at the end of a row (each with a tooltip and its own colour), instead of a hidden "…" menu. */
+export function RowActions({ actions, children }: { actions: RowAction[]; children?: ReactNode }) {
   return (
-    <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+    <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
       {actions
         .filter((a) => !a.hidden)
         .map((a) => {
           const Icon = a.icon;
-          return (
-            <IconButton
-              key={a.label}
-              label={a.label}
-              size="icon-sm"
-              variant="ghost"
-              onClick={a.onClick}
-              className={cn("text-muted-foreground hover:bg-muted hover:text-primary", a.tone === "danger" && "hover:bg-danger/10 hover:text-danger")}
-            >
+          const color = a.color ?? (a.tone === "danger" ? ACTION_COLOR.danger : colorFor(a.label));
+          const style = { color, background: `color-mix(in srgb, ${color} 9%, transparent)`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 18%, transparent)` };
+          const cls = "size-8 rounded-lg transition-transform hover:-translate-y-px hover:brightness-110 [&_svg]:size-4";
+          return a.href ? (
+            <IconButton key={a.label} asChild label={a.label} size="icon-sm" variant="ghost" className={cls} style={style}>
+              <Link href={a.href}>
+                <Icon aria-hidden="true" />
+              </Link>
+            </IconButton>
+          ) : (
+            <IconButton key={a.label} label={a.label} size="icon-sm" variant="ghost" onClick={a.onClick} className={cls} style={style}>
               <Icon aria-hidden="true" />
             </IconButton>
           );
         })}
+      {children}
     </div>
   );
 }

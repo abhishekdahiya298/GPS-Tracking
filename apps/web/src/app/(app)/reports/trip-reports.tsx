@@ -6,12 +6,12 @@
  * and paged in the browser without extra requests.
  */
 import { addDays, dateFormatter, startOfLocalDay, zoneLabel } from "@rio-gps/core/timezones";
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarRange, Download, Mail, MapPinned, Route, Truck } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarRange, Clock, Download, Gauge, Mail, MapPinned, Milestone, Route, Timer, Truck } from "lucide-react";
+import { ColumnChart } from "@/components/app/charts";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { SegmentedFilter } from "@/components/app/filter-bar";
 import { PageHeader } from "@/components/app/page-header";
-import { StatCard } from "@/components/app/stat-card";
 import { Pagination } from "@/components/app/pagination";
 import { EmptyState, ErrorState, TableSkeleton } from "@/components/app/states";
 import { useTime } from "@/components/app/time-context";
@@ -103,11 +103,11 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
     }
   }, [deviceId, qs, fromDay, toDay]);
 
+  // Loads as soon as the vehicle or dates change: no extra "Show" click.
   useEffect(() => {
     if (ready) void load();
-    // First load only; later loads are explicit ("Show trips").
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
+  }, [ready, qs]);
 
   const trips = useMemo(() => {
     const list = [...(report?.trips ?? [])];
@@ -160,100 +160,96 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
     );
   }
 
+  const totalIdle = report ? report.trips.reduce((a, t) => a + t.idleMin, 0) : 0;
+  const drivingMin = report?.totals.drivingMin ?? 0;
+  const dayPoints = (report?.days ?? []).map((d) => ({ key: d.day, label: time.day(d.day).replace(/^\w+, /, ""), longLabel: time.day(d.day), value: u.dist(d.distanceKm), valueLabel: u.fmtDist(d.distanceKm) }));
+  const speedPoints = (report?.days ?? []).map((d) => ({ key: d.day, label: time.day(d.day).replace(/^\w+, /, ""), longLabel: time.day(d.day), value: Math.round(u.speed === "mph" ? d.maxSpeedKph / 1.609344 : d.maxSpeedKph), valueLabel: u.fmtSpeed(d.maxSpeedKph) }));
+  const avgMoving = report && report.trips.length ? report.trips.reduce((a, t) => a + t.avgMovingKph * t.drivingMin, 0) / Math.max(1, report.trips.reduce((a, t) => a + t.drivingMin, 0)) : 0;
+
   return (
     <>
       <PageHeader
-        title="Trip reports"
-        description="Trips, distance, driving time and top speed for a vehicle over a period."
+        title="Reports"
+        description="Trips, stops, driving time, speed and mileage for your fleet."
         actions={
-          canSchedule && (
-            <Button asChild variant="secondary">
-              <Link href="/reports/schedules">
-                <Mail /> Email schedules
-              </Link>
-            </Button>
-          )
+          <>
+            {canSchedule && (
+              <Button asChild variant="secondary">
+                <Link href="/reports/schedules">
+                  <Mail /> Email schedules
+                </Link>
+              </Button>
+            )}
+            {report && report.trips.length > 0 && (
+              <Button asChild>
+                <a href={`/api/reports/trips?${qs}&format=csv`} download>
+                  <Download /> Export
+                </a>
+              </Button>
+            )}
+          </>
         }
       />
 
       <ReportTabs active="trips" />
 
       <Card className="mb-4">
-        <form
-          method="post"
-          className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void load();
-          }}
-        >
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]">
-            <label className="grid gap-1.5 text-sm font-medium">
-              Vehicle
-              <Select value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
-                {devices.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium">
-              From
-              <Input
-                type="date"
-                value={fromDay}
-                max={toDay}
-                onChange={(e) => {
-                  setPreset("custom");
-                  setDays([e.target.value, toDay]);
-                }}
-              />
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium">
-              To
-              <Input
-                type="date"
-                value={toDay}
-                min={fromDay}
-                onChange={(e) => {
-                  setPreset("custom");
-                  setDays([fromDay, e.target.value]);
-                }}
-              />
-            </label>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" loading={busy} disabled={!deviceId}>
-              <Route /> Show trips
-            </Button>
-            {report && report.trips.length > 0 && (
-              <Button asChild variant="secondary">
-                <a href={`/api/reports/trips?${qs}&format=csv`} download>
-                  <Download /> CSV
-                </a>
-              </Button>
-            )}
-          </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-3 md:col-span-2">
-            <SegmentedFilter<Preset>
-              label="Quick range"
-              value={preset}
-              onChange={(p) => {
-                setPreset(p);
-                if (p !== "custom") setDays(presetRange(p, tz));
+        <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_auto] lg:items-end">
+          <label className="grid gap-1.5 text-sm font-medium">
+            <span className="inline-flex items-center gap-1.5">
+              <Truck className="size-4 text-[#15803d]" aria-hidden="true" /> Vehicle
+            </span>
+            <Select value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
+              {devices.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="grid gap-1.5 text-sm font-medium">
+            From
+            <Input
+              type="date"
+              value={fromDay}
+              max={toDay}
+              onChange={(e) => {
+                setPreset("custom");
+                setDays([e.target.value, toDay]);
               }}
-              options={[
-                { value: "today", label: "Today" },
-                { value: "yesterday", label: "Yesterday" },
-                { value: "7d", label: "Last 7 days" },
-                { value: "30d", label: "Last 30 days" },
-                { value: "custom", label: "Custom" }
-              ]}
             />
-            <span className="text-xs text-muted-foreground">Times in {time.abbr()} ({zoneLabel(tz)}). A trip ends after 5 minutes parked or a 20-minute gap in data.</span>
-          </div>
-        </form>
+          </label>
+          <label className="grid gap-1.5 text-sm font-medium">
+            To
+            <Input
+              type="date"
+              value={toDay}
+              min={fromDay}
+              onChange={(e) => {
+                setPreset("custom");
+                setDays([fromDay, e.target.value]);
+              }}
+            />
+          </label>
+          <SegmentedFilter<Preset>
+            label="Quick range"
+            value={preset}
+            onChange={(p) => {
+              setPreset(p);
+              if (p !== "custom") setDays(presetRange(p, tz));
+            }}
+            options={[
+              { value: "today", label: "Today" },
+              { value: "yesterday", label: "Yesterday" },
+              { value: "7d", label: "Last 7 days" },
+              { value: "30d", label: "Last 30 days" },
+              { value: "custom", label: "Custom" }
+            ]}
+          />
+        </div>
+        <p className="m-0 border-t border-border px-4 py-2 text-xs text-muted-foreground">
+          Times in {time.abbr()} ({zoneLabel(tz)}). A trip ends after 5 minutes parked or a 20-minute gap in data. The report updates as you change the vehicle or dates.
+        </p>
       </Card>
 
       {error ? (
@@ -270,28 +266,23 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
         </Card>
       ) : !report ? (
         <div className="grid gap-4" aria-busy="true" aria-label="Loading report">
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {Array.from({ length: 4 }, (_, i) => (
-              <Skeleton key={i} className="h-[84px]" />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {Array.from({ length: 5 }, (_, i) => (
+              <Skeleton key={i} className="h-[76px]" />
             ))}
           </div>
           <Card>
-            <TableSkeleton rows={6} cols={5} />
+            <TableSkeleton rows={6} cols={6} />
           </Card>
         </div>
       ) : (
         <div className={busy ? "pointer-events-none opacity-60 transition-opacity" : "transition-opacity"} aria-busy={busy}>
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {(
-              [
-                ["Trips", String(report.totals.trips)],
-                ["Distance", u.fmtDist(report.totals.distanceKm)],
-                ["Driving time", hm(report.totals.drivingMin)],
-                ["Top speed", u.fmtSpeed(report.totals.maxSpeedKph)]
-              ] as const
-            ).map(([k, v]) => (
-              <StatCard key={k} label={k} value={v} />
-            ))}
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+            <Kpi icon={Route} color="#1d4ed8" label="Trips" value={String(report.totals.trips)} />
+            <Kpi icon={Milestone} color="#6d28d9" label="Total distance" value={u.fmtDist(report.totals.distanceKm)} />
+            <Kpi icon={Clock} color="#15803d" label="Driving time" value={hm(report.totals.drivingMin)} />
+            <Kpi icon={Gauge} color="#b91c1c" label="Top speed" value={u.fmtSpeed(report.totals.maxSpeedKph)} />
+            <Kpi icon={Timer} color="#c2410c" label="Total idling" value={hm(totalIdle)} />
           </div>
 
           {report.trips.length === 0 ? (
@@ -299,62 +290,77 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
               <EmptyState icon={CalendarRange} title="No trips in this period" description={`${vehicleLabel} didn't drive between ${fromDay} and ${toDay}. Try a longer range.`} />
             </Card>
           ) : (
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-              <Card className="h-fit">
-                <CardHeader>
-                  <CardTitle>By day</CardTitle>
-                </CardHeader>
-                <Table>
-                  <THead>
-                    <TR>
-                      <TH>Day</TH>
-                      <TH className="text-right">Trips</TH>
-                      <TH className="text-right">Distance</TH>
-                      <TH className="text-right">Driving</TH>
-                    </TR>
-                  </THead>
-                  <TBody>
-                    {report.days.map((d) => (
-                      <TR key={d.day}>
-                        <TD className="whitespace-nowrap">{time.day(d.day)}</TD>
-                        <TD className="text-right tabular-nums">{d.trips}</TD>
-                        <TD className="whitespace-nowrap text-right tabular-nums">{u.fmtDist(d.distanceKm)}</TD>
-                        <TD className="whitespace-nowrap text-right tabular-nums">{hm(d.drivingMin)}</TD>
-                      </TR>
-                    ))}
-                  </TBody>
-                </Table>
-              </Card>
+            <>
+              <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <Card className="min-w-0">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Distance per day</CardTitle>
+                  </CardHeader>
+                  <div className="px-4 pb-4">
+                    <ColumnChart data={dayPoints} ariaLabel="Distance per day" tableHeads={["Day", "Distance"]} labelEvery={dayPoints.length > 10 ? 5 : 1} className="h-44" />
+                  </div>
+                </Card>
+                <Card className="min-w-0">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Driving time</CardTitle>
+                  </CardHeader>
+                  <DriveDonut driving={drivingMin} idle={totalIdle} />
+                </Card>
+                <Card className="min-w-0">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Top speed per day</CardTitle>
+                    <span className="text-xs text-muted-foreground">
+                      Avg moving <strong className="text-foreground">{u.fmtSpeed(avgMoving)}</strong>
+                    </span>
+                  </CardHeader>
+                  <div className="px-4 pb-4">
+                    <ColumnChart data={speedPoints} ariaLabel="Top speed per day" tableHeads={["Day", "Top speed"]} labelEvery={speedPoints.length > 10 ? 5 : 1} className="h-44" />
+                  </div>
+                </Card>
+              </div>
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Trips</CardTitle>
+                  <CardTitle>
+                    Trip details <span className="text-sm font-normal text-muted-foreground">({trips.length} trip{trips.length === 1 ? "" : "s"})</span>
+                  </CardTitle>
                 </CardHeader>
-                <div className="hidden sm:block">
+                <div className="hidden overflow-x-auto sm:block">
                   <Table>
                     <THead>
                       <TR>
+                        <TH className="w-10">#</TH>
                         {sortHead("start", "Start")}
+                        <TH>End</TH>
                         {sortHead("duration", "Duration", "text-right")}
                         {sortHead("distance", "Distance", "text-right")}
-                        {sortHead("max", "Max", "text-right")}
-                        <TH className="text-right" title="Average speed while moving (stops with the engine running are left out)">Avg moving</TH>
-                        <TH>
-                          <span className="sr-only">Map</span>
-                        </TH>
+                        {sortHead("max", "Max speed", "text-right")}
+                        <TH className="text-right" title="Average speed while moving (stops with the engine running are left out)">Avg speed</TH>
+                        <TH className="text-right">Idle</TH>
+                        <TH className="text-right">Actions</TH>
                       </TR>
                     </THead>
                     <TBody>
-                      {shown.map((t) => (
+                      {shown.map((t, i) => (
                         <TR key={t.startAt}>
-                          <TD className="whitespace-nowrap">
-                            {fmt(t.startAt)}
-                            <div className="text-xs text-muted-foreground">to {fmt(t.endAt)}</div>
+                          <TD className="tabular-nums text-muted-foreground">{(page - 1) * PAGE + i + 1}</TD>
+                          <TD className="whitespace-nowrap">{fmt(t.startAt)}</TD>
+                          <TD className="whitespace-nowrap">{fmt(t.endAt)}</TD>
+                          <TD className="whitespace-nowrap text-right tabular-nums">
+                            <span className="inline-flex items-center gap-1">
+                              <Clock className="size-3.5 text-[#15803d]" aria-hidden="true" />
+                              {hm(t.durationMin)}
+                            </span>
                           </TD>
-                          <TD className="whitespace-nowrap text-right tabular-nums">{hm(t.durationMin)}</TD>
-                          <TD className="whitespace-nowrap text-right tabular-nums">{u.fmtDist(t.distanceKm)}</TD>
+                          <TD className="whitespace-nowrap text-right font-medium tabular-nums">{u.fmtDist(t.distanceKm)}</TD>
                           <TD className="whitespace-nowrap text-right tabular-nums">{u.fmtSpeed(t.maxSpeedKph)}</TD>
                           <TD className="whitespace-nowrap text-right tabular-nums">{u.fmtSpeed(t.avgMovingKph)}</TD>
+                          <TD className="whitespace-nowrap text-right tabular-nums">
+                            <span className="inline-flex items-center gap-1">
+                              <Timer className="size-3.5 text-[#c2410c]" aria-hidden="true" />
+                              {t.idleMin < 1 ? "—" : `${t.idleMin}m`}
+                            </span>
+                          </TD>
                           <TD className="text-right">
                             <MapLink report={report} t={t} />
                           </TD>
@@ -378,7 +384,7 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
                 </ul>
                 {trips.length > PAGE && <Pagination page={page} pageSize={PAGE} total={trips.length} onPageChange={setPage} />}
               </Card>
-            </div>
+            </>
           )}
         </div>
       )}
@@ -386,10 +392,62 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
   );
 }
 
+/** Coloured KPI card: tinted icon, value, label. */
+function Kpi({ icon: Icon, color, label, value }: { icon: typeof Route; color: string; label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border p-3.5 shadow-card" style={{ borderColor: `color-mix(in srgb, ${color} 22%, var(--color-border))`, backgroundImage: `linear-gradient(135deg, var(--color-background) 45%, color-mix(in srgb, ${color} 12%, var(--color-background)))` }}>
+      <span className="grid size-11 shrink-0 place-items-center rounded-xl" style={{ background: `color-mix(in srgb, ${color} 15%, transparent)`, color }}>
+        <Icon className="size-5" aria-hidden="true" />
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-xl font-bold tabular-nums">{value}</span>
+        <span className="block truncate text-xs font-medium text-muted-foreground">{label}</span>
+      </span>
+    </div>
+  );
+}
+
+/** Driving vs idling, as a ring with the total in the middle and a labelled legend. */
+function DriveDonut({ driving, idle }: { driving: number; idle: number }) {
+  const total = driving + idle;
+  const R = 40;
+  const C = 2 * Math.PI * R;
+  const d = total ? (driving / total) * C : 0;
+  const pct = (v: number) => (total ? Math.round((v / total) * 100) : 0);
+  return (
+    <div className="flex flex-wrap items-center gap-5 px-5 pb-5">
+      <svg viewBox="0 0 100 100" className="size-36 shrink-0 -rotate-90" aria-hidden="true">
+        <circle cx="50" cy="50" r={R} fill="none" stroke="#cbd5e1" strokeWidth="12" />
+        <circle cx="50" cy="50" r={R} fill="none" stroke="#16a34a" strokeWidth="12" strokeDasharray={`${d} ${C}`} strokeLinecap={d > 0 && d < C ? "round" : "butt"} />
+        <text x="50" y="47" transform="rotate(90 50 50)" textAnchor="middle" dominantBaseline="central" className="fill-foreground text-[13px] font-bold tabular-nums">
+          {hm(total)}
+        </text>
+        <text x="50" y="62" transform="rotate(90 50 50)" textAnchor="middle" className="fill-muted-foreground text-[8px]">
+          total
+        </text>
+      </svg>
+      <ul className="m-0 grid min-w-36 flex-1 list-none gap-2 p-0 text-sm">
+        <li className="flex items-center gap-2">
+          <span aria-hidden="true" className="size-2.5 rounded-full bg-[#16a34a]" />
+          <span className="flex-1 text-muted-foreground">Driving</span>
+          <strong className="tabular-nums">{hm(driving)}</strong>
+          <span className="w-10 text-right text-xs text-muted-foreground">{pct(driving)}%</span>
+        </li>
+        <li className="flex items-center gap-2">
+          <span aria-hidden="true" className="size-2.5 rounded-full bg-[#cbd5e1]" />
+          <span className="flex-1 text-muted-foreground">Idle / stop</span>
+          <strong className="tabular-nums">{hm(idle)}</strong>
+          <span className="w-10 text-right text-xs text-muted-foreground">{pct(idle)}%</span>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
 function MapLink({ report, t }: { report: TripReport; t: TripDto }) {
   const time = useTime();
   return (
-    <Button asChild variant="ghost" size="sm">
+    <Button asChild variant="ghost" size="sm" className="bg-[#1d4ed8]/10 text-[#1d4ed8] hover:bg-[#1d4ed8]/15 dark:text-[#93b4ff]">
       <Link
         href={`/map?${new URLSearchParams({ device: report.deviceId, from: t.startAt, to: new Date(Date.parse(t.endAt) + 60_000).toISOString() })}`}
         aria-label={`View the trip starting ${time.dateTime(t.startAt)} on the map`}

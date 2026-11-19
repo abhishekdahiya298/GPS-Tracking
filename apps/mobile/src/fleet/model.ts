@@ -207,7 +207,7 @@ export function sheetHeadline(d: FleetDevice, now: number = Date.now()): { title
 
 /** The vehicle type as people read it. The type is chosen per vehicle on the website. */
 const TYPE_LABEL: Record<string, string> = {
-  truck: "Truck with trailer", semi: "Tractor only", trailer: "Trailer", box_truck: "Box truck", tanker: "Tanker", dump_truck: "Dump truck",
+  truck: "Truck + trailer", semi: "Truck", trailer: "Trailer", box_truck: "Box truck", tanker: "Tanker", dump_truck: "Dump truck",
   mixer: "Mixer", garbage_truck: "Garbage truck", van: "Van", pickup: "Pickup", car: "Car", motorcycle: "Motorcycle", bus: "Bus",
   school_bus: "School bus", excavator: "Excavator", tractor: "Farm tractor", equipment: "Equipment", other: "Other"
 };

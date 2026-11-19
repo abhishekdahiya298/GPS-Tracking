@@ -1,5 +1,5 @@
 "use client";
-import { AlertTriangle, History, Map as MapIcon, Navigation } from "lucide-react";
+import { AlertTriangle, IdCard, History, Map as MapIcon, Navigation } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { startOfLocalDay } from "@rio-gps/core/timezones";
@@ -105,6 +105,30 @@ export function VehicleDetailSheet({ vehicleId, onOpenChange, actions }: { vehic
               ) : (
                 <p className="m-0 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">{detail.device ? "No position received yet." : "Assign a GPS device to see this vehicle's position."}</p>
               )}
+            </section>
+
+            <section aria-labelledby="vd-driver">
+              <h3 id="vd-driver" className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Driver
+              </h3>
+              <div className="flex items-center gap-3 rounded-lg border border-border p-3 text-sm">
+                <IdCard className="size-5 shrink-0 text-[#0f766e]" aria-hidden="true" />
+                {detail.driver ? (
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">{detail.driver.name}</span>
+                    {detail.driver.phone && (
+                      <a href={`tel:${detail.driver.phone}`} className="text-xs text-primary no-underline hover:underline">
+                        {detail.driver.phone}
+                      </a>
+                    )}
+                  </span>
+                ) : (
+                  <span className="flex-1 text-muted-foreground">No driver assigned.</span>
+                )}
+                <Link href={`/drivers${detail.driver ? `?search=${encodeURIComponent(detail.driver.name)}` : ""}`} className="shrink-0 text-xs font-medium text-primary no-underline hover:underline">
+                  {detail.driver ? "Manage" : "Assign driver"}
+                </Link>
+              </div>
             </section>
 
             <section aria-labelledby="vd-device">
