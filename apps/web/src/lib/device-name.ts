@@ -8,11 +8,12 @@ export function deviceName(name: string | null, model: string | null): string | 
 }
 
 /** Hardware model codes as they come from the maker ("FTM880", "FMC130"…). */
-const MODEL_CODE = /^(FTM|FMC|FMB|FMM|FMT|FMP|TAT|TFT|TMT)(\d{2,4})\b/i;
+const MODEL_CODE = /^(FTM|FMC|FMB|FMM|FMT|FMP|TAT|TFT|TMT|NT)(\d{2,4})[A-Z]?\b/i;
 
 /**
  * The RIO GPS product name for a tracker model. Customers never see the maker's codes: "FTM880"
- * is "RIO GPS 880", "FTM164" is "RIO GPS 164"; anything unknown is "RIO GPS tracker".
+ * is "RIO GPS 880", "FTM164" is "RIO GPS 164", Kingwo "NT28E" is
+ * "RIO GPS 28"; anything unknown is "RIO GPS tracker".
  */
 export function productName(model: string | null | undefined): string {
   const m = model?.trim() ?? "";

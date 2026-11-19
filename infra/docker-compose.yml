@@ -86,6 +86,10 @@ services:
       # this is the one port a real FMM230 actually connects to. Do not put
       # a generic HTTP(S) reverse proxy or Cloudflare's proxy in front of it.
       - "5027:5027"
+      # Kingwo NT28E trailer trackers: JT808 (5015) and GT06 (5023). Raw TCP,
+      # public, same rules as 5027.
+      - "5015:5015"
+      - "5023:5023"
 
   web:
     build:

@@ -16,6 +16,8 @@ describe("product names", () => {
   it("never shows the maker's model codes to customers", () => {
     expect(productName("FTM880")).toBe("RIO GPS 880");
     expect(productName("FTM164")).toBe("RIO GPS 164");
+    expect(productName("NT28E")).toBe("RIO GPS 28");
+    expect(deviceDisplayName("NT28E (862601388000266)", "NT28E")).toBe("RIO GPS 28");
     expect(productName(null)).toBe("RIO GPS tracker");
     expect(deviceDisplayName("FTM164", "FTM164")).toBe("RIO GPS 164");
     expect(deviceDisplayName("FTM164 (868038076566455)", "FTM164")).toBe("RIO GPS 164");

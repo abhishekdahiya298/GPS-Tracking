@@ -22,6 +22,15 @@
     <!-- Teltonika protocol device port (FTM880, FMM230). -->
     <entry key='teltonika.port'>5027</entry>
 
+    <!-- Kingwo NT28E (trailer). Kingwo trackers speak JT808 (Traccar calls it
+         "huabao") or GT06 depending on how the maker set them up. Both are open
+         so the unit connects whichever one it uses; check the Traccar log for
+         "huabao <" or "gt06 <" to see which. GT06 sends the full 15-digit IMEI;
+         JT808 sends a 12-digit terminal ID, which must then be the Traccar
+         uniqueId (see docs/NT28E_ONBOARDING.md). -->
+    <entry key='huabao.port'>5015</entry>
+    <entry key='gt06.port'>5023</entry>
+
     <!-- Forward every position update to RIO's webhook ingest endpoint.
          forward.type=json makes Traccar POST {position, device} as JSON
          (PositionForwarderJson). Without it Traccar 6.x defaults to "url",

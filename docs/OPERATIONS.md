@@ -93,7 +93,7 @@ A Docker minor-version upgrade can still restart the containers (about 30 s; tra
 
 - `web` runs as the unprivileged `node` user.
 - `postgres` receives only the 3 variables its init script needs, not the whole `.env`. Editing unrelated `.env` values and recreating web or worker therefore no longer restarts the database.
-- Only ports 22, 80, 443 and 5027 are public. Postgres, Redis and Traccar 8082 are on loopback or the internal network only.
+- Only ports 22, 80, 443, 5027 (Teltonika), 5015 (JT808) and 5023 (GT06) are public. Postgres, Redis and Traccar 8082 are on loopback or the internal network only.
 
 ## Content-Security-Policy
 
