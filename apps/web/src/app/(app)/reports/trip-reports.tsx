@@ -297,7 +297,7 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
                     <CardTitle className="text-sm">Distance per day</CardTitle>
                   </CardHeader>
                   <div className="px-4 pb-4">
-                    <ColumnChart data={dayPoints} ariaLabel="Distance per day" tableHeads={["Day", "Distance"]} labelEvery={dayPoints.length > 10 ? 5 : 1} className="h-44" />
+                    <ColumnChart data={dayPoints} ariaLabel="Distance per day" tableHeads={["Day", "Distance"]} color="#6d28d9" labelEvery={dayPoints.length > 10 ? 5 : 1} className="h-44" />
                   </div>
                 </Card>
                 <Card className="min-w-0">
@@ -314,7 +314,7 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
                     </span>
                   </CardHeader>
                   <div className="px-4 pb-4">
-                    <ColumnChart data={speedPoints} ariaLabel="Top speed per day" tableHeads={["Day", "Top speed"]} labelEvery={speedPoints.length > 10 ? 5 : 1} className="h-44" />
+                    <ColumnChart data={speedPoints} ariaLabel="Top speed per day" tableHeads={["Day", "Top speed"]} color="#dc2626" labelEvery={speedPoints.length > 10 ? 5 : 1} className="h-44" />
                   </div>
                 </Card>
               </div>
@@ -419,10 +419,10 @@ function DriveDonut({ driving, idle }: { driving: number; idle: number }) {
       <svg viewBox="0 0 100 100" className="size-36 shrink-0 -rotate-90" aria-hidden="true">
         <circle cx="50" cy="50" r={R} fill="none" stroke="#cbd5e1" strokeWidth="12" />
         <circle cx="50" cy="50" r={R} fill="none" stroke="#16a34a" strokeWidth="12" strokeDasharray={`${d} ${C}`} strokeLinecap={d > 0 && d < C ? "round" : "butt"} />
-        <text x="50" y="47" transform="rotate(90 50 50)" textAnchor="middle" dominantBaseline="central" className="fill-foreground text-[13px] font-bold tabular-nums">
+        <text x="50" y="47" transform="rotate(90 50 50)" textAnchor="middle" dominantBaseline="central" className="fill-foreground text-[11px] font-bold tabular-nums">
           {hm(total)}
         </text>
-        <text x="50" y="62" transform="rotate(90 50 50)" textAnchor="middle" className="fill-muted-foreground text-[8px]">
+        <text x="50" y="62" transform="rotate(90 50 50)" textAnchor="middle" className="fill-muted-foreground text-[7px]" style={{ letterSpacing: 0 }}>
           total
         </text>
       </svg>

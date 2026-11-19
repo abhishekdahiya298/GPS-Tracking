@@ -57,14 +57,14 @@ export function DriverFormDialog({ open, onOpenChange, driver, vehicles, onSaved
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
       <DialogContent title={editing ? `Edit ${driver!.name}` : "Add driver"} description={editing ? undefined : "Their name shows on the live map, the vehicle and its trips."} className="max-w-2xl">
         <form noValidate onSubmit={submit} className="grid gap-4">
-          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+          <div className="grid items-start gap-x-4 gap-y-3 sm:grid-cols-2">
             <Field id="d-name" label="Full name" required error={nameError}>
               <Input id="d-name" autoFocus maxLength={120} aria-invalid={Boolean(nameError)} {...field("name")} onInput={() => setNameError(null)} />
             </Field>
             <Field id="d-phone" label="Phone">
               <Input id="d-phone" type="tel" inputMode="tel" maxLength={40} placeholder="+1 555 010 2030" {...field("phone")} />
             </Field>
-            <Field id="d-vehicle" label="Vehicle" description={taken ? `${taken.driver} drives it now; saving moves it to this driver.` : "The vehicle they drive now."}>
+            <Field id="d-vehicle" label="Vehicle they drive" description={taken ? `${taken.driver} drives it now; saving moves it here.` : undefined}>
               <Select id="d-vehicle" {...field("vehicleId")}>
                 <option value="">No vehicle</option>
                 {vehicles.map((x) => (
@@ -82,7 +82,7 @@ export function DriverFormDialog({ open, onOpenChange, driver, vehicles, onSaved
             <Field id="d-license" label="Licence number">
               <Input id="d-license" maxLength={60} {...field("licenseNumber")} />
             </Field>
-            <Field id="d-expiry" label="Licence expires" description="Flagged 30 days before.">
+            <Field id="d-expiry" label="Licence expires">
               <Input id="d-expiry" type="date" {...field("licenseExpiresOn")} />
             </Field>
             <Field id="d-notes" label="Notes" className="sm:col-span-2">

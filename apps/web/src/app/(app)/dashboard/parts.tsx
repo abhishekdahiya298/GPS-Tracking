@@ -89,16 +89,11 @@ export const QA_TONE = {
 
 export function QuickAction({ href, icon: Icon, label, hint, tone }: { href: string; icon: typeof Truck; label: string; hint: string; tone: keyof typeof QA_TONE }) {
   return (
-    <Link href={href} className="group flex items-center gap-3 rounded-xl border border-border p-3 text-foreground no-underline transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-pop">
-      <span className={cn("grid size-10 shrink-0 place-items-center rounded-lg transition-colors duration-200", QA_TONE[tone])}>
-        <Icon className="size-[18px]" aria-hidden="true" />
+    <Link href={href} title={hint} className="group flex flex-col items-center gap-2 rounded-xl border border-border px-2 py-3.5 text-center text-foreground no-underline transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-pop">
+      <span className={cn("grid size-11 shrink-0 place-items-center rounded-xl transition-colors duration-200", QA_TONE[tone])}>
+        <Icon className="size-5" aria-hidden="true" />
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-[#0a2463] dark:text-foreground">{label}</span>
-        <span className="block truncate text-xs text-muted-foreground">{hint}</span>
-      </span>
-      <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-primary" aria-hidden="true" />
+      <span className="block w-full truncate text-[13px] font-semibold text-[#0a2463] dark:text-foreground">{label}</span>
     </Link>
   );
 }
-

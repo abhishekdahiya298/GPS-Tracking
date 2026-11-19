@@ -265,7 +265,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <CardHeader>
             <IconTitle icon={Zap}>Quick actions</IconTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-2.5">
+          <CardContent className="grid grid-cols-3 gap-2.5">
             {can("locations.read") && <QuickAction href="/map" icon={MapIcon} label="Live map" hint="Every vehicle now" tone="navy" />}
             {can("history.read") && <QuickAction href="/reports" icon={Route} label="Reports" hint="Trips, stops, miles" tone="amber" />}
             {can("vehicles.create") && <QuickAction href="/vehicles" icon={Plus} label="Add vehicle" hint="Truck, trailer, van" tone="green" />}
@@ -375,7 +375,7 @@ function StatusDonut({ total, parts }: { total: number; parts: { key: string; la
           vehicle{total === 1 ? "" : "s"}
         </text>
       </svg>
-      <ul className="m-0 grid min-w-48 flex-1 list-none grid-cols-2 gap-x-4 gap-y-2 p-0 text-sm">
+      <ul className="m-0 grid min-w-40 flex-1 list-none gap-1 p-0 text-sm">
         {parts.map((p) => (
           <li key={p.key}>
             <Link href={`/vehicles?state=${p.key}`} className="flex items-center gap-2 rounded-md px-1.5 py-1 text-foreground no-underline hover:bg-canvas">
