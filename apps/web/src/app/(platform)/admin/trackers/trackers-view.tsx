@@ -74,7 +74,7 @@ function rowColor(t: PlatformTrackerRow, now: number, onlineMs: number) {
 /** Coloured filter tiles: count, label and icon per state; the selected one is filled. */
 function StateTiles({ value, counts, onChange }: { value: State; counts: Record<State, number>; onChange: (v: State) => void }) {
   return (
-    <div role="radiogroup" aria-label="Tracker status" className="mb-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-9">
+    <div role="radiogroup" aria-label="Tracker status" className="mb-4 grid grid-cols-[repeat(auto-fill,minmax(158px,1fr))] gap-2.5">
       {STATES.map((s) => {
         const on = value === s.value;
         const Icon = s.icon;
@@ -135,7 +135,7 @@ export function TrackersView({ data, query, onlineSeconds, hideDemo }: { data: D
                 <div className="font-medium">{label(t)}</div>
                 <div className="font-mono text-xs text-muted-foreground">{t.imei}</div>
                 <div className="text-xs text-muted-foreground">
-                  {[`${productName(t.model)}${t.model ? ` (${t.model})` : ""}`, t.serialNumber ? `SN ${t.serialNumber}` : null].filter(Boolean).join(" · ")}
+                  {[`${productName(t.model)}${t.model && productName(t.model) !== t.model ? ` (${t.model})` : ""}`, t.serialNumber ? `SN ${t.serialNumber}` : null].filter(Boolean).join(" · ")}
                 </div>
               </div>
             </div>
