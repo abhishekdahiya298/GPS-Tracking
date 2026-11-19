@@ -24,6 +24,7 @@ import {
   type LucideIcon,
   Inbox,
   Home,
+  IdCard,
   Target,
   Layers,
   Smartphone
@@ -68,7 +69,8 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   home: Home,
   target: Target,
   layers: Layers,
-  smartphone: Smartphone
+  smartphone: Smartphone,
+  driver: IdCard
 };
 
 /** Routes whose page fills the content area edge to edge (maps). */

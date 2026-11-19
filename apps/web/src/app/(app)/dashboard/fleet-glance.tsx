@@ -42,7 +42,7 @@ function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, 
   };
 }
 
-export function FleetGlance({ offlineSeconds }: { offlineSeconds: number }) {
+export function FleetGlance({ offlineSeconds, className }: { offlineSeconds: number; className?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
 
@@ -64,14 +64,14 @@ export function FleetGlance({ offlineSeconds }: { offlineSeconds: number }) {
   }, []);
 
   return (
-    <Card className="mb-5 min-w-0 overflow-hidden">
+    <Card className={className ?? "mb-5 min-w-0 overflow-hidden"}>
       <CardHeader className="items-center">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary">
             <Radio className="size-4" aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <CardTitle>Fleet at a glance</CardTitle>
+            <CardTitle>Fleet live map</CardTitle>
             <p className="m-0 text-xs text-muted-foreground">Live positions. Select a vehicle to open it on the full map.</p>
           </div>
         </div>
@@ -79,7 +79,7 @@ export function FleetGlance({ offlineSeconds }: { offlineSeconds: number }) {
           <Maximize2 className="size-3.5" aria-hidden="true" /> Open live map
         </Link>
       </CardHeader>
-      <div ref={box} className="relative h-[300px] bg-[#eef2f7] dark:bg-muted sm:h-[340px]">
+      <div ref={box} className="relative h-[300px] bg-[#eef2f7] dark:bg-muted sm:h-[360px]">
         {visible ? <GlanceMap offlineSeconds={offlineSeconds} /> : <MapPlaceholder />}
         <ul aria-label="Map legend" className="pointer-events-none absolute bottom-2 left-2 m-0 flex list-none flex-wrap gap-x-3 gap-y-1 rounded-lg bg-white/90 px-2.5 py-1.5 p-0 text-[11px] font-medium text-foreground shadow-card backdrop-blur">
           {LEGEND.map(([s, label]) => (
@@ -125,6 +125,7 @@ function GlanceMap({ offlineSeconds }: { offlineSeconds: number }) {
   const { devices } = useFleetStream({
     onSnapshot: (list) => {
       const pts = list.map((d) => toPoint(d, Date.now(), offlineSeconds, u.fmtSpeed)).filter((p): p is FleetPoint => p !== null);
+      layer.current?.setSmallFleet(pts.length <= 60);
       layer.current?.reset(pts);
       fit(pts);
     },
@@ -177,6 +178,7 @@ function GlanceMap({ offlineSeconds }: { offlineSeconds: number }) {
           fl.install();
           fl.setLabels(true);
           const pts = [...devices.current.values()].map((d) => toPoint(d, Date.now(), offlineSeconds, u.fmtSpeed)).filter((p): p is FleetPoint => p !== null);
+          fl.setSmallFleet(pts.length <= 60);
           fl.reset(pts);
           fit(pts);
         });

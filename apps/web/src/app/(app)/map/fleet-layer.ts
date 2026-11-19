@@ -41,7 +41,11 @@ const DETAIL_ZOOM = 9;
  * other icons. Offsets are in ems of the 11 px label text.
  */
 function labelPlace(style: IconPrefs["style"]): { "text-anchor": "left" | "top"; "text-offset": [number, number] } {
-  return style === "photo" ? { "text-anchor": "left", "text-offset": [2.4, -3.1] } : { "text-anchor": "top", "text-offset": [0, 0.5] };
+  // Photo and pin icons stand on their tip (anchor bottom): the name goes below the point.
+  // Badges and top-down icons are centred on it: the name goes below the icon, clear of it.
+  if (style === "photo") return { "text-anchor": "left", "text-offset": [2.6, -3.2] };
+  if (style === "pin") return { "text-anchor": "top", "text-offset": [0, 0.6] };
+  return { "text-anchor": "top", "text-offset": [0, 2.1] };
 }
 
 interface Anim {
@@ -277,6 +281,7 @@ export class FleetLayer {
   private inSource = new Set<string>();
   private labels = true;
   private clustering = true;
+  private small = false;
   private handlers: Array<() => void> = [];
   private prefs: IconPrefs = DEFAULT_ICON_PREFS;
 
@@ -353,7 +358,7 @@ export class FleetLayer {
     }
     // promoteId lets live updates send only the vehicles that changed (updateData diff).
     if (!m.getSource(TRAILS)) m.addSource(TRAILS, { type: "geojson", data: { type: "FeatureCollection", features: [] }, lineMetrics: true });
-    if (!m.getSource(SRC)) m.addSource(SRC, { type: "geojson", data: this.collection(), promoteId: "id", cluster: this.clustering, clusterMaxZoom: CLUSTER_MAX_ZOOM, clusterRadius: 48 });
+    if (!m.getSource(SRC)) m.addSource(SRC, { type: "geojson", data: this.collection(), promoteId: "id", cluster: this.clustering && !this.small, clusterMaxZoom: CLUSTER_MAX_ZOOM, clusterRadius: 48 });
     this.structural = true;
     if (!m.getLayer("fleet-halo")) {
       // After a base-map switch the layers are re-added: drop the old listeners so clicks fire once.
@@ -457,7 +462,7 @@ export class FleetLayer {
         filter: NOT_CLUSTER as never,
         layout: {
           "icon-image": ["coalesce", ["image", ["get", "pin"]], ["image", ["concat", "pin-", ["get", "type"], "-", ["get", "state"]]]] as never,
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 9, 0.8, 14, 0.9, 18, 1],
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.55, 9, 0.8, 14, 0.9, 18, 1],
           "icon-anchor": this.prefs.style === "pin" || this.prefs.style === "photo" ? "bottom" : "center",
           "icon-rotate": this.prefs.style === "top" ? ["to-number", ["get", "rot"]] : 0,
           "icon-rotation-alignment": this.prefs.style === "top" ? "map" : "viewport",
@@ -541,6 +546,7 @@ export class FleetLayer {
       }
     }
     this.ready = true;
+    this.applyZoomRanges();
     this.applySelection();
     this.applyLabels();
     this.schedule();
@@ -613,11 +619,32 @@ export class FleetLayer {
     this.schedule();
   }
 
-  /** Merge nearby vehicles into counted bubbles when zoomed out (on by default). */
+  /** Merge nearby vehicles into counted bubbles when zoomed out (on by default; never for a small fleet). */
   setClustering(on: boolean) {
     this.clustering = on;
     if (!this.ready) return;
-    (this.map.getSource(SRC) as GeoJSONSource | undefined)?.setClusterOptions({ cluster: on, clusterMaxZoom: CLUSTER_MAX_ZOOM, clusterRadius: 48 });
+    const cluster = on && !this.small;
+    (this.map.getSource(SRC) as GeoJSONSource | undefined)?.setClusterOptions({ cluster, clusterMaxZoom: CLUSTER_MAX_ZOOM, clusterRadius: 48 });
+  }
+
+  /**
+   * A small fleet: its vehicle icons and names show at every zoom (no status dots or count bubbles),
+   * so the first view of the map shows the actual vehicles.
+   */
+  setSmallFleet(small: boolean) {
+    if (small === this.small) return;
+    this.small = small;
+    if (!this.ready) return;
+    this.applyZoomRanges();
+    this.setClustering(this.clustering);
+  }
+
+  private applyZoomRanges() {
+    const m = this.map;
+    const iconMin = this.small ? 0 : DETAIL_ZOOM;
+    if (m.getLayer("fleet-icons")) m.setLayerZoomRange("fleet-icons", iconMin, 24);
+    if (m.getLayer("fleet-dots")) m.setLayerZoomRange("fleet-dots", 0, this.small ? 0 : DETAIL_ZOOM);
+    if (m.getLayer("fleet-labels")) m.setLayerZoomRange("fleet-labels", this.small ? 3 : 12, 24);
   }
 
   /** Show or hide vehicle names next to the markers. */

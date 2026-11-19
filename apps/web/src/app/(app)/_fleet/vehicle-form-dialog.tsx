@@ -77,32 +77,34 @@ export function VehicleFormDialog({ open, onOpenChange, vehicle, onSaved }: { op
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title={editing ? "Edit vehicle" : "Add vehicle"} description={editing ? undefined : "Give it a name your team recognises, e.g. a truck number."}>
+      <DialogContent title={editing ? "Edit vehicle" : "Add vehicle"} description={editing ? undefined : "Give it a name your team recognises, e.g. a truck number."} className="max-w-2xl">
         <form method="post" noValidate onSubmit={form.handleSubmit(submit)} className="grid gap-4">
-          <Field id="v-name" label="Name" required error={errors.name?.message}>
-            <Input id="v-name" autoFocus aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? "v-name-error" : undefined} {...form.register("name")} />
-          </Field>
-          <Field id="v-plate" label="License plate" description="Optional" error={errors.licensePlate?.message}>
-            <Input id="v-plate" aria-invalid={Boolean(errors.licensePlate)} {...form.register("licensePlate")} />
-          </Field>
+          <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+            <Field id="v-name" label="Name" required error={errors.name?.message}>
+              <Input id="v-name" autoFocus placeholder="e.g. TRUCK-210" aria-invalid={Boolean(errors.name)} aria-describedby={errors.name ? "v-name-error" : undefined} {...form.register("name")} />
+            </Field>
+            <Field id="v-plate" label="License plate" error={errors.licensePlate?.message}>
+              <Input id="v-plate" placeholder="Optional" aria-invalid={Boolean(errors.licensePlate)} {...form.register("licensePlate")} />
+            </Field>
+          </div>
           <fieldset className="m-0 grid min-w-0 gap-1.5 border-0 p-0">
             <legend className="mb-1.5 p-0 text-sm font-medium">Type</legend>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
               {VEHICLE_TYPES.map((t) => (
                 <label
                   key={t}
                   className={cn(
-                    "flex cursor-pointer flex-col items-center gap-1 rounded-lg border px-2 py-2 text-center text-xs transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring",
+                    "flex cursor-pointer flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 text-center text-[11px] leading-tight transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring",
                     type === t ? "border-primary bg-primary-soft text-foreground" : "border-border text-muted-foreground hover:bg-muted"
                   )}
                 >
                   <input type="radio" value={t} className="sr-only" {...form.register("type")} />
-                  <VehiclePicture type={t} state="moving" className="h-9 w-12" />
+                  <VehiclePicture type={t} state="moving" className="h-8 w-11" />
                   {VEHICLE_TYPE_LABEL[t]}
                 </label>
               ))}
             </div>
-            <p className="m-0 text-xs text-muted-foreground">Sets the picture shown on the map and in lists, here and in the phone app.</p>
+
           </fieldset>
           {!editing && freeDevices && freeDevices.length > 0 && (
             <Field id="v-device" label="GPS device" description={`${freeDevices.length} free device${freeDevices.length === 1 ? "" : "s"}. You can also assign one later.`}>

@@ -23,3 +23,4 @@ export * from "./simCards";
 export * from "./billing";
 export * from "./appReleases";
 export * from "./platformSettings";
+export * from "./drivers";
