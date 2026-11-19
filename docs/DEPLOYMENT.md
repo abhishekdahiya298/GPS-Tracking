@@ -51,6 +51,7 @@ ufw allow 443/tcp
 ufw allow 5027/tcp
 ufw allow 5015/tcp   # Kingwo NT28E, JT808
 ufw allow 5023/tcp   # Kingwo NT28E, GT06
+ufw allow 5095/tcp   # Kingwo NT28E, Kingwo protocol (upro)
 ufw enable
 ```
 

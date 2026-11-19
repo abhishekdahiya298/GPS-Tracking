@@ -29,6 +29,9 @@
          JT808 sends a 12-digit terminal ID, which must then be the Traccar
          uniqueId (see docs/NT28E_ONBOARDING.md). -->
     <entry key='huabao.port'>5015</entry>
+    <!-- Kingwo's own protocol (the factory default on Kingwo units) is
+         Traccar's "upro". It sends the full 15-digit IMEI. -->
+    <entry key='upro.port'>5095</entry>
     <entry key='gt06.port'>5023</entry>
 
     <!-- Forward every position update to RIO's webhook ingest endpoint.
