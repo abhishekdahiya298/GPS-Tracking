@@ -3,7 +3,8 @@ import { useSyncExternalStore } from "react";
 import { DEFAULT_ICON_PREFS, type IconColor, type IconPrefs, type IconStyle } from "@/app/(app)/map/fleet-model";
 
 /** How vehicles are drawn on the maps. Kept in this browser, like the phone keeps its own. */
-const KEY = "rio.mapIcons";
+// v2: personal choices made before company map settings existed are dropped, so everyone starts from the company's.
+const KEY = "rio.mapIcons.v2";
 const STYLES: IconStyle[] = ["photo", "pin", "circle", "square", "top"];
 const COLORS: IconColor[] = ["status", "type"];
 const EVENT = "rio:map-icons";
@@ -12,7 +13,9 @@ let cached: IconPrefs | null = null;
 
 /** The platform default (Platform console → Maps & addresses), put on <body data-map-icons="pin-status"> by the server. */
 export function platformDefaultIcons(): IconPrefs {
-  const [style, color] = (typeof document === "undefined" ? "" : (document.body.dataset.mapIcons ?? "")).split("-");
+  // The company's choice (Settings → Map display) first, then the platform default.
+  const org = typeof document === "undefined" ? null : document.querySelector<HTMLElement>("[data-org-map-icons]")?.dataset.orgMapIcons;
+  const [style, color] = (org ?? (typeof document === "undefined" ? "" : (document.body.dataset.mapIcons ?? ""))).split("-");
   return {
     style: STYLES.includes(style as IconStyle) ? (style as IconStyle) : DEFAULT_ICON_PREFS.style,
     color: COLORS.includes(color as IconColor) ? (color as IconColor) : DEFAULT_ICON_PREFS.color
@@ -84,4 +87,10 @@ export function useMapIcons(): IconPrefs {
     readMapIcons,
     () => DEFAULT_ICON_PREFS
   );
+}
+
+/** After the company changes its map icons: maps re-read the company default (unless this person picked their own). */
+export function refreshCompanyIcons(): void {
+  cached = null;
+  window.dispatchEvent(new Event(EVENT));
 }

@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
 import { NotFoundError } from "./errors";
+import { OrgMapPrefsSchema, parseOrgMapPrefs } from "./org-map-prefs";
 import { logger } from "./logger";
 import { NAV_THEMES, type NavTheme } from "@/components/app/nav-themes";
 
@@ -24,7 +25,12 @@ export const TimeZoneSchema = z
   });
 
 export const OrgSettingsPatchSchema = z
-  .object({ unitSystem: z.enum(UNIT_SYSTEMS), timeZone: TimeZoneSchema, timeFormat: z.enum(TIME_FORMATS) })
+  .object({
+    unitSystem: z.enum(UNIT_SYSTEMS),
+    timeZone: TimeZoneSchema,
+    timeFormat: z.enum(TIME_FORMATS),
+    mapPrefs: OrgMapPrefsSchema.strict()
+  })
   .partial()
   .refine((v) => Object.keys(v).length > 0, "Nothing to update");
 
@@ -35,12 +41,13 @@ export async function getOrgSettings(organizationId: string) {
       slug: schema.organizations.slug,
       unitSystem: schema.organizations.unitSystem,
       timeZone: schema.organizations.timeZone,
-      timeFormat: schema.organizations.timeFormat
+      timeFormat: schema.organizations.timeFormat,
+      mapPrefs: schema.organizations.mapPrefs
     })
     .from(schema.organizations)
     .where(eq(schema.organizations.id, organizationId));
   if (!o) throw new NotFoundError("Organization not found");
-  return o;
+  return { ...o, mapPrefs: parseOrgMapPrefs(o.mapPrefs) };
 }
 
 /** Tenant is always ctx.organizationId (never from the request). */
@@ -58,7 +65,10 @@ export async function updateOrgSettings(ctx: TenantContext, patch: z.infer<typeo
     targetType: "organization",
     targetId: ctx.organizationId,
     metadata: Object.fromEntries(
-      (["unitSystem", "timeZone", "timeFormat"] as const).filter((k) => patch[k] !== undefined && patch[k] !== before[k]).map((k) => [k, { from: before[k], to: patch[k] }])
+      [
+        ...(["unitSystem", "timeZone", "timeFormat"] as const).filter((k) => patch[k] !== undefined && patch[k] !== before[k]).map((k) => [k, { from: before[k], to: patch[k] }]),
+        ...(patch.mapPrefs ? [["mapPrefs", { from: before.mapPrefs, to: patch.mapPrefs }]] : [])
+      ]
     ),
     ...meta
   });

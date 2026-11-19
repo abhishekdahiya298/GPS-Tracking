@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app/app-shell";
 import { buildNav } from "@/components/app/nav-config";
 import { PlatformFrame } from "@/components/app/platform-frame";
 import { listMyOrganizations } from "@/lib/my-organizations";
+import { getOrgSettings } from "@/lib/organization";
 import { getRequestContext, getUnacknowledgedAlertCount } from "@/lib/request-context";
 
 const ROLE_LABEL: Record<string, string> = { ORG_ADMIN: "Org admin", FLEET_MANAGER: "Fleet manager", DISPATCHER: "Dispatcher", VIEWER: "Viewer" };
@@ -28,7 +29,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const { user, ctx, orgName, orgStatus, unitSystem, timeZone, timeFormat, navTheme } = rc;
   const canSeeAlerts = contextHasPermission(ctx, "alerts.read");
   // A platform admin has no companies of their own: the switcher stays empty for them.
-  const [unack, mine] = await Promise.all([canSeeAlerts ? getUnacknowledgedAlertCount(ctx.organizationId) : 0, user.isSuperAdmin ? [] : listMyOrganizations(user.userId)]);
+  const [unack, mine, org] = await Promise.all([
+    canSeeAlerts ? getUnacknowledgedAlertCount(ctx.organizationId) : 0,
+    user.isSuperAdmin ? [] : listMyOrganizations(user.userId),
+    getOrgSettings(ctx.organizationId)
+  ]);
   const viewingAs = ctx.isSuperAdmin && ctx.role === null;
   return (
     <AppShell
@@ -45,6 +50,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       timeFormat={timeFormat}
       navTheme={navTheme}
     >
+      {/* The company's map icon choice (Settings → Map display), read by every map on the page. */}
+      <span hidden data-org-map-icons={`${org.mapPrefs.iconStyle}-${org.mapPrefs.iconColor}`} />
       {children}
     </AppShell>
   );

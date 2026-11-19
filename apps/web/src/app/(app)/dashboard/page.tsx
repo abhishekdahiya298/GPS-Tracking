@@ -1,13 +1,13 @@
 import { contextHasPermission, units, type TenantContext, type Units } from "@rio-gps/core";
-import { Activity, AlertTriangle, PieChart, Zap, CheckCircle2, CalendarClock, ArrowRight, Bell, CircleOff, CircleParking, Hexagon, Map as MapIcon, Navigation, Package, Plus, Route, Truck, Users, Wrench } from "lucide-react";
+import { AlertTriangle, PieChart, Zap, CheckCircle2, CalendarClock, ArrowRight, Bell,  Hexagon, Map as MapIcon, Navigation, Package, Plus, Route, Truck, Users, Wrench } from "lucide-react";
 import Link from "next/link";
 import { CHART_RANGES, type ChartRange } from "@/lib/daily-stats";
-import { VehiclePicture } from "@/components/app/vehicle-picture";
 import { cache, Suspense } from "react";
 import { LocalTime } from "@/components/app/local-time";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
+import { STATUS_THEME } from "@/components/app/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,7 +16,6 @@ import { listEvents } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
 import { getServerEnv } from "@/lib/env";
 import { FLEET_STATE_META, fleetState, type FleetState } from "@/lib/fleet-status";
-import { isFixStale } from "@rio-gps/core/freshness";
 import { durationMin, relativeTime } from "@/lib/format";
 import { listCurrentLocations, type CurrentDeviceLocation } from "@/lib/locations";
 import { dueCounts } from "@/lib/maintenance";
@@ -118,8 +117,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   ) : null;
 
   const fixOpts = { nowMs: now.getTime(), maxFixAgeSeconds: getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS };
-  // Online but the newest position is old: say so instead of showing a past speed as current.
-  const staleFix = (d: CurrentDeviceLocation) => d.connectivity === "online" && !!d.location && isFixStale(d.location.recordedAt, fixOpts.nowMs, fixOpts.maxFixAgeSeconds);
   const states = devices.map((d) => ({ d, s: fleetState(d, fixOpts) }));
   const count = (s: FleetState) => states.filter((x) => x.s === s).length;
   const firstName = (user.name || "").split(" ")[0];
@@ -169,9 +166,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <section aria-label="Fleet summary" className="stagger-in mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Tile label="Total vehicles" value={devices.length} icon={Truck} look="total" hint={unack > 0 ? `${unack} unread alert${unack === 1 ? "" : "s"}` : "All tracked"} href="/vehicles" className="col-span-2 md:col-span-1" />
         <Tile label="Moving" value={count("moving")} total={devices.length} icon={Navigation} look="moving" href="/vehicles?state=moving" />
-        <Tile label="Idling" value={count("idle")} total={devices.length} icon={Activity} look="idle" hint="engine on" href="/vehicles?state=idle" />
-        <Tile label="Stopped" value={count("stopped") + count("parked")} total={devices.length} icon={CircleParking} look="stopped" href="/vehicles?state=stopped" />
-        <Tile label="Offline" value={count("offline") + count("never_seen")} total={devices.length} icon={CircleOff} look="offline" href="/vehicles?state=offline" />
+        <Tile label="Idling" value={count("idle")} total={devices.length} icon={STATUS_THEME.idle.icon} look="idle" hint="engine on" href="/vehicles?state=idle" />
+        <Tile label="Stopped" value={count("stopped") + count("parked")} total={devices.length} icon={STATUS_THEME.stopped.icon} look="stopped" href="/vehicles?state=stopped" />
+        <Tile label="Offline" value={count("offline") + count("never_seen")} total={devices.length} icon={STATUS_THEME.offline.icon} look="offline" href="/vehicles?state=offline" />
       </section>
 
       {/* Things that need attention sit side by side on wide screens instead of stacking. */}
@@ -211,9 +208,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       )}
       </div>
 
-      {/* Map and status side by side, like the phone app: where they are, and how many of each. */}
-      <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
-        {can("locations.read") && <FleetGlance offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} className="min-w-0 overflow-hidden lg:col-span-2" />}
+      {/* Bento: the map is the big tile; status, alerts, quick actions and trips fill around it. */}
+      <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {can("locations.read") && (
+          <FleetGlance
+            offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS}
+            className="flex min-w-0 flex-col overflow-hidden md:col-span-2 xl:row-span-2"
+            mapClassName="h-[320px] xl:h-auto xl:min-h-[440px] xl:flex-1"
+          />
+        )}
         <Card className="min-w-0">
           <CardHeader>
             <IconTitle icon={PieChart}>Fleet status</IconTitle>
@@ -226,55 +229,36 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             parts={(["moving", "idle", "stopped", "offline"] as const).map((k) => ({
               key: k,
               label: FLEET_STATE_META[k].label,
-              color: FLEET_STATE_META[k].color,
+              color: STATUS_THEME[k].color,
               value: k === "offline" ? count("offline") + count("never_seen") : k === "stopped" ? count("stopped") + count("parked") : count(k)
             }))}
           />
-          <ul className="m-0 list-none divide-y divide-border border-t border-border p-0">
-            {states
-              .sort((a, b) => rank(a.s) - rank(b.s))
-              .slice(0, 3)
-              .map(({ d, s }) => (
-                <li key={d.deviceId}>
-                  <Link href={`/map?focus=${d.deviceId}`} className="flex items-center gap-3 px-4 py-2.5 text-foreground no-underline hover:bg-canvas sm:px-5">
-                    <VehiclePicture type={d.vehicle?.type} state={s === "never_seen" ? "offline" : s} className="h-8 w-11" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{d.vehicle?.name ?? deviceDisplayName(d.name, d.model)}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {staleFix(d) ? "No current GPS · " : d.location && s === "moving" ? `${u.fmtSpeed(d.location.speedKph)} · ` : ""}
-                        {relativeTime(d.lastSeenAt, now.getTime(), rc.timeZone)}
-                      </span>
-                    </span>
-                    <StatusBadge tone={FLEET_STATE_META[s].tone} label={FLEET_STATE_META[s].label} pulse={s === "moving"} />
-                  </Link>
-                </li>
-              ))}
-          </ul>
         </Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        {can("history.read") ? (
-          <Suspense fallback={<TripsSkeleton />}>
-            <RecentTrips ctx={ctx} devices={devices} now={now} u={u} />
-          </Suspense>
-        ) : (
-          <div className="hidden lg:block" />
-        )}
+        {can("alerts.read") ? (
+          <div className="min-w-0 xl:row-span-2 [&>*]:h-full">
+            <RecentAlertsCard alerts={recentAlerts} now={now} timeZone={rc.timeZone} canWrite={can("alerts.write")} emptyHint={loadsDash ? "Speeding, zone, offline and load alerts will appear here." : "Speeding, zone and offline alerts will appear here."} />
+          </div>
+        ) : null}
         <Card className="min-w-0">
           <CardHeader>
             <IconTitle icon={Zap}>Quick actions</IconTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-2.5">
+          <CardContent className="grid grid-cols-3 gap-2">
             {can("locations.read") && <QuickAction href="/map" icon={MapIcon} label="Live map" hint="Every vehicle now" tone="navy" />}
             {can("history.read") && <QuickAction href="/reports" icon={Route} label="Reports" hint="Trips, stops, miles" tone="amber" />}
             {can("vehicles.create") && <QuickAction href="/vehicles" icon={Plus} label="Add vehicle" hint="Truck, trailer, van" tone="green" />}
-            {can("vehicles.create") && <QuickAction href="/drivers" icon={Users} label="Drivers" hint="Who drives what" tone="purple" />}
-            {can("geofences.write") && <QuickAction href="/geofences" icon={Hexagon} label="Create zone" hint="Yards and sites" tone="purple" />}
-            {can("loads.write") && <QuickAction href="/loads/new" icon={Package} label="New load" hint="Track a shipment" tone="red" />}
+            {can("vehicles.read") && <QuickAction href="/drivers" icon={Users} label="Drivers" hint="Who drives what" tone="purple" />}
+            {can("geofences.write") && <QuickAction href="/geofences" icon={Hexagon} label="Zones" hint="Yards and sites" tone="purple" />}
+            {can("loads.write") ? <QuickAction href="/loads/new" icon={Package} label="New load" hint="Track a shipment" tone="red" /> : can("alerts.write") ? <QuickAction href="/alerts" icon={Bell} label="Alert rules" hint="Speed, zones, offline" tone="red" /> : null}
           </CardContent>
         </Card>
-        {can("alerts.read") && <RecentAlertsCard alerts={recentAlerts} now={now} timeZone={rc.timeZone} canWrite={can("alerts.write")} emptyHint={loadsDash ? "Speeding, zone, offline and load alerts will appear here." : "Speeding, zone and offline alerts will appear here."} />}
+        {can("history.read") && (
+          <div className="min-w-0 md:col-span-2 xl:col-span-4">
+            <Suspense fallback={<TripsSkeleton />}>
+              <RecentTrips ctx={ctx} devices={devices} now={now} u={u} />
+            </Suspense>
+          </div>
+        )}
       </div>
 
       {loadsSection}
@@ -341,9 +325,6 @@ function RecentAlertsCard({ alerts, now, timeZone, canWrite, emptyHint }: { aler
   );
 }
 
-function rank(s: FleetState) {
-  return { moving: 0, idle: 1, stopped: 2, parked: 3, offline: 4, never_seen: 5 }[s];
-}
 
 /** Share of the fleet in each status: a ring with the total in the middle, and a labelled legend (no colour-only meaning). */
 function StatusDonut({ total, parts }: { total: number; parts: { key: string; label: string; color: string; value: number }[] }) {
@@ -429,8 +410,8 @@ async function RecentTrips({ ctx, devices, now, u }: { ctx: TenantContext; devic
       {trips.length === 0 ? (
         <CardContent className="text-sm text-muted-foreground">No trips in the last 24 hours.</CardContent>
       ) : (
-        <ul className="m-0 list-none divide-y divide-border p-0">
-          {trips.slice(0, 5).map((t) => (
+        <ul className="m-0 grid list-none p-0 lg:grid-cols-2 [&>li]:border-b [&>li]:border-border lg:[&>li:nth-child(odd)]:border-r">
+          {trips.slice(0, 6).map((t) => (
             <li key={`${t.deviceId}-${t.startAt}`}>
               <Link
                 href={`/map?device=${t.deviceId}&from=${encodeURIComponent(t.startAt)}&to=${encodeURIComponent(new Date(Date.parse(t.endAt) + 60_000).toISOString())}`}

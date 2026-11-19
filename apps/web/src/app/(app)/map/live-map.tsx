@@ -1,6 +1,7 @@
 "use client";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { readMapIcons, saveMapIcons, useMapIcons } from "@/lib/map-icons";
+import { readMapIcons, useMapIcons } from "@/lib/map-icons";
+import { DEFAULT_ORG_MAP_PREFS, type OrgMapPrefs } from "@/lib/org-map-prefs";
 import { useAddress } from "@/lib/use-address";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
 import * as Menu from "@radix-ui/react-dropdown-menu";
@@ -25,7 +26,7 @@ import { cn } from "@/lib/cn";
 import { MAP_STYLES, type MapStyleId, saveStyle, savedStyle, setBuildings3d, styleUrl } from "@/lib/map-style";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { FleetLayer, STATE_COLORS, type FleetPoint } from "./fleet-layer";
-import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, hasStaleFix, iconName, mapState, MAP_STATES, STATE_ORDER, stateBucket, type IconStyle, type MapState } from "./fleet-model";
+import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, hasStaleFix, iconName, mapState, MAP_STATES, STATE_ORDER, stateBucket, type MapState } from "./fleet-model";
 import { useFleetStream } from "./use-fleet-stream";
 
 // Loaded on first use: most sessions never open history.
@@ -119,15 +120,6 @@ function StatusBadge({ state, stale = false }: { state: MapState; stale?: boolea
 /** Up to this many vehicles, icons show at every zoom instead of dots and count bubbles. */
 const SMALL_FLEET = 60;
 
-/** The same icon styles as Settings → Map icons and the phone app. */
-const ICON_CHOICES: ReadonlyArray<{ value: IconStyle; label: string }> = [
-  { value: "photo", label: "3D photo" },
-  { value: "pin", label: "3D pin" },
-  { value: "circle", label: "Circle" },
-  { value: "square", label: "Square" },
-  { value: "top", label: "Top" }
-];
-
 export function LiveMap({
   offlineSeconds,
   groups = [],
@@ -135,8 +127,11 @@ export function LiveMap({
   defaultStyle = "streets",
   addresses = false,
   platformAdmin = false,
-  drivers = {}
+  drivers = {},
+  mapPrefs = DEFAULT_ORG_MAP_PREFS
 }: {
+  /** The company's map defaults (Settings → Map display). */
+  mapPrefs?: OrgMapPrefs;
   /** Who drives each vehicle now (vehicle id → driver), from the Drivers page. */
   drivers?: Record<string, { name: string; phone: string | null }>;
   offlineSeconds: number;
@@ -170,13 +165,14 @@ export function LiveMap({
   const [search, setSearch] = useState("");
   const [groupId, setGroupId] = useState("");
   const [sort, setSort] = useState<"status" | "name" | "recent" | "speed">("status");
-  const [clustered, setClustered] = useState(true);
+  const [clustered, setClustered] = useState(mapPrefs.cluster);
   const [now, setNow] = useState(() => Date.now());
   const [sheetOpen, setSheetOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
-  const [showLabels, setShowLabels] = useState(true);
-  const [showZones, setShowZones] = useState(true);
-  const showZonesRef = useRef(true);
+  const [showLabels, setShowLabels] = useState(mapPrefs.labels);
+  const [showZones, setShowZones] = useState(mapPrefs.zones);
+  const [showNearby, setShowNearby] = useState(mapPrefs.nearby);
+  const showZonesRef = useRef(mapPrefs.zones);
   showZonesRef.current = showZones;
   const [follow, setFollow] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -459,7 +455,7 @@ export function LiveMap({
   const q = search.trim().toLowerCase();
   const rows = useMemo(
     () => scoped.filter((r) => (filter === "all" || stateBucket(r.state) === filter) && (!q || r.name.toLowerCase().includes(q) || (r.d.vehicle?.licensePlate ?? "").toLowerCase().includes(q) || (r.d.vehicle ? (drivers[r.d.vehicle.id]?.name ?? "") : "").toLowerCase().includes(q))),
-    [scoped, filter, q]
+    [scoped, filter, q, drivers]
   );
 
   // Keep the map filter in step with the list.
@@ -1134,6 +1130,7 @@ export function LiveMap({
                   {(
                     [
                       ["Vehicle names", showLabels, setShowLabels],
+                      ["Nearby vehicle chips", showNearby, setShowNearby],
                       ["Group nearby vehicles", clustered, setClustered],
                       ["Zones", showZones, setShowZones]
                     ] as const
@@ -1153,28 +1150,6 @@ export function LiveMap({
                       {label}
                     </Menu.CheckboxItem>
                   ))}
-                  <Menu.Separator className="my-1 h-px bg-border" />
-                  <Menu.Label className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Vehicle icons</Menu.Label>
-                  <div role="radiogroup" aria-label="Vehicle icon style" className="grid grid-cols-5 gap-1 px-1.5 pb-1.5">
-                    {ICON_CHOICES.map((c) => {
-                      const on = icons.style === c.value;
-                      return (
-                        <button
-                          key={c.value}
-                          type="button"
-                          role="radio"
-                          aria-checked={on}
-                          title={c.label}
-                          onClick={() => saveMapIcons({ style: c.value })}
-                          className={cn("flex cursor-pointer flex-col items-center gap-0.5 rounded-lg border-2 bg-transparent p-1 text-[10px] font-semibold", on ? "border-primary bg-primary-soft text-primary" : "border-transparent text-muted-foreground hover:bg-muted")}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element -- small static icon */}
-                          <img src={`/fleet-art/map/icons/${iconName("semi", "moving", { style: c.value, color: icons.color })}.png`} alt="" className="h-8 w-auto" />
-                          {c.label}
-                        </button>
-                      );
-                    })}
-                  </div>
                 </Menu.Content>
               </Menu.Portal>
             </Menu.Root>
@@ -1240,7 +1215,7 @@ export function LiveMap({
         </div>
 
         {vehicleCard}
-        {nearbyChips()}
+        {showNearby && nearbyChips()}
 
         {follow && sel && (
           <div className="pointer-events-none absolute inset-x-0 top-16 z-[1] flex justify-center">

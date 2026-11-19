@@ -185,8 +185,8 @@ export function AppShell({
         {viewingAs && mode.kind === "tenant" && <ViewAsBanner orgName={orgName} orgStatus={mode.orgStatus ?? "active"} />}
         {mode.kind === "platform" && mode.viewAsName && <StillViewingBanner name={mode.viewAsName} />}
 
-        <main id="main" className={cn("flex-1", fullBleed && "relative h-[calc(100dvh-3.5rem)] overflow-hidden")}>
-          <UnitsProvider system={unitSystem}>{fullBleed ? children : <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 sm:py-6">{children}</div>}</UnitsProvider>
+        <main id="main" className={cn("min-w-0 flex-1", fullBleed && "relative h-[calc(100dvh-3.5rem)] overflow-hidden")}>
+          <UnitsProvider system={unitSystem}>{fullBleed ? children : <div className="mx-auto w-full max-w-[1680px] px-4 py-5 sm:px-6 sm:py-6">{children}</div>}</UnitsProvider>
         </main>
       </div>
     </div>

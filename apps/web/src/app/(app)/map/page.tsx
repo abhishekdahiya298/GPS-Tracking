@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib/authz";
 import { driversByVehicle } from "@/lib/drivers";
+import { getOrgSettings } from "@/lib/organization";
 import { getServerEnv } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { getMapsSettings } from "@/lib/maps-settings";
@@ -27,7 +28,7 @@ export default async function MapPage() {
   // Groups are only names and vehicle ids of the caller's own organization.
   const groups = contextHasPermission(ctx, "vehicles.read") ? await listGroups(ctx.organizationId) : [];
   const canShare = contextHasPermission(ctx, "vehicles.update") && contextHasPermission(ctx, "locations.read");
-  const maps = await getMapsSettings();
+  const [maps, org] = await Promise.all([getMapsSettings(), getOrgSettings(ctx.organizationId)]);
   const drivers = contextHasPermission(ctx, "vehicles.read") ? Object.fromEntries([...(await driversByVehicle(ctx.organizationId))].map(([v, d]) => [v, { name: d.name, phone: d.phone }])) : {};
-  return <LiveMap offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} groups={groups} canShare={canShare} defaultStyle={maps.mapStyle} addresses={maps.addressProvider !== "off"} platformAdmin={ctx.isSuperAdmin} drivers={drivers} />;
+  return <LiveMap offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} groups={groups} canShare={canShare} defaultStyle={maps.mapStyle} addresses={maps.addressProvider !== "off"} platformAdmin={ctx.isSuperAdmin} drivers={drivers} mapPrefs={org.mapPrefs} />;
 }

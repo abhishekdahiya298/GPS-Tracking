@@ -55,7 +55,7 @@ export function MapIconsCard() {
           />
         ) : null}
         <p className="text-sm text-muted-foreground">
-          {own ? "Your own choice in this browser. " : "Using the default set by RIO GPS. "}
+          {own ? "Your own choice in this browser. " : "Using your company's default (Settings → Map display). "}
           Zoomed out, vehicles show as status dots. The phone app has its own setting.
           {own && (
             <>

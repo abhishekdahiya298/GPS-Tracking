@@ -1,4 +1,4 @@
-import { boolean, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /** Display units only; stored GPS values are always metric. */
 export const unitSystemEnum = pgEnum("unit_system", ["imperial", "metric"]);
@@ -42,6 +42,8 @@ export const organizations = pgTable("organizations", {
   platformNotes: text("platform_notes"),
   /** Demo or internal test account (store review, sales demos). Platform admins can hide these from their lists. */
   isDemo: boolean("is_demo").notNull().default(false),
+  /** Company map display defaults set by the company admin (icon style, names, nearby chips…); see lib/org-map-prefs. */
+  mapPrefs: jsonb("map_prefs").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });

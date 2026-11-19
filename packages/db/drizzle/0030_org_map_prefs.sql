@@ -1,0 +1,1 @@
+ALTER TABLE "organizations" ADD COLUMN "map_prefs" jsonb DEFAULT '{}'::jsonb NOT NULL;
