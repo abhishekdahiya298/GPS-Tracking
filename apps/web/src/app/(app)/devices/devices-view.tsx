@@ -10,7 +10,8 @@ import { pictureState, VehiclePicture } from "@/components/app/vehicle-picture";
 import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
-import { StatusBadge, type StatusTone } from "@/components/app/status-badge";
+import { StatusChip } from "@/components/app/status-chip";
+type StatusTone = "success" | "neutral" | "warning";
 import { useListParams } from "@/components/app/use-list-params";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -76,7 +77,7 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
           />
         )
       },
-      { id: "status", header: "Status", meta: { sortKey: "state" } satisfies ColumnMeta, cell: ({ row }) => <StatusBadge {...STATE[row.original.state]} /> },
+      { id: "status", header: "Status", meta: { sortKey: "state" } satisfies ColumnMeta, cell: ({ row }) => <StatusChip status={row.original.state} label={STATE[row.original.state].label} /> },
       {
         id: "vehicle",
         header: "Vehicle",
@@ -174,7 +175,7 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
                   {[d.vehicle ? d.vehicle.name : "Not assigned", d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null, relativeTime(d.lastSeenAt, Date.now(), t.timeZone)].filter(Boolean).join(" · ")}
                 </p>
                 <div className="mt-1.5">
-                  <StatusBadge {...STATE[d.state]} />
+                  <StatusChip status={d.state} label={STATE[d.state].label} />
                 </div>
               </div>
               <RowMenu d={d} />

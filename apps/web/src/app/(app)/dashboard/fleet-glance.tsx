@@ -10,6 +10,7 @@ import type { Map as MlMap, Popup } from "maplibre-gl";
 import { preferredStyleUrl } from "@/lib/map-style";
 import { Maximize2, Radio } from "lucide-react";
 import Link from "next/link";
+import { cn } from "@/lib/cn";
 import { useEffect, useRef, useState } from "react";
 import { useUnits } from "@/components/app/units-context";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,7 +43,7 @@ function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, 
   };
 }
 
-export function FleetGlance({ offlineSeconds, className }: { offlineSeconds: number; className?: string }) {
+export function FleetGlance({ offlineSeconds, className, mapClassName }: { offlineSeconds: number; className?: string; mapClassName?: string }) {
   const box = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
 
@@ -79,7 +80,7 @@ export function FleetGlance({ offlineSeconds, className }: { offlineSeconds: num
           <Maximize2 className="size-3.5" aria-hidden="true" /> Open live map
         </Link>
       </CardHeader>
-      <div ref={box} className="relative h-[300px] bg-[#eef2f7] dark:bg-muted sm:h-[360px]">
+      <div ref={box} className={cn("relative bg-[#eef2f7] dark:bg-muted", mapClassName ?? "h-[300px] sm:h-[360px]")}>
         {visible ? <GlanceMap offlineSeconds={offlineSeconds} /> : <MapPlaceholder />}
         <ul aria-label="Map legend" className="pointer-events-none absolute bottom-2 left-2 m-0 flex list-none flex-wrap gap-x-3 gap-y-1 rounded-lg bg-white/90 px-2.5 py-1.5 p-0 text-[11px] font-medium text-foreground shadow-card backdrop-blur">
           {LEGEND.map(([s, label]) => (

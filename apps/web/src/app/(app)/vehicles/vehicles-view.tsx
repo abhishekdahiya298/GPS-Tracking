@@ -1,6 +1,6 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CircleStop, Clock, Gauge, MapPin, Power, History, Layers, Navigation, Timer, Unplug, WifiOff, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2, Truck } from "lucide-react";
+import { CircleStop, Clock, Cpu, Gauge, MapPin, Power, History, Layers, Navigation, Timer, Unplug, WifiOff, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2, Truck } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
@@ -43,7 +43,7 @@ function LocationCell({ lat, lon, moving }: { lat: number; lon: number; moving: 
   const a = useAddress(lat, lon, moving);
   const text = a ? [a.line1, a.line2].filter(Boolean).join(", ") : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
   return (
-    <span className="flex min-w-0 max-w-56 items-center gap-1.5 text-sm" title={a?.label ?? text}>
+    <span className="flex min-w-0 max-w-52 items-center gap-1.5 text-sm" title={a?.label ?? text}>
       <MapPin className="size-4 shrink-0 text-[#2563eb]" aria-hidden="true" />
       <span className="truncate">{text}</span>
     </span>
@@ -135,15 +135,30 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         meta: { sortKey: "name" } satisfies ColumnMeta,
         cell: ({ row: { original: v } }) => (
           <div className="flex min-w-0 items-center gap-3">
-            <VehiclePicture type={v.type} state={pictureState(v.device ? v.state : null)} className="h-11 w-16" />
-            <div className="min-w-0">
-              <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
-              <p className="m-0 truncate text-xs text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(v.type)], v.licensePlate, v.device ? deviceDisplayName(v.device.name, v.device.model) : "No GPS device", ...v.groups].filter(Boolean).join(" · ")}</p>
+            <VehiclePicture type={v.type} state={pictureState(v.device ? v.state : null)} className="h-10 w-14" />
+            <div className="min-w-0 max-w-[15rem]">
+              <p className="m-0 truncate font-semibold text-foreground">{v.name}</p>
+              <p className="m-0 truncate text-xs text-muted-foreground" title={[VEHICLE_TYPE_LABEL[asVehicleType(v.type)], v.licensePlate, ...v.groups].filter(Boolean).join(" · ")}>
+                {[VEHICLE_TYPE_LABEL[asVehicleType(v.type)], v.licensePlate, ...v.groups].filter(Boolean).join(" · ")}
+              </p>
             </div>
           </div>
         )
       },
-      { id: "status", header: "Status", meta: { sortKey: "state" } satisfies ColumnMeta, cell: ({ row }) => <VehicleStateBadge state={row.original.state} /> },
+      {
+        id: "status",
+        header: "Status · device",
+        meta: { sortKey: "state" } satisfies ColumnMeta,
+        cell: ({ row: { original: v } }) => (
+          <div className="grid justify-items-start gap-1">
+            <VehicleStateBadge state={v.state} />
+            <span className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-muted-foreground">
+              <Cpu className="size-3" aria-hidden="true" />
+              {v.device ? deviceDisplayName(v.device.name, v.device.model) : "No GPS device"}
+            </span>
+          </div>
+        )
+      },
       {
         id: "driver",
         header: "Driver",
@@ -167,33 +182,26 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         cell: ({ row: { original: v } }) => (v.location ? <LocationCell lat={v.location.latitude} lon={v.location.longitude} moving={v.state === "moving"} /> : <span className="text-muted-foreground">{v.device ? "No position yet" : "—"}</span>)
       },
       {
-        id: "speed",
-        header: "Speed",
-        meta: { sortKey: "speed", hideable: true, label: "Speed", className: "text-right tabular-nums" } satisfies ColumnMeta,
+        id: "live",
+        header: "Speed · ignition",
+        meta: { sortKey: "speed", hideable: true, label: "Speed and ignition" } satisfies ColumnMeta,
         // A silent tracker's last speed is history, not now: show a dash, never "65 mph" for a truck that stopped reporting days ago.
-        cell: ({ row: { original: v } }) =>
-          v.location && !SILENT.has(v.state) ? (
-            <span className={v.state === "moving" ? "inline-flex items-center gap-1.5 whitespace-nowrap font-semibold text-[#15803d] dark:text-[#4ade80]" : "inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground"}>
-              <Gauge className="size-4 text-[#1d4ed8]" aria-hidden="true" />
-              {u.fmtSpeed(v.location.speedKph)}
+        cell: ({ row: { original: v } }) => {
+          const live = v.location && !SILENT.has(v.state);
+          const ign = v.location?.ignition;
+          return (
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold">
+              <span className={live && v.state === "moving" ? "inline-flex h-6 items-center gap-1 rounded-full bg-[#15803d]/12 px-2 text-[#15803d] dark:text-[#4ade80]" : "inline-flex h-6 items-center gap-1 rounded-full bg-muted px-2 text-muted-foreground"}>
+                <Gauge className="size-3.5" aria-hidden="true" />
+                {live ? u.fmtSpeed(v.location!.speedKph) : "—"}
+              </span>
+              <span className={ign ? "inline-flex h-6 items-center gap-1 rounded-full bg-[#16a34a]/12 px-2 text-[#15803d] dark:text-[#4ade80]" : "inline-flex h-6 items-center gap-1 rounded-full bg-muted px-2 text-muted-foreground"} title="Ignition">
+                <Power className="size-3.5" aria-hidden="true" />
+                {ign == null ? "—" : ign ? "On" : "Off"}
+              </span>
             </span>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )
-      },
-      {
-        id: "ignition",
-        header: "Ignition",
-        meta: { hideable: true, label: "Ignition" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) =>
-          v.location?.ignition == null ? (
-            <span className="text-muted-foreground">—</span>
-          ) : (
-            <span className={v.location.ignition ? "inline-flex items-center gap-1.5 font-medium text-[#15803d] dark:text-[#4ade80]" : "inline-flex items-center gap-1.5 text-muted-foreground"}>
-              <Power aria-hidden="true" className={v.location.ignition ? "size-4 text-[#16a34a]" : "size-4 text-[#94a3b8]"} />
-              {v.location.ignition ? "On" : "Off"}
-            </span>
-          )
+          );
+        }
       },
       {
         id: "lastSeen",

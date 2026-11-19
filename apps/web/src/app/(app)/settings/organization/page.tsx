@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/app/page-header";
 import { getOrgSettings } from "@/lib/organization";
 import { requireTenantPage } from "@/lib/request-context";
+import { MapDisplayCard } from "./map-display-card";
 import { OrgSettingsForm } from "./org-settings-form";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,10 @@ export default async function OrganizationSettingsPage() {
   return (
     <>
       <PageHeader title="Settings" description="Organization-wide preferences. They apply to everyone in your organization." />
-      <OrgSettingsForm name={settings.name} initial={{ unitSystem: settings.unitSystem, timeZone: settings.timeZone, timeFormat: settings.timeFormat }} />
+      <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+        <OrgSettingsForm name={settings.name} initial={{ unitSystem: settings.unitSystem, timeZone: settings.timeZone, timeFormat: settings.timeFormat }} />
+        <MapDisplayCard initial={settings.mapPrefs} />
+      </div>
     </>
   );
 }
