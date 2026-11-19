@@ -141,7 +141,7 @@ export async function registerDevice(actorUserId: string, organizationId: string
     traccar = await getTraccarAdmin().ensureDevice(input.name ?? `${input.model}-${input.imei.slice(-4)}`, input.imei);
   } catch (err) {
     logger.error("customers.traccar_register_failed", { organizationId }, err);
-    throw new AppError("TRACCAR_UNAVAILABLE", 502, "Could not register the device in Traccar; nothing was saved. Try again.");
+    throw new AppError("TRACCAR_UNAVAILABLE", 502, "Could not register the device on the GPS server; nothing was saved. Try again.");
   }
 
   const providerId =
@@ -253,22 +253,27 @@ export interface CustomerRow extends CustomerDto {
   activeDevices: number;
   status: OrganizationStatus;
   statusReason: string | null;
+  /** Demo / internal test account. */
+  isDemo: boolean;
 }
 
 const likeP = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 /** Super-admin only (callers check isSuperAdmin): every organization, paged in SQL. */
 export async function listCustomersPage(
-  q: CustomerListQuery
+  q: CustomerListQuery,
+  hideDemo = false
 ): Promise<{ items: CustomerRow[]; total: number; page: number; pageSize: number; counts: Record<"current" | "suspended" | "archived" | "all", number> }> {
-  const viewWhere = { current: sql`o.status <> 'archived'`, suspended: sql`o.status = 'suspended'`, archived: sql`o.status = 'archived'`, all: sql`true` }[q.view];
+  // "Hide demo accounts" leaves demo / test customers out of the list and the counts.
+  const nd = hideDemo ? sql`not o.is_demo` : sql`true`;
+  const viewWhere = sql`${nd} and ${{ current: sql`o.status <> 'archived'`, suspended: sql`o.status = 'suspended'`, archived: sql`o.status = 'archived'`, all: sql`true` }[q.view]}`;
   const search = q.search ? sql`where (o.name ilike ${likeP(q.search)} or o.slug ilike ${likeP(q.search)}) and ${viewWhere}` : sql`where ${viewWhere}`;
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
   const order = { name: sql`lower(name) ${dir}`, created: sql`created_at ${dir}`, devices: sql`devices ${dir}`, members: sql`members ${dir}` }[q.sort];
-  const statusCounts = getDb().execute<{ status: OrganizationStatus; n: number }>(sql`select status, count(*)::int as n from organizations group by status`);
-  const rows = await getDb().execute<{ id: string; name: string; slug: string; created_at: Date; devices: number; members: number; active_devices: number; total: number; status: OrganizationStatus; status_reason: string | null }>(sql`
+  const statusCounts = getDb().execute<{ status: OrganizationStatus; n: number }>(sql`select o.status, count(*)::int as n from organizations o where ${nd} group by o.status`);
+  const rows = await getDb().execute<{ id: string; name: string; slug: string; created_at: Date; devices: number; members: number; active_devices: number; total: number; status: OrganizationStatus; status_reason: string | null; is_demo: boolean }>(sql`
     with f as (
-      select o.id, o.name, o.slug, o.created_at, o.status, o.status_reason,
+      select o.id, o.name, o.slug, o.created_at, o.status, o.status_reason, o.is_demo,
         (select count(*)::int from gps_devices d where d.organization_id = o.id) as devices,
         (select count(*)::int from gps_devices d where d.organization_id = o.id and d.last_seen_at > now() - interval '24 hours') as active_devices,
         (select count(*)::int from memberships m join users u on u.id = m.user_id where m.organization_id = o.id and not u.is_super_admin) as members
@@ -289,7 +294,8 @@ export async function listCustomersPage(
       members: r.members,
       activeDevices: r.active_devices,
       status: r.status,
-      statusReason: r.status_reason
+      statusReason: r.status_reason,
+      isDemo: Boolean(r.is_demo)
     })),
     total: rows.length ? Number(rows[0]!.total) : 0,
     page: q.page,
@@ -312,6 +318,7 @@ export interface CustomerDetail {
   timeFormat: "12h" | "24h";
   status: OrganizationStatus;
   statusReason: string | null;
+  isDemo: boolean;
   statusChangedAt: string | null;
   statusChangedBy: string | null;
   members: { userId: string; name: string; email: string; role: string; lastSignInAt: string | null; twoStep: boolean }[];
@@ -344,6 +351,7 @@ export async function getCustomerDetail(organizationId: string): Promise<Custome
     createdAt: org.createdAt.toISOString(),
     status: org.status,
     statusReason: org.statusReason,
+    isDemo: org.isDemo,
     statusChangedAt: org.statusChangedAt?.toISOString() ?? null,
     statusChangedBy: changedBy ? changedBy.name || changedBy.email : null,
     contactName: org.contactName,
@@ -372,12 +380,13 @@ export const UpdateCustomerSchema = z
     notes: optText(2000),
     timeZone: TimeZoneSchema,
     unitSystem: z.enum(UNIT_SYSTEMS),
-    timeFormat: z.enum(TIME_FORMATS)
+    timeFormat: z.enum(TIME_FORMATS),
+    isDemo: z.boolean()
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, "Nothing to update");
 
-const COLUMN = { name: "name", slug: "slug", contactName: "contactName", contactEmail: "contactEmail", contactPhone: "contactPhone", notes: "platformNotes", timeZone: "timeZone", unitSystem: "unitSystem", timeFormat: "timeFormat" } as const;
+const COLUMN = { name: "name", slug: "slug", contactName: "contactName", contactEmail: "contactEmail", contactPhone: "contactPhone", notes: "platformNotes", timeZone: "timeZone", unitSystem: "unitSystem", timeFormat: "timeFormat", isDemo: "isDemo" } as const;
 
 /** Platform admins edit a customer's name, short name, account contact, notes and display defaults. Audited field by field. */
 export async function updateCustomer(actorUserId: string, organizationId: string, patch: z.infer<typeof UpdateCustomerSchema>, meta: Meta) {

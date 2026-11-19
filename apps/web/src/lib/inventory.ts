@@ -127,7 +127,7 @@ export async function addToStock(actorUserId: string, input: z.infer<typeof AddT
     traccar = await getTraccarAdmin().ensureDevice(`${input.model}-${input.imei.slice(-4)}`, input.imei);
   } catch (err) {
     logger.error("inventory.traccar_register_failed", {}, err);
-    throw new AppError("TRACCAR_UNAVAILABLE", 502, "Could not register the tracker in Traccar; nothing was saved. Try again.");
+    throw new AppError("TRACCAR_UNAVAILABLE", 502, "Could not register the tracker on the GPS server; nothing was saved. Try again.");
   }
   const now = new Date();
   const out = await getDb()

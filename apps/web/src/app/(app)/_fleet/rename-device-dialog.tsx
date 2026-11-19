@@ -8,12 +8,13 @@ import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import type { DeviceRow } from "@/lib/fleet-list";
 import { DevicePatchSchema } from "@/lib/schemas/vehicle";
+import { isModelCodeName, productName } from "@/lib/device-name";
 
 export function RenameDialog({ device, onClose, onSaved }: { device: DeviceRow | null; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => setName(device?.name ?? ""), [device]);
+  useEffect(() => setName(device?.name && !isModelCodeName(device.name) ? device.name : ""), [device]);
   return (
     <Dialog
       open={device !== null}
@@ -23,7 +24,7 @@ export function RenameDialog({ device, onClose, onSaved }: { device: DeviceRow |
         onClose();
       }}
     >
-      <DialogContent title="Rename device" description="A name your team recognises, e.g. “Truck 7 tracker”. Leave empty to use the model name.">
+      <DialogContent title="Rename device" description="A name your team recognises, e.g. “Truck 7 tracker”. Leave empty to use the product name.">
         <form
           method="post"
           noValidate
@@ -48,7 +49,7 @@ export function RenameDialog({ device, onClose, onSaved }: { device: DeviceRow |
             <Input
               id="d-name"
               value={name}
-              placeholder={device?.model ?? "Tracker name"}
+              placeholder={productName(device?.model)}
               maxLength={80}
               autoFocus
               aria-invalid={Boolean(error)}

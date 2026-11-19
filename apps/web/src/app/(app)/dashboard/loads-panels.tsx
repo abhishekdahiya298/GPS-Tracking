@@ -113,7 +113,7 @@ export function TodayStopsCard({ d, timeZone, timeFormat }: { d: LoadDashboard; 
               <li key={`${l.id}-${stop}`}>
                 <Link href={`/loads/${l.id}`} className="flex items-center gap-3 px-4 py-3 text-sm text-foreground no-underline hover:bg-primary-soft/40 sm:px-5">
                   <span className={cn("w-[4.5rem] shrink-0 whitespace-nowrap font-semibold tabular-nums", past ? "text-muted-foreground" : "text-[#0a2463] dark:text-foreground")}>{f.time(new Date(at))}</span>
-                  <span className={cn("size-2.5 shrink-0 rounded-full", stop === "pickup" ? "bg-[#136c35]" : "bg-[#c81e2b]")} aria-hidden="true" />
+                  <span className={cn("size-2.5 shrink-0 rounded-full", stop === "pickup" ? "bg-[#0f5c2c]" : "bg-[#c81e2b]")} aria-hidden="true" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">
                       {stop === "pickup" ? "Pickup" : "Delivery"} · {shortPlace(s.name, s.address)}

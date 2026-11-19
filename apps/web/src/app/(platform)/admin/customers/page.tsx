@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { CustomerListQuery, listCustomersPage } from "@/lib/customers";
+import { hideDemoAccounts } from "@/lib/demo-pref";
 import { parseListQuery } from "@/lib/fleet-list";
 import { getRequestContext } from "@/lib/request-context";
 import { termsSummary } from "@/lib/plan-format";
@@ -16,7 +17,8 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   if (!rc.user.isSuperAdmin) redirect("/dashboard");
   const sp = await searchParams;
   const q = parseListQuery(CustomerListQuery, sp);
-  const [data, plans] = await Promise.all([listCustomersPage(q), listPlans()]);
+  const hideDemo = await hideDemoAccounts();
+  const [data, plans] = await Promise.all([listCustomersPage(q, hideDemo), listPlans()]);
   const options = plans.filter((p) => p.active).map((p) => ({ id: p.id, name: p.name, summary: termsSummary(p).join(" · ") }));
-  return <CustomersView data={data} query={q} startCreating={sp.new === "1"} plans={options} />;
+  return <CustomersView data={data} query={q} hideDemo={hideDemo} startCreating={sp.new === "1"} plans={options} />;
 }

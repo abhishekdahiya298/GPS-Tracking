@@ -44,10 +44,10 @@ export function fleetState(
 }
 
 export const FLEET_STATE_META: Record<FleetState, { label: string; tone: "success" | "warning" | "danger" | "info" | "neutral" | "parked"; color: string }> = {
-  moving: { label: "Moving", tone: "success", color: "#136c35" },
-  idle: { label: "Idling", tone: "warning", color: "#a3470a" },
-  stopped: { label: "Stopped", tone: "danger", color: "#ad1f1f" },
-  parked: { label: "Parked (unhooked)", tone: "parked", color: "#6526d1" },
+  moving: { label: "Moving", tone: "success", color: "#0f5c2c" },
+  idle: { label: "Idling", tone: "warning", color: "#8f3d06" },
+  stopped: { label: "Stopped", tone: "danger", color: "#9c1818" },
+  parked: { label: "Parked (unhooked)", tone: "parked", color: "#5a1fc0" },
   offline: { label: "Offline", tone: "neutral", color: "#6b7280" },
   never_seen: { label: "No data yet", tone: "neutral", color: "#9ca3af" }
 };

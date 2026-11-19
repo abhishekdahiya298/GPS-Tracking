@@ -16,6 +16,9 @@ import type { AlertEventDto } from "@/lib/alerts";
 import { api, errorMessage } from "@/lib/client/api";
 import type { VehicleDetail } from "@/lib/fleet-list";
 import { VehicleStateBadge } from "./vehicle-state";
+import { deviceDisplayName, productName } from "@/lib/device-name";
+import { pictureState, VehiclePicture } from "@/components/app/vehicle-picture";
+import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 
 type Detail = VehicleDetail & { alerts: AlertEventDto[] };
 
@@ -57,6 +60,13 @@ export function VehicleDetailSheet({ vehicleId, onOpenChange, actions }: { vehic
           </div>
         ) : (
           <div className="grid gap-5 p-5">
+            <div className="flex items-center gap-4 rounded-xl border border-border p-3" style={{ backgroundImage: "linear-gradient(135deg, var(--color-background) 30%, var(--color-primary-soft) 100%)" }}>
+              <VehiclePicture type={detail.vehicle.type} state={pictureState(detail.device ? detail.state : null)} className="h-20 w-28 shrink-0 rounded-xl" />
+              <div className="min-w-0">
+                <p className="m-0 truncate text-lg font-bold">{detail.vehicle.name}</p>
+                <p className="m-0 truncate text-sm text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(detail.vehicle.type)], detail.vehicle.licensePlate].filter(Boolean).join(" · ")}</p>
+              </div>
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <VehicleStateBadge state={detail.state} />
               {detail.vehicle.status !== "active" && <StatusBadge tone="warning" label={detail.vehicle.status === "maintenance" ? "In maintenance" : "Inactive"} />}
@@ -103,8 +113,8 @@ export function VehicleDetailSheet({ vehicleId, onOpenChange, actions }: { vehic
               </h3>
               {detail.device ? (
                 <dl className="m-0 grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-border p-4 text-sm">
-                  <Item label="Device" value={detail.device.name ?? detail.device.model ?? "Device"} />
-                  <Item label="Model" value={detail.device.model ?? "—"} />
+                  <Item label="Device" value={deviceDisplayName(detail.device.name, detail.device.model)} />
+                  <Item label="Product" value={productName(detail.device.model)} />
                   {detail.device.imeiLast4 && <Item label="IMEI" value={`…${detail.device.imeiLast4}`} />}
                   <Item label="Assigned" value={<LocalTime iso={detail.device.assignedAt} />} />
                 </dl>

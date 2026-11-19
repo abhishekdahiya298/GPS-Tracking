@@ -5,6 +5,7 @@
 import { isFixStale } from "@rio-gps/core/freshness";
 import { addDays, dateFormatter, startOfLocalDay } from "@rio-gps/core/timezones";
 import type { CurrentDeviceLocation, LocationPoint } from "@/lib/locations";
+import { deviceDisplayName } from "@/lib/device-name";
 
 /**
  * moving: travelling. idle: engine on but standing still (burning fuel).
@@ -23,7 +24,7 @@ export function stateBucket(s: MapState): Exclude<MapState, "parked"> {
 export const MOVING_KPH = 5;
 
 export function deviceLabel(d: Pick<CurrentDeviceLocation, "vehicle" | "name" | "model">) {
-  return d.vehicle?.name ?? d.name ?? d.model ?? "Device";
+  return d.vehicle?.name ?? deviceDisplayName(d.name, d.model);
 }
 
 /** Presentation state. Offline is decided from last_seen so it stays right between snapshots. */
