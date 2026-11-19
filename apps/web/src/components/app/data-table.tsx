@@ -37,7 +37,8 @@ export function DataTable<T>({
   mobileRow,
   loading,
   empty,
-  toolbar
+  toolbar,
+  onPageSize
 }: {
   columns: ColumnDef<T, unknown>[];
   data: T[];
@@ -57,6 +58,8 @@ export function DataTable<T>({
   loading?: boolean;
   empty: ReactNode;
   toolbar?: ReactNode;
+  /** Shows a rows-per-page picker (10, 25, 50, 100). */
+  onPageSize?: (size: number) => void;
 }) {
   const [visibility, setVisibility] = useState<VisibilityState>({});
   const table = useReactTable({
@@ -183,7 +186,7 @@ export function DataTable<T>({
           )}
         </>
       )}
-      {total > 0 && <Pagination page={page} pageSize={pageSize} total={total} onPageChange={onPage} />}
+      {total > 0 && <Pagination page={page} pageSize={pageSize} total={total} onPageChange={onPage} onPageSizeChange={onPageSize} />}
     </div>
   );
 }

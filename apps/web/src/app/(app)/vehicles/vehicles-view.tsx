@@ -1,11 +1,11 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { History, Layers, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2, Truck } from "lucide-react";
+import { CircleStop, History, Layers, Navigation, Timer, Unplug, WifiOff, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2, Truck } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
-import { SegmentedFilter } from "@/components/app/filter-bar";
+import { FilterTiles } from "@/components/app/list-kit";
 import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
@@ -141,13 +141,26 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         header: "Speed",
         meta: { sortKey: "speed", hideable: true, label: "Speed", className: "text-right tabular-nums" } satisfies ColumnMeta,
         // A silent tracker's last speed is history, not now: show a dash, never "65 mph" for a truck that stopped reporting days ago.
-        cell: ({ row: { original: v } }) => (v.location && !SILENT.has(v.state) ? u.fmtSpeed(v.location.speedKph) : "—")
+        cell: ({ row: { original: v } }) =>
+          v.location && !SILENT.has(v.state) ? (
+            <span className={v.state === "moving" ? "font-semibold text-[#15803d] dark:text-[#4ade80]" : "text-muted-foreground"}>{u.fmtSpeed(v.location.speedKph)}</span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )
       },
       {
         id: "ignition",
         header: "Ignition",
         meta: { hideable: true, label: "Ignition" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) => (v.location?.ignition === true ? "On" : v.location?.ignition === false ? "Off" : "—")
+        cell: ({ row: { original: v } }) =>
+          v.location?.ignition == null ? (
+            <span className="text-muted-foreground">—</span>
+          ) : (
+            <span className={v.location.ignition ? "inline-flex items-center gap-1.5 font-medium text-[#15803d] dark:text-[#4ade80]" : "inline-flex items-center gap-1.5 text-muted-foreground"}>
+              <span aria-hidden="true" className={v.location.ignition ? "size-2 rounded-full bg-[#16a34a] shadow-[0_0_0_3px_rgb(22_163_74/0.18)]" : "size-2 rounded-full bg-[#94a3b8]"} />
+              {v.location.ignition ? "On" : "Off"}
+            </span>
+          )
       },
       {
         id: "lastSeen",
@@ -223,6 +236,19 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
           </>
         }
       />
+      <FilterTiles
+        label="Filter by status"
+        value={query.state}
+        onChange={(state) => set({ state: state === "all" ? null : state })}
+        options={[
+          { value: "all", label: "All vehicles", count: c.all ?? 0, icon: Layers, color: "#133a8f" },
+          { value: "moving", label: "Moving", count: c.moving ?? 0, icon: Navigation, color: "#15803d" },
+          { value: "idle", label: "Idling", count: c.idle ?? 0, icon: Timer, color: "#c2410c" },
+          { value: "stopped", label: "Stopped", count: (c.stopped ?? 0) + (c.parked ?? 0), icon: CircleStop, color: "#b91c1c" },
+          { value: "offline", label: "Offline", count: (c.offline ?? 0) + (c.never_seen ?? 0) + (c.inactive ?? 0), icon: WifiOff, color: "#64748b" },
+          { value: "no_device", label: "No device", count: c.no_device ?? 0, icon: Unplug, color: "#0369a1" }
+        ]}
+      />
       <Card>
         <DataTable
           columns={columns}
@@ -235,25 +261,30 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
           direction={query.direction}
           onSort={(sort, direction) => set({ sort, direction })}
           onPage={(page) => set({ page })}
+          onPageSize={(pageSize) => set({ pageSize })}
           onRowClick={(v) => setDetailId(v.id)}
           rowLabel={(v) => `Open ${v.name}`}
           loading={pending}
           toolbar={
             <>
               <SearchInput value={query.search} onChange={(search) => set({ search })} placeholder="Search name, plate or device…" label="Search vehicles" />
-              <SegmentedFilter
-                label="Filter by status"
-                value={query.state}
-                onChange={(state) => set({ state: state === "all" ? null : state })}
-                options={[
-                  { value: "all", label: "All", count: c.all ?? 0 },
-                  { value: "moving", label: "Moving", count: c.moving ?? 0 },
-                  { value: "idle", label: "Idling", count: c.idle ?? 0 },
-                  { value: "stopped", label: "Stopped", count: (c.stopped ?? 0) + (c.parked ?? 0) },
-                  { value: "offline", label: "Offline", count: (c.offline ?? 0) + (c.never_seen ?? 0) + (c.inactive ?? 0) },
-                  { value: "no_device", label: "No device", count: c.no_device ?? 0 }
-                ]}
-              />
+              <Select
+                aria-label="Sort vehicles"
+                className="w-auto min-w-[12rem]"
+                value={`${query.sort}:${query.direction}`}
+                onChange={(e) => {
+                  const [sort, direction] = e.target.value.split(":");
+                  set({ sort: sort!, direction: direction! });
+                }}
+              >
+                <option value="state:asc">Sort: Moving first</option>
+                <option value="lastSeen:desc">Sort: Recently active</option>
+                <option value="speed:desc">Sort: Fastest first</option>
+                <option value="name:asc">Sort: Name A–Z</option>
+                <option value="name:desc">Sort: Name Z–A</option>
+                <option value="plate:asc">Sort: Plate</option>
+                <option value="lastSeen:asc">Sort: Longest silent</option>
+              </Select>
               {groups.length > 0 && (
                 <Select aria-label="Filter by group" className="w-auto min-w-[10rem] max-w-[14rem]" value={query.group ?? ""} onChange={(e) => set({ group: e.target.value || null })}>
                   <option value="">All groups</option>

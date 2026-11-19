@@ -1,11 +1,12 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Cpu, Link2, Link2Off, MoreHorizontal, Pencil, Power, PowerOff, RefreshCw } from "lucide-react";
+import { CircleOff, Cpu, Layers, Link2, Link2Off, Pencil, Plus, Power, PowerOff, Radio, RefreshCw, Unplug, WifiOff } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
-import { SegmentedFilter } from "@/components/app/filter-bar";
+import { FilterTiles, IconCell, RowActions } from "@/components/app/list-kit";
+import { pictureState, VehiclePicture } from "@/components/app/vehicle-picture";
 import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
@@ -13,7 +14,6 @@ import { StatusBadge, type StatusTone } from "@/components/app/status-badge";
 import { useListParams } from "@/components/app/use-list-params";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import type { DeviceListQuery, DeviceRow, DeviceState, Page } from "@/lib/fleet-list";
@@ -22,6 +22,7 @@ import { RelativeTime } from "@/components/app/local-time";
 import { useTime } from "@/components/app/time-context";
 import dynamic from "next/dynamic";
 import { deviceDisplayName, productName } from "@/lib/device-name";
+import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 
 // Dialogs (and their form/validation code) load on first use, not with the page.
 const AssignDialog = dynamic(() => import("../_fleet/assign-dialog").then((m) => m.AssignDialog));
@@ -37,6 +38,7 @@ const STATE: Record<DeviceState, { label: string; tone: StatusTone }> = {
   retired: { label: "Retired", tone: "neutral" }
 };
 const label = (d: DeviceRow) => deviceDisplayName(d.name, d.model);
+const STATE_COLOR: Record<DeviceState, string> = { online: "#15803d", offline: "#64748b", never_seen: "#b45309", inactive: "#c2410c", retired: "#475569" };
 
 export function DevicesView({ data, query, can }: { data: Page<DeviceRow, DeviceState | "unassigned">; query: DeviceListQuery; can: Can }) {
   const t = useTime();
@@ -48,48 +50,16 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
   const c = data.counts;
   const filtered = query.search !== "" || query.state !== "all";
 
-  const RowMenu = ({ d }: { d: DeviceRow }) => {
-    const items = [
-      can.manage && (
-        <DropdownMenuItem key="rename" onSelect={() => setRenaming(d)}>
-          <Pencil aria-hidden="true" /> Rename
-        </DropdownMenuItem>
-      ),
-      can.assign && (
-        <DropdownMenuItem key="assign" onSelect={() => setAssignFor(d)}>
-          <Link2 aria-hidden="true" /> {d.vehicle ? "Move to another vehicle" : "Assign to vehicle"}
-        </DropdownMenuItem>
-      ),
-      can.unassign && d.vehicle && (
-        <DropdownMenuItem key="unassign" onSelect={() => setUnassigning(d)}>
-          <Link2Off aria-hidden="true" /> Unassign
-        </DropdownMenuItem>
-      )
-    ].filter(Boolean);
-    const toggle = can.manage && d.state !== "retired";
-    if (items.length === 0 && !toggle) return null;
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton label={`Actions for ${label(d)}`} size="icon-sm">
-            <MoreHorizontal aria-hidden="true" />
-          </IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          {items}
-          {toggle && (
-            <>
-              {items.length > 0 && <DropdownMenuSeparator />}
-              <DropdownMenuItem destructive={d.status === "active"} onSelect={() => setToggling(d)}>
-                {d.status === "active" ? <PowerOff aria-hidden="true" /> : <Power aria-hidden="true" />}
-                {d.status === "active" ? "Deactivate" : "Reactivate"}
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  };
+  const RowMenu = ({ d }: { d: DeviceRow }) => (
+    <RowActions
+      actions={[
+        { icon: Pencil, label: "Rename", onClick: () => setRenaming(d), hidden: !can.manage },
+        { icon: Link2, label: d.vehicle ? "Move to another vehicle" : "Assign to a vehicle", onClick: () => setAssignFor(d), hidden: !can.assign },
+        { icon: Link2Off, label: "Unassign from vehicle", onClick: () => setUnassigning(d), hidden: !can.unassign || !d.vehicle },
+        { icon: d.status === "active" ? PowerOff : Power, label: d.status === "active" ? "Deactivate" : "Reactivate", onClick: () => setToggling(d), tone: d.status === "active" ? "danger" : undefined, hidden: !can.manage || d.state === "retired" }
+      ]}
+    />
+  );
 
   const columns = useMemo<ColumnDef<DeviceRow, unknown>[]>(
     () => [
@@ -98,10 +68,12 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
         header: "Device",
         meta: { sortKey: "name" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => (
-          <div className="min-w-0">
-            <p className="m-0 truncate font-medium text-foreground">{label(d)}</p>
-            <p className="m-0 truncate text-xs text-muted-foreground">{[label(d) !== productName(d.model) ? productName(d.model) : null, d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null].filter(Boolean).join(" · ") || " "}</p>
-          </div>
+          <IconCell
+            icon={Cpu}
+            color={STATE_COLOR[d.state]}
+            title={label(d)}
+            lines={[[label(d) !== productName(d.model) ? productName(d.model) : null, d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null].filter(Boolean).join(" · ") || null]}
+          />
         )
       },
       { id: "status", header: "Status", meta: { sortKey: "state" } satisfies ColumnMeta, cell: ({ row }) => <StatusBadge {...STATE[row.original.state]} /> },
@@ -109,7 +81,29 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
         id: "vehicle",
         header: "Vehicle",
         meta: { sortKey: "vehicle" } satisfies ColumnMeta,
-        cell: ({ row: { original: d } }) => (d.vehicle ? <span>{d.vehicle.name}</span> : <span className="text-muted-foreground">Not assigned</span>)
+        cell: ({ row: { original: d } }) =>
+          d.vehicle ? (
+            <Link href={`/map?focus=${d.id}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-3 text-foreground no-underline hover:underline">
+              <VehiclePicture type={d.vehicle.type} state={pictureState(d.state === "online" ? "moving" : d.state)} className="h-9 w-12" />
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{d.vehicle.name}</span>
+                <span className="block truncate text-xs text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(d.vehicle.type)], d.vehicle.licensePlate].filter(Boolean).join(" · ")}</span>
+              </span>
+            </Link>
+          ) : can.assign ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={(e) => {
+                e.stopPropagation();
+                setAssignFor(d);
+              }}
+            >
+              <Plus /> Assign to vehicle
+            </Button>
+          ) : (
+            <span className="text-muted-foreground">Not assigned</span>
+          )
       },
       {
         id: "lastSeen",
@@ -117,7 +111,7 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
         meta: { sortKey: "lastSeen", hideable: true, label: "Last seen" } satisfies ColumnMeta,
         cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground"><RelativeTime iso={row.original.lastSeenAt} /></span>
       },
-      { id: "actions", header: () => <span className="sr-only">Actions</span>, meta: { className: "w-12 text-right" } satisfies ColumnMeta, cell: ({ row }) => <RowMenu d={row.original} /> }
+      { id: "actions", header: () => <span className="sr-only">Actions</span>, meta: { className: "w-0 whitespace-nowrap text-right" } satisfies ColumnMeta, cell: ({ row }) => <RowMenu d={row.original} /> }
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [can]
@@ -126,8 +120,8 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
   return (
     <>
       <PageHeader
-        title="Devices"
-        description="GPS trackers registered to your organization and the vehicle each one is on."
+        title="GPS devices"
+        description="Your RIO GPS trackers and the vehicle each one is on."
         actions={
           <>
             <IconButton label="Refresh" variant="secondary" onClick={refresh} disabled={pending}>
@@ -141,6 +135,18 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
           </>
         }
       />
+      <FilterTiles
+        label="Filter by status"
+        value={query.state}
+        onChange={(state) => set({ state: state === "all" ? null : state })}
+        options={[
+          { value: "all", label: "All devices", count: c.all ?? 0, icon: Layers, color: "#133a8f" },
+          { value: "online", label: "Online", count: c.online ?? 0, icon: Radio, color: "#15803d" },
+          { value: "offline", label: "Offline", count: c.offline ?? 0, icon: WifiOff, color: "#64748b" },
+          { value: "unassigned", label: "Not on a vehicle", count: c.unassigned ?? 0, icon: Unplug, color: "#b45309" },
+          { value: "inactive", label: "Deactivated", count: (c.inactive ?? 0) + (c.retired ?? 0), icon: CircleOff, color: "#c2410c" }
+        ]}
+      />
       <Card>
         <DataTable
           columns={columns}
@@ -153,22 +159,11 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
           direction={query.direction}
           onSort={(sort, direction) => set({ sort, direction })}
           onPage={(page) => set({ page })}
+          onPageSize={(pageSize) => set({ pageSize })}
           loading={pending}
           toolbar={
             <>
               <SearchInput value={query.search} onChange={(search) => set({ search })} placeholder={can.manage ? "Search name, vehicle or IMEI digits…" : "Search name or vehicle…"} label="Search devices" />
-              <SegmentedFilter
-                label="Filter by status"
-                value={query.state}
-                onChange={(state) => set({ state: state === "all" ? null : state })}
-                options={[
-                  { value: "all", label: "All", count: c.all ?? 0 },
-                  { value: "online", label: "Online", count: c.online ?? 0 },
-                  { value: "offline", label: "Offline", count: c.offline ?? 0 },
-                  { value: "unassigned", label: "Unassigned", count: c.unassigned ?? 0 },
-                  { value: "inactive", label: "Deactivated", count: (c.inactive ?? 0) + (c.retired ?? 0) }
-                ]}
-              />
             </>
           }
           mobileRow={(d) => (
