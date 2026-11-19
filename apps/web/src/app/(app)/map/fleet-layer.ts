@@ -462,7 +462,7 @@ export class FleetLayer {
         filter: NOT_CLUSTER as never,
         layout: {
           "icon-image": ["coalesce", ["image", ["get", "pin"]], ["image", ["concat", "pin-", ["get", "type"], "-", ["get", "state"]]]] as never,
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.55, 9, 0.8, 14, 0.9, 18, 1],
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.85, 9, 0.95, 14, 1, 18, 1.1],
           "icon-anchor": this.prefs.style === "pin" || this.prefs.style === "photo" ? "bottom" : "center",
           "icon-rotate": this.prefs.style === "top" ? ["to-number", ["get", "rot"]] : 0,
           "icon-rotation-alignment": this.prefs.style === "top" ? "map" : "viewport",

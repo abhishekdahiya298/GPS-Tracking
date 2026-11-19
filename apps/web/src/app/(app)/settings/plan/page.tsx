@@ -88,7 +88,7 @@ export default async function PlanPage() {
                   <img src="/fleet-art/vehicles/3d-truck-moving.png" alt="" className="hidden h-24 w-auto shrink-0 drop-shadow-xl sm:block" />
                 </div>
                 {terms.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/40 p-2 md:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-2 rounded-xl border border-border bg-muted/40 p-2 sm:grid-cols-2">
                     {terms.map((t) => (
                       <div key={t.unit} className="flex items-center gap-2 rounded-lg bg-background p-2.5">
                         <t.icon className="size-5 shrink-0 text-primary" aria-hidden="true" />

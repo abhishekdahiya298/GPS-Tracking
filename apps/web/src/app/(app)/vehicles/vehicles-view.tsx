@@ -43,7 +43,7 @@ function LocationCell({ lat, lon, moving }: { lat: number; lon: number; moving: 
   const a = useAddress(lat, lon, moving);
   const text = a ? [a.line1, a.line2].filter(Boolean).join(", ") : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
   return (
-    <span className="flex min-w-0 max-w-64 items-center gap-1.5 text-sm" title={a?.label ?? text}>
+    <span className="flex min-w-0 max-w-56 items-center gap-1.5 text-sm" title={a?.label ?? text}>
       <MapPin className="size-4 shrink-0 text-[#2563eb]" aria-hidden="true" />
       <span className="truncate">{text}</span>
     </span>
@@ -155,7 +155,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
               <span className="truncate">{v.driver.name}</span>
             </Link>
           ) : (
-            <Link href="/drivers" onClick={(e) => e.stopPropagation()} className="text-sm text-muted-foreground no-underline hover:text-primary hover:underline">
+            <Link href="/drivers" onClick={(e) => e.stopPropagation()} className="whitespace-nowrap text-sm text-muted-foreground no-underline hover:text-primary hover:underline">
               No driver
             </Link>
           )
@@ -173,7 +173,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         // A silent tracker's last speed is history, not now: show a dash, never "65 mph" for a truck that stopped reporting days ago.
         cell: ({ row: { original: v } }) =>
           v.location && !SILENT.has(v.state) ? (
-            <span className={v.state === "moving" ? "inline-flex items-center gap-1.5 font-semibold text-[#15803d] dark:text-[#4ade80]" : "inline-flex items-center gap-1.5 text-muted-foreground"}>
+            <span className={v.state === "moving" ? "inline-flex items-center gap-1.5 whitespace-nowrap font-semibold text-[#15803d] dark:text-[#4ade80]" : "inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground"}>
               <Gauge className="size-4 text-[#1d4ed8]" aria-hidden="true" />
               {u.fmtSpeed(v.location.speedKph)}
             </span>

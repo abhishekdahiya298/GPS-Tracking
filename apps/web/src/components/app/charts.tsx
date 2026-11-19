@@ -33,8 +33,11 @@ export function ColumnChart({
   ariaLabel,
   tableHeads,
   labelEvery = 7,
-  className
+  className,
+  color
 }: {
+  /** Bar colour (defaults to the brand blue). */
+  color?: string;
   data: ChartPoint[];
   ariaLabel: string;
   /** [category, value] column headings for the table view. */
@@ -94,7 +97,7 @@ export function ColumnChart({
               <div key={d.key} className="flex min-w-0 flex-1 items-end justify-center px-px" onPointerEnter={() => setActive(i)} onPointerDown={() => setActive(i)}>
                 <div
                   className={cn("w-full max-w-6 rounded-t-[4px] bg-primary transition-opacity", active !== null && active !== i && "opacity-45")}
-                  style={{ height: `${(d.value / top) * 100}%`, minHeight: d.value > 0 ? 2 : 0 }}
+                  style={{ height: `${(d.value / top) * 100}%`, minHeight: d.value > 0 ? 2 : 0, ...(color ? { background: `linear-gradient(180deg, ${color}, color-mix(in srgb, ${color} 70%, #000))` } : {}) }}
                 />
               </div>
             ))}
