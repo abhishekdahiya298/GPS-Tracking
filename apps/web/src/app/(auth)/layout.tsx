@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { BrandMark } from "@/components/app/brand-mark";
+import { StoreBadges } from "@/components/app/store-badges";
+import { storeLinks } from "@/lib/app-releases";
 
 const STATE = { moving: "#22c55e", idle: "#f59e0b", stopped: "#3b82f6", offline: "#8a93a1" };
 const ROUTE_A = "M-10 150 C 70 150 90 86 160 90 S 270 170 340 120 S 430 60 470 70";
@@ -26,6 +28,7 @@ function MiniMap() {
         <path d="M110 0 C 120 110 90 200 130 300" strokeWidth="7" />
         <path d="M380 0 C 370 100 400 190 380 300" strokeWidth="7" />
       </g>
+      <path d={ROUTE_B} fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" pathLength={1} className="auth-draw" opacity="0.85" />
       <path d={ROUTE_A} fill="none" stroke="#9db9ff" strokeWidth="2.5" strokeDasharray="2 10" strokeLinecap="round" className="auth-dash" opacity="0.8" />
       <path d="M214 96 l46 0 l22 38 l-22 38 l-46 0 l-22 -38z" fill="rgba(157,185,255,0.12)" stroke="#9db9ff" strokeWidth="1.5" strokeDasharray="5 4" />
       <text x="237" y="138" textAnchor="middle" fontSize="11" fontWeight="600" fill="#cdd9ff">Yard</text>
@@ -42,13 +45,14 @@ const ICON = {
   map: "M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14",
   history: "M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5M12 8v4l3 2",
   zone: "m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3z",
-  chart: "M6 3h9l4 4v14H6zM9 17v-3M12 17v-6M15 17v-4"
+  chart: "M6 3h9l4 4v14H6zM9 17v-3M12 17v-6M15 17v-4",
+  box: "M21 8 12 3 3 8v8l9 5 9-5V8zM3 8l9 5 9-5M12 13v8"
 };
 const FEATURES: [keyof typeof ICON, string][] = [
-  ["map", "Live tracking"],
-  ["history", "Trip history"],
+  ["map", "Live map"],
+  ["history", "Trip replay"],
   ["zone", "Zones & alerts"],
-  ["chart", "Reports"]
+  ["box", "Loads & ETAs"]
 ];
 const STATS = [
   ["Moving", "12", STATE.moving],
@@ -57,8 +61,25 @@ const STATS = [
   ["Offline", "1", STATE.offline]
 ] as const;
 
+/** Small glass cards floating over the map: what the product tells you at a glance (example data). */
+function FloatCard({ className, color, title, detail, delay = "0s" }: { className: string; color: string; title: string; detail: string; delay?: string }) {
+  return (
+    <div aria-hidden="true" className={`auth-float absolute flex items-center gap-2 rounded-xl border border-white/20 bg-[#0a1f55]/70 px-2.5 py-1.5 shadow-[0_10px_30px_rgb(3_12_40_/_0.45)] backdrop-blur-md ${className}`} style={{ animationDelay: delay }}>
+      <span className="relative grid size-2.5 place-items-center">
+        <span className="absolute inset-0 animate-ping rounded-full opacity-60" style={{ background: color }} />
+        <span className="relative size-2.5 rounded-full" style={{ background: color }} />
+      </span>
+      <span className="leading-tight">
+        <span className="block text-[11.5px] font-semibold text-white">{title}</span>
+        <span className="block text-[10.5px] text-white/65">{detail}</span>
+      </span>
+    </div>
+  );
+}
+
 /** Split sign-in frame, locked to one viewport (no page scroll): brand panel left, form right. */
-export default function AuthLayout({ children }: { children: ReactNode }) {
+export default async function AuthLayout({ children }: { children: ReactNode }) {
+  const stores = await storeLinks();
   return (
     <main className="flex h-dvh overflow-hidden bg-background">
       <aside className="relative hidden w-[46%] max-w-[860px] flex-col overflow-hidden bg-[linear-gradient(150deg,#071a4a_0%,#0a2463_45%,#1d4fb8_100%)] px-8 py-8 text-white lg:flex xl:px-12 2xl:px-16">
@@ -79,10 +100,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         {/* Headline + subtext */}
         <div className="relative mt-7 shrink-0">
           <h2 className="auth-rise m-0 max-w-md text-[30px] font-semibold leading-[1.1] tracking-tight xl:text-[36px] 2xl:text-[42px]">
-            Know where every truck and trailer is, <span className="bg-[linear-gradient(90deg,#ffffff,#9db9ff)] bg-clip-text text-transparent">right now.</span>
+            Everything you move.<br /><span className="bg-[linear-gradient(90deg,#ffffff,#9db9ff)] bg-clip-text text-transparent">Live, on one map.</span>
           </h2>
           <p className="auth-rise auth-rise-1 m-0 mt-3 max-w-md text-sm leading-6 text-white/75">
-            One live map for your whole fleet, the history of every trip, and an alert the moment something needs attention.
+            Vehicles, trailers, equipment and loads: see where each one is, replay any trip, and get an alert the moment something needs attention.
           </p>
         </div>
 
@@ -102,8 +123,11 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
         {/* Live-map card fills the remaining height, so the panel always fits one screen */}
         <div className="auth-rise auth-rise-3 relative mt-6 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/15 bg-white/[0.06] p-2.5 shadow-[0_24px_60px_rgb(3_12_40_/_0.45)] backdrop-blur">
-          <div className="min-h-0 flex-1 overflow-hidden rounded-xl">
+          <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl">
             <MiniMap />
+            <FloatCard className="left-3 top-3" color={STATE.moving} title="Unit 14 · Moving" detail="58 mph · Hwy 401 E" />
+            <FloatCard className="bottom-3 right-3" delay="-2s" color={STATE.stopped} title="Arrived at Yard" detail="2 min ago" />
+            <FloatCard className="right-3 top-3 hidden xl:flex" delay="-4s" color={STATE.idle} title="Load 2041" detail="82 mi left · ETA 3:40 PM" />
           </div>
           <div className="mt-2.5 grid shrink-0 grid-cols-4 gap-2">
             {STATS.map(([label, n, color]) => (
@@ -125,7 +149,11 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             <BrandMark className="h-14" />
           </div>
           <div className="auth-rise">{children}</div>
-          <div className="mt-8 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+          <div className="auth-rise auth-rise-2 mt-8 border-t border-border pt-6">
+            <p className="m-0 mb-3 text-center text-xs font-medium text-muted-foreground">Get the RIO GPS app for iPhone and Android</p>
+            <StoreBadges ios={stores.ios} android={stores.android} />
+          </div>
+          <div className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 3 4 6v6c0 5 3.5 7.5 8 9 4.5-1.5 8-4 8-9V6l-8-3z" />
               <path d="m9 12 2 2 4-4" />

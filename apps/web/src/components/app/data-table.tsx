@@ -19,7 +19,12 @@ export interface ColumnMeta {
   /** Column can be hidden via the Columns menu. */
   hideable?: boolean;
   label?: string;
+  /** Share of the table width (e.g. "30%"); used with layout="fixed" so long text wraps inside its column. */
+  width?: string;
 }
+
+/** Row height: compact fits more rows on screen; comfortable gives more air. */
+export type TableDensity = "compact" | "comfortable";
 
 export function DataTable<T>({
   columns,
@@ -38,7 +43,10 @@ export function DataTable<T>({
   loading,
   empty,
   toolbar,
-  onPageSize
+  onPageSize,
+  layout = "auto",
+  minWidth,
+  density = "comfortable"
 }: {
   columns: ColumnDef<T, unknown>[];
   data: T[];
@@ -60,6 +68,11 @@ export function DataTable<T>({
   toolbar?: ReactNode;
   /** Shows a rows-per-page picker (10, 25, 50, 100). */
   onPageSize?: (size: number) => void;
+  /** "fixed": columns keep their meta.width and content wraps inside its cell (nothing spills into the next column). */
+  layout?: "auto" | "fixed";
+  /** Below this width the table scrolls sideways instead of squeezing columns. */
+  minWidth?: number;
+  density?: TableDensity;
 }) {
   const [visibility, setVisibility] = useState<VisibilityState>({});
   const table = useReactTable({
@@ -112,7 +125,7 @@ export function DataTable<T>({
         <>
           {/* Desktop / tablet: table */}
           <div className={cn("w-full overflow-x-auto", mobileRow && "hidden md:block")}>
-            <table className="w-full border-collapse text-sm">
+            <table className={cn("w-full border-collapse text-sm", layout === "fixed" && "table-fixed")} style={minWidth ? { minWidth } : undefined}>
               <thead className="bg-primary-soft/70">
                 {table.getHeaderGroups().map((hg) => (
                   <tr key={hg.id}>
@@ -124,6 +137,7 @@ export function DataTable<T>({
                           key={h.id}
                           scope="col"
                           aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : undefined}
+                          style={meta?.width ? { width: meta.width } : undefined}
                           className={cn("h-10 whitespace-nowrap border-b border-border px-3 text-left text-xs font-semibold uppercase tracking-wide text-primary first:pl-4 last:pr-4", meta?.className)}
                         >
                           {h.isPlaceholder ? null : meta?.sortKey ? (
@@ -156,7 +170,15 @@ export function DataTable<T>({
                     className={cn("border-b border-border last:border-b-0", "hover:bg-primary-soft/40", onRowClick && "cursor-pointer")}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className={cn("px-3 py-2.5 align-middle first:pl-4 last:pr-4", (cell.column.columnDef.meta as ColumnMeta | undefined)?.className)}>
+                      <td
+                        key={cell.id}
+                        className={cn(
+                          "px-3 align-middle first:pl-4 last:pr-4",
+                          density === "compact" ? "py-1.5" : "py-2.5",
+                          layout === "fixed" && "overflow-hidden",
+                          (cell.column.columnDef.meta as ColumnMeta | undefined)?.className
+                        )}
+                      >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}

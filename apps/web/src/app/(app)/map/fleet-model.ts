@@ -4,6 +4,7 @@
  */
 import { isFixStale } from "@rio-gps/core/freshness";
 import { addDays, dateFormatter, startOfLocalDay } from "@rio-gps/core/timezones";
+import { splitTrips, type TrackPoint } from "@rio-gps/core/trips";
 import type { CurrentDeviceLocation, LocationPoint } from "@/lib/locations";
 import { deviceDisplayName } from "@/lib/device-name";
 
@@ -127,8 +128,9 @@ export function trackStats(pts: LocationPoint[]): TrackStats {
   return { km, maxKph: max, cumKm: cum };
 }
 
-/** Quick history ranges as local calendar days in `timeZone` (DST-safe). */
-export function quickRange(kind: "today" | "yesterday" | "7d", timeZone: string, now = new Date()): { from: Date; to: Date | null } {
+/** Quick history ranges: the last 24 hours, or local calendar days in `timeZone` (DST-safe). */
+export function quickRange(kind: "24h" | "today" | "yesterday" | "7d", timeZone: string, now = new Date()): { from: Date; to: Date | null } {
+  if (kind === "24h") return { from: new Date(now.getTime() - 24 * 3_600_000), to: null };
   const today = dateFormatter(timeZone).dayKey(now);
   const start = startOfLocalDay(today, timeZone);
   if (kind === "today") return { from: start, to: null };
@@ -214,4 +216,65 @@ export function iconNames(prefs: IconPrefs): string[] {
   if (prefs.style === "top") return ["truck", "trailer", "car", "tractor"].flatMap((k) => STATES.map((s) => `top-${k}-${s}`));
   if (prefs.style === "photo") return PHOTO_KINDS.flatMap((k) => STATES.map((s) => `photo-${k}-${s}`));
   return KINDS.flatMap((k) => STATES.map((s) => `${prefs.style}-${prefs.color}-${k}-${s}`));
+}
+
+/** One row of the trip timeline (and one coloured stretch of the 24-hour bar). */
+export interface TimelineEvent {
+  kind: "trip" | "idle" | "stop";
+  /** Index of the first / last GPS point of this stretch in the track. */
+  from: number;
+  to: number;
+  startMs: number;
+  endMs: number;
+  distanceM: number;
+  maxSpeedKph: number;
+  /** Engine-on time without moving inside this stretch (seconds). */
+  idleS: number;
+  /** Where the stretch ends (a trip) or happens (a stop or idle). */
+  lat: number;
+  lon: number;
+  /** 1, 2, 3… for trips. */
+  n?: number;
+}
+
+/**
+ * Trips, idling and stops from a recorded track, in time order, with the same trip rules
+ * as reports (core trip engine). Nothing is invented: a stop is the time between two
+ * engine-on runs, a data gap longer than 20 min inside a stop stays part of that stop.
+ */
+export function timeline(track: LocationPoint[]): TimelineEvent[] {
+  if (track.length < 2) return [];
+  const pts: TrackPoint[] = track.map((p) => ({ t: Date.parse(p.recordedAt), lat: p.latitude, lon: p.longitude, speedKph: p.speedKph, ignition: p.ignition }));
+  const index = new Map<number, number>();
+  pts.forEach((p, i) => index.set(p.t, i));
+  const runs = splitTrips(pts);
+  const out: TimelineEvent[] = [];
+  let n = 0;
+  let cursor = 0;
+  const stop = (from: number, to: number) => {
+    if (to <= from) return;
+    const a = pts[from]!;
+    out.push({ kind: "stop", from, to, startMs: a.t, endMs: pts[to]!.t, distanceM: 0, maxSpeedKph: 0, idleS: 0, lat: a.lat, lon: a.lon });
+  };
+  for (const r of runs) {
+    const from = index.get(r.trip.start.t) ?? cursor;
+    const to = index.get(r.trip.end.t) ?? from;
+    stop(cursor, from);
+    out.push({
+      kind: r.moved ? "trip" : "idle",
+      from,
+      to,
+      startMs: r.trip.start.t,
+      endMs: r.trip.end.t,
+      distanceM: r.trip.distanceM,
+      maxSpeedKph: r.trip.maxSpeedKph,
+      idleS: r.moved ? r.trip.idleS : r.trip.durationS,
+      lat: r.moved ? r.trip.end.lat : r.trip.start.lat,
+      lon: r.moved ? r.trip.end.lon : r.trip.start.lon,
+      ...(r.moved ? { n: ++n } : {})
+    });
+    cursor = to;
+  }
+  stop(cursor, pts.length - 1);
+  return out;
 }

@@ -21,8 +21,8 @@ export async function GET(request: Request) {
     const ctx = await requireTenantContext(request);
     requirePermission(ctx, "alerts.read");
     const params = Object.fromEntries(new URL(request.url).searchParams);
-    // Paged form for the Alerts page: ?page=&pageSize=&status=&type=&search=&from=&to=&tz=
-    if (["page", "pageSize", "status", "type", "search", "from", "to", "tz"].some((k) => k in params)) {
+    // Paged form for the Alerts page: ?page=&pageSize=&status=&type=&kind=&search=&from=&to=&tz=
+    if (["page", "pageSize", "status", "type", "kind", "search", "from", "to", "tz"].some((k) => k in params)) {
       const q = parseListQuery(AlertListQuery, params);
       const page = await listAlertsPage(ctx.organizationId, q, q.tz ?? (await getTimePrefs(ctx.organizationId, ctx.userId)).timeZone);
       return NextResponse.json(page, { headers: { "Cache-Control": "no-store" } });

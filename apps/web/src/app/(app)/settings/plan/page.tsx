@@ -110,7 +110,16 @@ export default async function PlanPage() {
                 </p>
               </>
             ) : (
-              <p className="m-0 text-sm text-muted-foreground">No plan is recorded for your company yet. Contact RIO GPS.</p>
+              <div className="flex flex-col items-center px-4 py-8 text-center">
+                <span className="grid size-12 place-items-center rounded-full bg-primary-soft text-primary">
+                  <Crown className="size-6" aria-hidden="true" />
+                </span>
+                <p className="m-0 mt-3 text-base font-semibold text-[#0a2463] dark:text-foreground">No plan on record yet</p>
+                <p className="m-0 mt-1 max-w-sm text-sm text-muted-foreground">Your plan and prices appear here once RIO GPS sets them up for your company.</p>
+                <a href="mailto:support@riogps.com" className="mt-3 text-sm font-medium text-primary no-underline hover:underline">
+                  Contact RIO GPS
+                </a>
+              </div>
             )}
           </CardContent>
         </Card>

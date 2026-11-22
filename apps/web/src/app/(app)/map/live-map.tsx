@@ -5,7 +5,7 @@ import { DEFAULT_ORG_MAP_PREFS, type OrgMapPrefs } from "@/lib/org-map-prefs";
 import { useAddress } from "@/lib/use-address";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Activity, Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Crosshair, Download, Expand, ExternalLink, Gauge, History, IdCard, KeyRound, Layers, Locate, LocateFixed, MapPin, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Phone, Plus, Radio, Satellite, Share2, Shrink, Truck, Wifi, X } from "lucide-react";
+import { Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Expand, ExternalLink, Gauge, History, IdCard, KeyRound, Layers, Locate, LocateFixed, MapPin, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Phone, Plus, Radio, Satellite, Share2, Shrink, Truck, Wifi, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +15,8 @@ import { EmptyState } from "@/components/app/states";
 import { Select } from "@/components/ui/input";
 import { VehiclePicture, vehiclePictureSrc } from "@/components/app/vehicle-picture";
 import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
+import { OrderBadge, PlateTag, VinTag, yearMakeModel } from "@/components/app/vehicle-tags";
+import { DriverAvatar } from "../drivers/drivers-view";
 import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
 import { Alert } from "@/components/ui/alert";
@@ -33,7 +35,8 @@ import { useFleetStream } from "./use-fleet-stream";
 const HistoryPanel = dynamic(() => import("./history-panel").then((m) => m.HistoryPanel), { ssr: false });
 const ShareDialog = dynamic(() => import("../vehicles/share-dialog").then((m) => m.ShareDialog), { ssr: false });
 
-const ROW_H = 68;
+/** One list card: name/tags, driver/speed, address (up to two lines). */
+const ROW_H = 92;
 const STATE_LABEL: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", parked: "Parked (unhooked)", offline: "Offline" };
 const STATE_HINT: Record<MapState, string> = {
   moving: "Travelling",
@@ -117,6 +120,95 @@ function StatusBadge({ state, stale = false }: { state: MapState; stale?: boolea
   );
 }
 
+export interface VehicleInfo {
+  vin: string | null;
+  modelYear: number | null;
+  make: string | null;
+  model: string | null;
+  sortOrder: number | null;
+  plateRegion: string | null;
+}
+
+/** One vehicle in the list: name, plate/VIN, status, driver, speed and the full address. */
+function ListRow({
+  r,
+  info,
+  driver,
+  active,
+  now,
+  speed,
+  addresses,
+  onClick
+}: {
+  r: { d: CurrentDeviceLocation; state: MapState; stale: boolean; name: string };
+  info: VehicleInfo | undefined;
+  driver: string | undefined;
+  active: boolean;
+  now: number;
+  speed: string | null;
+  addresses: boolean;
+  onClick: () => void;
+}) {
+  const d = r.d;
+  const nm = splitName(r.name);
+  const loc = d.location;
+  const address = useAddress(addresses && loc ? loc.latitude : null, addresses && loc ? loc.longitude : null, r.state === "moving");
+  const look: MapState = r.stale ? "offline" : r.state;
+  const where = !loc ? "No position yet" : address ? [address.line1, address.line2].filter(Boolean).join(", ") : `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
+  const ymm = info ? yearMakeModel(info) : null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={ymm ?? undefined}
+      className={cn(
+        "relative grid h-full w-full cursor-pointer grid-cols-[44px_minmax(0,1fr)] items-start gap-2.5 overflow-hidden rounded-xl border-0 py-2 pl-3 pr-2.5 text-left transition-shadow",
+        active ? "shadow-[inset_0_0_0_2px_var(--color-primary),0_6px_14px_-6px_rgb(29_78_216/0.5)]" : "shadow-[inset_0_0_0_1px_var(--card-ring)] hover:shadow-[inset_0_0_0_1.5px_var(--card-ring-hover)]"
+      )}
+      style={{
+        backgroundImage: `linear-gradient(110deg, ${tint(STATE_COLORS[look], 14)} 0%, ${tint(STATE_COLORS[look], 34)} 100%)`,
+        ["--card-ring" as string]: `color-mix(in srgb, ${STATE_COLORS[look]} 22%, transparent)`,
+        ["--card-ring-hover" as string]: `color-mix(in srgb, ${STATE_COLORS[look]} 45%, transparent)`
+      }}
+    >
+      <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1" style={{ background: STATE_COLORS[look] }} />
+      <span className="mt-0.5 grid justify-items-center gap-1">
+        <VehiclePicture type={d.vehicle?.type} state={r.state} className="h-8 w-11 rounded-md bg-background/80" />
+      </span>
+      <span className="grid min-w-0 gap-[3px]">
+        <span className="flex min-w-0 items-center gap-1 overflow-hidden">
+          <span className="shrink-0 text-[13.5px] font-bold text-foreground">{nm.main}</span>
+          <OrderBadge order={info?.sortOrder} />
+          <PlateTag plate={d.vehicle?.licensePlate} className="bg-background/70" />
+          <VinTag vin={info?.vin} short className="bg-background/70" />
+          <span className="ml-auto shrink-0 pl-1 text-[11px] tabular-nums text-muted-foreground">{d.lastSeenAt ? ago(d.lastSeenAt, now).replace(/ ago$/, "") : "No data"}</span>
+        </span>
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-foreground">
+          <span className="inline-flex h-[18px] shrink-0 items-center rounded-full bg-background/85 px-1.5 text-[10.5px] font-bold" style={{ color: ink(STATE_COLORS[look]) }}>
+            {r.stale ? "No GPS" : STATE_BADGE[r.state]}
+            {speed ? ` · ${speed}` : ""}
+          </span>
+          {driver ? (
+            <>
+              <IdCard className="size-3 shrink-0 text-[#0f766e]" aria-hidden="true" />
+              <span className="truncate font-semibold">{driver}</span>
+            </>
+          ) : (
+            <span className="truncate text-muted-foreground">{d.vehicle ? "No driver" : "No vehicle linked"}</span>
+          )}
+        </span>
+        <span className="flex min-w-0 items-start gap-1 text-[11.5px] leading-[15px] text-foreground/75">
+          <MapPin className="mt-px size-3 shrink-0" style={{ color: STATE_COLORS[look] }} aria-hidden="true" />
+          <span className="line-clamp-2 [overflow-wrap:anywhere]" title={address?.label ?? where}>
+            {where}
+          </span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
 /** Up to this many vehicles, icons show at every zoom instead of dots and count bubbles. */
 const SMALL_FLEET = 60;
 
@@ -128,8 +220,11 @@ export function LiveMap({
   addresses = false,
   platformAdmin = false,
   drivers = {},
+  vehicleInfo = {},
   mapPrefs = DEFAULT_ORG_MAP_PREFS
 }: {
+  /** VIN, year/make/model and the company's list order of each vehicle (vehicle id → details). */
+  vehicleInfo?: Record<string, VehicleInfo>;
   /** The company's map defaults (Settings → Map display). */
   mapPrefs?: OrgMapPrefs;
   /** Who drives each vehicle now (vehicle id → driver), from the Drivers page. */
@@ -164,7 +259,7 @@ export function LiveMap({
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
   const [groupId, setGroupId] = useState("");
-  const [sort, setSort] = useState<"status" | "name" | "recent" | "speed">("status");
+  const [sort, setSort] = useState<"order" | "status" | "name" | "recent" | "speed">("order");
   const [clustered, setClustered] = useState(mapPrefs.cluster);
   const [now, setNow] = useState(() => Date.now());
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -302,6 +397,15 @@ export function LiveMap({
         m.addSource("track", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addLayer({ id: "track-line", type: "line", source: "track", paint: { "line-color": "#2f5bea", "line-width": 4, "line-opacity": 0.85 }, layout: { "line-join": "round", "line-cap": "round" } });
       }
+      // Trip replay: the part already played (green) over the full track (blue), and the stops.
+      if (!m.getSource("track-done")) {
+        m.addSource("track-done", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        m.addLayer({ id: "track-done", type: "line", source: "track-done", paint: { "line-color": "#16a34a", "line-width": 4.5 }, layout: { "line-join": "round", "line-cap": "round" } });
+      }
+      if (!m.getSource("track-stops")) {
+        m.addSource("track-stops", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        m.addLayer({ id: "track-stops", type: "circle", source: "track-stops", paint: { "circle-radius": 6, "circle-color": ["get", "color"], "circle-stroke-color": "#ffffff", "circle-stroke-width": 2.5 } });
+      }
       fl.install();
       if (is3dRef.current) setBuildings3d(m, true, styleRef.current === "dark");
       if (!m.getSource("track-pos")) {
@@ -409,7 +513,19 @@ export function LiveMap({
     if (device && f && t && !Number.isNaN(Date.parse(f)) && !Number.isNaN(Date.parse(t))) setDeepLink({ device, from: f, to: t });
     const focusId = q.get("focus");
     if (focusId) setFocusParam(focusId);
+    // /map?trips=<deviceId>: open that vehicle's trip history (last 24 hours).
+    const tripsId = q.get("trips");
+    if (tripsId) setTripsParam(tripsId);
   }, []);
+  const [tripsParam, setTripsParam] = useState<string | null>(null);
+  useEffect(() => {
+    if (!tripsParam || !loaded) return;
+    if (devices.current.has(tripsParam)) {
+      setSelected(tripsParam);
+      setHistoryFor(tripsParam);
+    }
+    setTripsParam(null);
+  }, [tripsParam, loaded, devices, version]);
   // /map?focus=<deviceId> (from Vehicles "Show on map"): select and center once the snapshot has it.
   const [focusParam, setFocusParam] = useState<string | null>(null);
   useEffect(() => {
@@ -429,18 +545,28 @@ export function LiveMap({
   const all = useMemo(() => {
     const rows = [...devices.current.values()].map((d) => ({ d, state: mapState(d, now, offlineSeconds), stale: hasStaleFix(d, now, offlineSeconds), name: deviceLabel(d) }));
     const byName = (a: (typeof rows)[number], b: (typeof rows)[number]) => a.name.localeCompare(b.name, undefined, { numeric: true });
+    const order = (r: (typeof rows)[number]) => (r.d.vehicle ? (vehicleInfo[r.d.vehicle.id]?.sortOrder ?? null) : null);
+    const byStatus = (a: (typeof rows)[number], b: (typeof rows)[number]) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || byName(a, b);
     rows.sort(
-      sort === "name"
+      sort === "order"
+        ? (a, b) => {
+            // The company's numbered vehicles first (1, 2, …), then everyone else moving first.
+            const oa = order(a);
+            const ob = order(b);
+            if (oa !== null || ob !== null) return oa === null ? 1 : ob === null ? -1 : oa - ob || byStatus(a, b);
+            return byStatus(a, b);
+          }
+        : sort === "name"
         ? byName
         : sort === "recent"
           ? (a, b) => Date.parse(b.d.lastSeenAt ?? "1970-01-01") - Date.parse(a.d.lastSeenAt ?? "1970-01-01") || byName(a, b)
           : sort === "speed"
             ? (a, b) => (b.d.location?.speedKph ?? -1) - (a.d.location?.speedKph ?? -1) || byName(a, b)
-            : (a, b) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || byName(a, b)
+            : byStatus
     );
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [version, now, offlineSeconds, sort]);
+  }, [version, now, offlineSeconds, sort, vehicleInfo]);
   // Group filter: the list, the counts and the map all narrow to the group's vehicles.
   const groupSet = useMemo(() => {
     const g = groups.find((x) => x.id === groupId);
@@ -454,8 +580,8 @@ export function LiveMap({
   }, [scoped]);
   const q = search.trim().toLowerCase();
   const rows = useMemo(
-    () => scoped.filter((r) => (filter === "all" || stateBucket(r.state) === filter) && (!q || r.name.toLowerCase().includes(q) || (r.d.vehicle?.licensePlate ?? "").toLowerCase().includes(q) || (r.d.vehicle ? (drivers[r.d.vehicle.id]?.name ?? "") : "").toLowerCase().includes(q))),
-    [scoped, filter, q, drivers]
+    () => scoped.filter((r) => (filter === "all" || stateBucket(r.state) === filter) && (!q || r.name.toLowerCase().includes(q) || (r.d.vehicle?.licensePlate ?? "").toLowerCase().includes(q) || (r.d.vehicle ? (drivers[r.d.vehicle.id]?.name ?? "") : "").toLowerCase().includes(q) || (r.d.vehicle ? (vehicleInfo[r.d.vehicle.id]?.vin ?? "") : "").toLowerCase().includes(q))),
+    [scoped, filter, q, drivers, vehicleInfo]
   );
 
   // Keep the map filter in step with the list.
@@ -533,7 +659,7 @@ export function LiveMap({
   const paddedRef = useRef(false);
   const cardPadding = () => {
     paddedRef.current = true;
-    return window.matchMedia(WIDE).matches ? { top: 0, right: 0, bottom: 0, left: 392 } : { top: 0, right: 0, bottom: 480, left: 0 };
+    return window.matchMedia(WIDE).matches ? { top: 0, right: 0, bottom: 0, left: 480 } : { top: 0, right: 0, bottom: 480, left: 0 };
   };
   const focus = useCallback(
     (id: string) => {
@@ -612,16 +738,13 @@ export function LiveMap({
 
   const panel = (
     <>
-      <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
-        <div className="min-w-0">
-          <h1 className="m-0 text-xl font-bold tracking-tight">Live map</h1>
-          <p className="m-0 text-xs text-muted-foreground">
-            {counts.all} vehicle{counts.all === 1 ? "" : "s"}
-            {counts.offline > 0 && ` · ${counts.offline} not reporting`}
-          </p>
-        </div>
-        <span role="status" className={cn("mt-1 inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold", conn === "live" ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
-          {conn === "live" ? <span aria-hidden="true" className="live-ping inline-block size-2 rounded-full bg-current" /> : <Radio className="size-3.5" aria-hidden="true" />} {connLabel}
+      <div className="flex items-center gap-2 px-3 pb-2 pt-3">
+        <h1 className="m-0 text-base font-extrabold tracking-tight text-primary">Live map</h1>
+        <span className="text-xs text-muted-foreground">
+          {rows.length === counts.all ? `${counts.all}` : `${rows.length} of ${counts.all}`} vehicle{counts.all === 1 ? "" : "s"}
+        </span>
+        <span role="status" className={cn("ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold", conn === "live" ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
+          {conn === "live" ? <span aria-hidden="true" className="live-ping inline-block size-1.5 rounded-full bg-current" /> : <Radio className="size-3" aria-hidden="true" />} {connLabel}
         </span>
       </div>
 
@@ -641,59 +764,85 @@ export function LiveMap({
         </div>
       ) : (
         <>
-          <div className="grid gap-3 border-b border-border px-5 pb-4">
-            <div className="flex gap-2">
+          <div className="grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-border bg-gradient-to-b from-background to-canvas px-3 pb-2.5">
+            <div className="flex min-w-0 gap-1.5">
               <div className="min-w-0 flex-1">
-                <SearchInput value={search} onChange={setSearch} placeholder="Search name or plate" label="Search vehicles" debounceMs={150} />
+                <SearchInput value={search} onChange={setSearch} placeholder="Vehicle, driver, plate, VIN" label="Search vehicles" debounceMs={150} className="sm:w-full" />
               </div>
-              <Button size="md" variant="secondary" className="shrink-0 px-3" onClick={exportCsv} disabled={rows.length === 0} aria-label="Export this list as CSV" title="Export this list as CSV">
+              <Select aria-label="Sort vehicles" title="Sort" className="w-[6.5rem] shrink-0 px-2 text-xs" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+                <option value="order">Your order</option>
+                <option value="status">Moving first</option>
+                <option value="name">Name</option>
+                <option value="recent">Latest update</option>
+                <option value="speed">Speed</option>
+              </Select>
+              <Button size="md" variant="secondary" className="shrink-0 px-2.5" onClick={exportCsv} disabled={rows.length === 0} aria-label="Export this list as CSV" title="Export this list as CSV">
                 <Download />
               </Button>
             </div>
-            <div className="flex gap-2">
-              {groups.length > 0 && (
-                <Select aria-label="Filter by group" className="min-w-0 flex-1" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
-                  <option value="">All groups</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name} ({g.vehicleIds.length})
-                    </option>
-                  ))}
-                </Select>
-              )}
-              <Select aria-label="Sort vehicles" className="min-w-0 flex-1" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
-                <option value="status">Sort: status</option>
-                <option value="name">Sort: name</option>
-                <option value="recent">Sort: latest update</option>
-                <option value="speed">Sort: speed</option>
-              </Select>
-            </div>
-            <div role="group" aria-label="Filter by status" className="-mx-1 flex flex-wrap gap-1 px-1">
+            <div role="radiogroup" aria-label="Filter by status" className="grid grid-cols-[repeat(5,minmax(0,1fr))] gap-1">
               {(["all", ...MAP_STATES] as Filter[]).map((f) => {
                 const on = filter === f;
                 const n = counts[f];
+                const color = f === "all" ? PRIMARY : STATE_COLORS[f];
                 return (
                   <button
                     key={f}
                     type="button"
-                    aria-pressed={on}
+                    role="radio"
+                    aria-checked={on}
                     title={f === "all" ? "Every vehicle" : STATE_HINT[f]}
-                    onClick={() => setFilter(on && f !== "all" ? "all" : f)}
-                    className={cn(
-                      "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border px-2 text-xs font-medium transition-colors",
-                      on ? "border-primary bg-primary-soft text-primary" : "border-border bg-background text-foreground hover:border-input hover:bg-muted"
-                    )}
+                    onClick={() => setFilter(f)}
+                    className={cn("grid cursor-pointer justify-items-center gap-px rounded-lg border-0 px-0.5 py-1 transition-shadow", on ? "text-white" : "text-foreground hover:brightness-95")}
+                    style={
+                      on
+                        ? { background: `linear-gradient(135deg, ${f === "all" ? "#1849c6" : color}, ${f === "all" ? "#0a2463" : ink(color)})`, boxShadow: `0 4px 10px -4px ${color}` }
+                        : { background: tint(color, 12), boxShadow: `inset 0 0 0 1px ${tint(color, 40)}` }
+                    }
                   >
-                    {f !== "all" && <span aria-hidden="true" className="inline-block size-1.5 rounded-full" style={{ background: STATE_COLORS[f] }} />}
-                    {f === "all" ? "All" : STATE_LABEL[f]}
-                    <span className={cn("font-bold tabular-nums", n === 0 && !on && "text-muted-foreground")}>{n}</span>
+                    <span className="text-[15px] font-extrabold leading-[18px] tabular-nums" style={on ? undefined : { color: f === "all" ? undefined : ink(color) }}>
+                      {n}
+                    </span>
+                    <span className="flex items-center gap-1 text-[10.5px] font-semibold">
+                      {f !== "all" && !on && <span aria-hidden="true" className="inline-block size-1.5 rounded-full" style={{ background: color }} />}
+                      {f === "all" ? "All" : STATE_LABEL[f]}
+                    </span>
                   </button>
                 );
               })}
             </div>
+            {groups.length > 0 && (
+              <div role="radiogroup" aria-label="Filter by group" className="flex flex-wrap items-center gap-1">
+                <span className="mr-0.5 inline-flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide text-muted-foreground">
+                  <Layers className="size-3" aria-hidden="true" /> Groups
+                </span>
+                {[{ id: "", name: "All", n: all.length }, ...groups.map((g) => ({ id: g.id, name: g.name, n: g.vehicleIds.length }))].map((g) => {
+                  const on = groupId === g.id;
+                  return (
+                    <button
+                      key={g.id || "all"}
+                      type="button"
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => setGroupId(g.id)}
+                      className={cn(
+                        "inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border-0 px-2 text-[11.5px] font-semibold transition-colors",
+                        on ? "bg-primary text-primary-foreground" : "bg-background text-foreground shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-muted"
+                      )}
+                    >
+                      {g.name}
+                      <span className={on ? "opacity-80" : "text-muted-foreground"}>{g.n}</span>
+                    </button>
+                  );
+                })}
+                <Link href="/vehicles" title="Manage groups" aria-label="Manage groups" className="grid size-6 place-items-center rounded-md bg-background text-primary no-underline shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-muted">
+                  <Plus className="size-3" aria-hidden="true" />
+                </Link>
+              </div>
+            )}
           </div>
 
-          <div ref={listRef} className="relative min-h-0 flex-1 overflow-auto px-2 py-2" onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
+          <div ref={listRef} className="relative min-h-0 flex-1 overflow-auto bg-canvas px-2 py-1.5" onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
             {!loaded ? (
               <div className="grid gap-3 p-2" aria-busy="true" aria-label="Loading vehicles">
                 {Array.from({ length: 6 }, (_, i) => (
@@ -720,44 +869,18 @@ export function LiveMap({
               <ul className="relative m-0 list-none p-0" style={{ height: rows.length * ROW_H }} aria-label="Vehicles">
                 {rows.slice(start, end).map((r, i) => {
                   const d = r.d;
-                  const active = d.deviceId === selected;
-                  const nm = splitName(r.name);
-                  const detail = !d.location
-                    ? "No position yet"
-                    : r.stale
-                      ? `No current GPS · last fix ${ago(d.location.recordedAt, now)}`
-                      : r.state === "offline" && d.lastSeenAt
-                      ? `Last signal ${ago(d.lastSeenAt, now)}`
-                      : [d.vehicle ? drivers[d.vehicle.id]?.name : null, d.vehicle?.licensePlate, r.state === "moving" ? u.fmtSpeed(d.location.speedKph) : STATE_HINT[r.state], !d.vehicle && "No vehicle linked"].filter(Boolean).join(" · ");
                   return (
-                    <li key={d.deviceId} className="absolute inset-x-0 py-0.5" style={{ top: (start + i) * ROW_H, height: ROW_H }}>
-                      <button
-                        type="button"
+                    <li key={d.deviceId} className="absolute inset-x-0 py-[3px]" style={{ top: (start + i) * ROW_H, height: ROW_H }}>
+                      <ListRow
+                        r={r}
+                        info={d.vehicle ? vehicleInfo[d.vehicle.id] : undefined}
+                        driver={d.vehicle ? drivers[d.vehicle.id]?.name : undefined}
+                        active={d.deviceId === selected}
+                        now={now}
+                        addresses={addresses}
+                        speed={r.state === "moving" && !r.stale && d.location ? u.fmtSpeed(d.location.speedKph) : null}
                         onClick={() => focus(d.deviceId)}
-                        aria-pressed={active}
-                        className={cn(
-                          "relative flex h-full w-full cursor-pointer items-center gap-3 overflow-hidden rounded-lg border-0 bg-transparent px-3 text-left transition-colors hover:bg-muted",
-                          active && "bg-primary-soft shadow-[inset_0_0_0_1px_var(--color-primary)] hover:bg-primary-soft"
-                        )}
-                        style={active ? undefined : { backgroundImage: `linear-gradient(110deg, ${tint(STATE_COLORS[r.state], 8)} 0%, ${tint(STATE_COLORS[r.state], 34)} 100%)` }}
-                      >
-                        <span aria-hidden="true" className="absolute inset-y-1.5 left-0 w-1 rounded-r" style={{ background: STATE_COLORS[r.state] }} />
-                        <span className="relative shrink-0">
-                          <VehiclePicture type={d.vehicle?.type} state={r.state} className="h-9 w-12" />
-                          <span aria-hidden="true" className="absolute -right-1 -top-1 size-3 rounded-full border-2 border-background" style={{ background: STATE_COLORS[r.state] }} />
-                        </span>
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="flex min-w-0 items-baseline gap-1.5">
-                            <span className="truncate text-sm font-semibold">{nm.main}</span>
-                            {nm.imei && <span className="shrink-0 text-xs tabular-nums text-muted-foreground" title={r.name}>{nm.imei}</span>}
-                          </span>
-                          <span className="truncate text-xs text-muted-foreground">{detail}</span>
-                        </span>
-                        <span className="flex shrink-0 flex-col items-end gap-1">
-                          <StatusBadge state={r.state} stale={r.stale} />
-                          <span className="text-[11px] leading-4 tabular-nums text-muted-foreground">{d.lastSeenAt ? ago(d.lastSeenAt, now) : "No data yet"}</span>
-                        </span>
-                      </button>
+                      />
                     </li>
                   );
                 })}
@@ -777,6 +900,7 @@ export function LiveMap({
     const n = neighbour(by);
     if (n) focus(n.d.deviceId);
   };
+  const touchX = useRef<number | null>(null);
   const stepRef = useRef(stepTo);
   stepRef.current = stepTo;
   useEffect(() => {
@@ -827,7 +951,7 @@ export function LiveMap({
     const cy = h / 2;
     const top = 74;
     const bottom = h - 48;
-    const card = sel && w >= 768 ? { right: 416, top: h - 480 } : null;
+    const card = sel && w >= 768 ? { right: 500, top: h - 440 } : null;
     const GAP = 70;
     const off = located
       .filter((r) => r.d.deviceId !== selected)
@@ -888,209 +1012,233 @@ export function LiveMap({
 
   const address = useAddress(addresses && sel?.location ? sel.location.latitude : null, addresses && sel?.location ? sel.location.longitude : null, selState === "moving");
 
+  const selInfo = sel?.vehicle ? vehicleInfo[sel.vehicle.id] : undefined;
+  const selYmm = selInfo ? yearMakeModel(selInfo) : null;
+  const selDriver = sel?.vehicle ? drivers[sel.vehicle.id] : undefined;
+  const canStep = located.length > 1 && selIdx >= 0;
+  const vehicleHref = sel?.vehicle ? `/vehicles/${sel.vehicle.id}` : null;
   const vehicleCard = sel && !historyFor && (
-    <section
-      key={sel.deviceId}
-      aria-label="Selected vehicle"
-      className={cn(
-        "absolute inset-x-3 z-[2] grid animate-in grid-cols-[minmax(0,1fr)] gap-3 overflow-hidden rounded-xl border border-border bg-background p-4 shadow-pop",
-        "bottom-[160px] md:inset-x-auto md:bottom-6 md:left-4 md:w-[384px]",
-        sheetOpen && "hidden md:grid"
+    <div className={cn("absolute inset-x-3 z-[2] bottom-[160px] md:inset-x-auto md:bottom-5 md:left-4 md:w-[468px]", sheetOpen && "hidden md:block")}>
+      {/* Previous / next vehicle: round arrows on the card's edges (also ← / → keys and swipe on phones). */}
+      {canStep && (
+        <>
+          <button type="button" aria-label="Previous vehicle" title="Previous vehicle (←)" onClick={() => stepTo(-1)} className="absolute left-0 top-1/2 z-[3] hidden size-9 -translate-y-1/2 cursor-pointer place-items-center rounded-full border-0 bg-background text-primary shadow-pop hover:bg-primary-soft md:grid">
+            <ChevronLeft className="size-5" aria-hidden="true" />
+          </button>
+          <button type="button" aria-label="Next vehicle" title="Next vehicle (→)" onClick={() => stepTo(1)} className="absolute right-0 top-1/2 z-[3] hidden size-9 -translate-y-1/2 cursor-pointer place-items-center rounded-full border-0 bg-background text-primary shadow-pop hover:bg-primary-soft md:grid">
+            <ChevronRight className="size-5" aria-hidden="true" />
+          </button>
+        </>
       )}
-      style={{ backgroundImage: `linear-gradient(150deg, ${tint(STATE_COLORS[selState], 6)} 20%, ${tint(STATE_COLORS[selState], 32)} 100%)` }}
-    >
-      <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1" style={{ background: STATE_COLORS[selState] }} />
-      <div className="flex items-start gap-3">
-        <VehiclePicture type={sel.vehicle?.type} state={selState ?? undefined} className="h-11 w-14 shrink-0" />
-        <div className="min-w-0 flex-1">
-          <h2 className="m-0 flex min-w-0 items-baseline gap-1.5 text-base font-semibold">
-            <span className="truncate">{splitName(deviceLabel(sel)).main}</span>
-            {platformAdmin && splitName(deviceLabel(sel)).imei && <span className="shrink-0 text-xs font-normal tabular-nums text-muted-foreground">{splitName(deviceLabel(sel)).imei}</span>}
-          </h2>
-          <p className="m-0 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <StatusBadge state={selState} stale={selStale} />
-            <span className="truncate">{sel.vehicle ? [VEHICLE_TYPE_LABEL[asVehicleType(sel.vehicle.type)], sel.vehicle.licensePlate].filter(Boolean).join(" · ") : "GPS tracker · no vehicle linked"}</span>
-          </p>
-          {sel.vehicle && (
-            <p className="m-0 mt-1 flex min-w-0 items-center gap-1.5 text-xs">
-              <IdCard className="size-3.5 shrink-0 text-[#0f766e]" aria-hidden="true" />
-              {drivers[sel.vehicle.id] ? (
-                <>
-                  <span className="truncate font-semibold text-foreground">{drivers[sel.vehicle.id]!.name}</span>
-                  {drivers[sel.vehicle.id]!.phone && (
-                    <a href={`tel:${drivers[sel.vehicle.id]!.phone}`} className="inline-flex shrink-0 items-center gap-1 text-primary no-underline hover:underline">
-                      <Phone className="size-3" aria-hidden="true" />
-                      {drivers[sel.vehicle.id]!.phone}
-                    </a>
-                  )}
-                </>
-              ) : (
-                <Link href="/drivers" className="text-muted-foreground no-underline hover:text-primary hover:underline">
-                  No driver · assign one
-                </Link>
-              )}
-            </p>
-          )}
-        </div>
-        {located.length > 1 && selIdx >= 0 && (
-          <span className="flex shrink-0 items-center rounded-full bg-primary-soft text-primary">
-            <button type="button" aria-label="Previous vehicle" title="Previous vehicle (←)" className="grid size-7 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-primary hover:bg-background" onClick={() => stepTo(-1)}>
-              <ChevronLeft className="size-4" aria-hidden="true" />
-            </button>
-            <span className="text-xs font-bold tabular-nums">{selIdx + 1}/{located.length}</span>
-            <button type="button" aria-label="Next vehicle" title="Next vehicle (→)" className="grid size-7 cursor-pointer place-items-center rounded-full border-0 bg-transparent text-primary hover:bg-background" onClick={() => stepTo(1)}>
-              <ChevronRight className="size-4" aria-hidden="true" />
-            </button>
-          </span>
-        )}
+      <section
+        key={sel.deviceId}
+        aria-label="Selected vehicle"
+        className="relative grid animate-in grid-cols-[minmax(0,1fr)] gap-2.5 overflow-hidden rounded-2xl border border-border bg-background p-3 pl-4 shadow-pop md:mx-11"
+        style={{ backgroundImage: `linear-gradient(160deg, ${tint(STATE_COLORS[selState], 8)} 0%, ${tint(STATE_COLORS[selState], 36)} 100%)` }}
+        onTouchStart={(e) => {
+          touchX.current = e.touches[0]?.clientX ?? null;
+        }}
+        onTouchEnd={(e) => {
+          const x0 = touchX.current;
+          const x1 = e.changedTouches[0]?.clientX;
+          touchX.current = null;
+          if (x0 != null && x1 != null && Math.abs(x1 - x0) > 60) stepTo(x1 < x0 ? 1 : -1);
+        }}
+      >
+        <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1.5" style={{ background: STATE_COLORS[selState] }} />
         <button
           type="button"
           aria-label="Close vehicle details"
-          className="-mr-1 -mt-1 grid size-8 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="absolute right-2 top-2 z-[1] grid size-7 cursor-pointer place-items-center rounded-md border-0 bg-background/70 text-muted-foreground hover:bg-background hover:text-foreground"
           onClick={() => setSelected(null)}
         >
           <X className="size-4" aria-hidden="true" />
         </button>
-      </div>
-      {sel.location ? (
-        <>
-          {selStale ? (
-            // Reporting, but the newest position is old: never show its speed as current.
-            <div className="flex items-center gap-3 rounded-lg px-3 py-2.5" style={{ background: tint(STATE_COLORS.idle) }}>
-              <Satellite className="size-5 shrink-0" style={{ color: ink(STATE_COLORS.idle) }} aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="m-0 text-sm font-bold">{platformAdmin ? "No current GPS position" : "Location may be out of date"}</p>
-                <p className="m-0 text-xs text-muted-foreground">
-                  {platformAdmin
-                    ? `The tracker is online, but its newest position is ${durationText((now - Date.parse(sel.location.recordedAt)) / 60000)} old. It may be uploading stored records or have no GPS signal.`
-                    : `Last known position, ${durationText((now - Date.parse(sel.location.recordedAt)) / 60000)} ago.`}
-                </p>
-              </div>
-            </div>
-          ) : selState === "offline" || selState === "parked" ? (
-            // Not reporting: say so plainly instead of showing a speed that is no longer true.
-            <div className="flex items-center gap-3 rounded-lg px-3 py-2.5" style={{ background: tint(STATE_COLORS.idle) }}>
-              <Radio className="size-5 shrink-0" style={{ color: ink(STATE_COLORS.idle) }} aria-hidden="true" />
-              <div className="min-w-0">
-                <p className="m-0 text-sm font-bold">{sel.lastSeenAt ? `Not reporting for ${durationText((now - Date.parse(sel.lastSeenAt)) / 60000)}` : "No report yet"}</p>
-                <p className="m-0 text-xs text-muted-foreground">
-                  {platformAdmin
-                    ? selState === "parked"
-                      ? "Unhooked trailer: it reports only on its own battery."
-                      : "Usually no power or no mobile signal."
-                    : selState === "parked"
-                      ? "Parked trailer. Its position updates when it moves."
-                      : "Showing its last known position."}
-                </p>
-              </div>
-            </div>
+        {/* Header: opens the vehicle's full page. */}
+        {(() => {
+          const head = (
+            <>
+              <VehiclePicture type={sel.vehicle?.type} state={selState ?? undefined} className="h-12 w-16 shrink-0 rounded-xl bg-background" />
+              <span className="grid min-w-0 flex-1 gap-1">
+                <span className="flex min-w-0 items-baseline gap-2 pr-7">
+                  <span className="shrink-0 text-[17px] font-extrabold text-primary">{splitName(deviceLabel(sel)).main}</span>
+                  {platformAdmin && splitName(deviceLabel(sel)).imei && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{splitName(deviceLabel(sel)).imei}</span>}
+                  {selYmm && <span className="truncate text-xs text-muted-foreground">{selYmm}</span>}
+                </span>
+                <span className="flex min-w-0 flex-wrap items-center gap-1">
+                  <StatusBadge state={selState} stale={selStale} />
+                  {sel.vehicle ? (
+                    <>
+                      <PlateTag plate={sel.vehicle.licensePlate} className="bg-background/80" />
+                      <VinTag vin={selInfo?.vin} short className="bg-background/80" />
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">GPS tracker · no vehicle linked</span>
+                  )}
+                </span>
+              </span>
+            </>
+          );
+          return vehicleHref ? (
+            <Link href={vehicleHref} title="Open the vehicle page" className="-m-1 flex items-center gap-3 rounded-xl p-1 text-foreground no-underline hover:bg-background/60">
+              {head}
+            </Link>
           ) : (
-            <div className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-2">
-              <div className="relative flex items-center gap-2.5 overflow-hidden rounded-lg border border-border px-3 py-2 shadow-card">
-                <span aria-hidden="true" className="absolute inset-y-2 left-0 w-1 rounded-r" style={{ background: STATE_COLORS[selState] }} />
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: tint(STATE_COLORS[selState]) }}>
-                  <Gauge className="size-5" style={{ color: ink(STATE_COLORS[selState]) }} aria-hidden="true" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[11px] font-semibold text-muted-foreground">Speed</span>
-                  <span className="block truncate text-lg font-extrabold leading-6 tabular-nums">{u.fmtSpeed(selState === "moving" ? sel.location.speedKph : 0)}</span>
-                </span>
-              </div>
-              <div className="relative flex items-center gap-2.5 overflow-hidden rounded-lg border border-border px-3 py-2 shadow-card">
-                <span aria-hidden="true" className="absolute inset-y-2 left-0 w-1 rounded-r" style={{ background: PRIMARY }} />
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg" style={{ background: tint(PRIMARY) }}>
-                  <Navigation2 className="size-5" style={{ color: ink(PRIMARY), transform: `rotate(${selState === "moving" ? (sel.location.headingDeg ?? 0) : 0}deg)` }} aria-hidden="true" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[11px] font-semibold text-muted-foreground">{selState === "moving" && sel.location.headingDeg !== null ? `Heading ${Math.round(sel.location.headingDeg)}°` : "Heading"}</span>
-                  <span className="block truncate text-sm font-bold leading-6">{selState === "moving" ? (compass(sel.location.headingDeg) ?? "–") : STATE_BADGE[selState]}</span>
-                </span>
-              </div>
-            </div>
-          )}
-          <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: tint(PRIMARY, 14) }}>
-            <MapPin className="size-4 shrink-0" style={{ color: ink(PRIMARY) }} aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <span className="sr-only">Last location: </span>
-              <p className="m-0 truncate text-sm font-semibold" title={address?.label}>
-                {address ? address.line1 : `${sel.location.latitude.toFixed(5)}, ${sel.location.longitude.toFixed(5)}`}
-              </p>
-              {address?.line2 && <p className="m-0 truncate text-xs text-foreground/80">{address.line2}</p>}
-              <p className="m-0 truncate text-xs text-muted-foreground" title={`${time.dateTimeSec(sel.location.recordedAt)} ${time.abbr(sel.location.recordedAt)}`}>
-                {address && <span className="tabular-nums">{sel.location.latitude.toFixed(5)}, {sel.location.longitude.toFixed(5)} · </span>}
-                Updated <span className="font-medium text-foreground">{ago(sel.location.recordedAt, now)}</span>
-              </p>
-            </div>
-            <button
-              type="button"
-              aria-label="Copy coordinates"
-              className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-background text-primary shadow-card hover:bg-muted"
-              onClick={() => {
-                const text = `${sel.location!.latitude.toFixed(6)}, ${sel.location!.longitude.toFixed(6)}`;
-                navigator.clipboard.writeText(text).then(
-                  () => toast.success("Coordinates copied."),
-                  () => toast.error("Couldn't copy. Select the coordinates and copy them.")
-                );
-              }}
-            >
-              <Copy className="size-3.5" aria-hidden="true" />
-            </button>
-            <a
-              className="grid size-8 shrink-0 place-items-center rounded-md bg-background text-primary shadow-card hover:bg-muted"
-              href={`https://www.google.com/maps/search/?api=1&query=${sel.location.latitude.toFixed(6)},${sel.location.longitude.toFixed(6)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Open in Google Maps"
-              title="Open in Google Maps"
-            >
-              <ExternalLink className="size-3.5" aria-hidden="true" />
-            </a>
+            <div className="flex items-center gap-3">{head}</div>
+          );
+        })()}
+        {sel.vehicle && (
+          <div className="flex items-center gap-2 rounded-xl bg-background/75 px-2.5 py-1.5">
+            {selDriver ? (
+              <>
+                <DriverAvatar name={selDriver.name} className="size-7 text-[10px]" />
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{selDriver.name}</span>
+                {selDriver.phone && (
+                  <a href={`tel:${selDriver.phone}`} title={`Call ${selDriver.phone}`} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-success-soft px-2 text-xs font-semibold text-success no-underline hover:brightness-95">
+                    <Phone className="size-3" aria-hidden="true" /> Call
+                  </a>
+                )}
+              </>
+            ) : (
+              <Link href="/drivers" className="text-xs text-muted-foreground no-underline hover:text-primary hover:underline">
+                <IdCard className="mr-1 inline size-3.5 align-[-2px]" aria-hidden="true" />
+                No driver · assign one
+              </Link>
+            )}
           </div>
-          <div className={cn("grid gap-1.5", platformAdmin ? "grid-cols-[repeat(4,minmax(0,1fr))]" : "grid-cols-[repeat(3,minmax(0,1fr))]")}>
-            <Fact icon={KeyRound} label="Ignition" value={selStale || sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} color={selStale ? STATE_COLORS.offline : sel.location.ignition === false ? STATE_COLORS.stopped : sel.location.ignition ? STATE_COLORS.moving : STATE_COLORS.offline} />
-            <Fact icon={Activity} label="Status" value={selStale ? "Unknown" : STATE_BADGE[selState]} color={PRIMARY} />
-            <Fact icon={Satellite} label={platformAdmin ? "GPS" : "Updated"} value={now - Date.parse(sel.location.recordedAt) < 120_000 ? "Live" : ago(sel.location.recordedAt, now)} color={now - Date.parse(sel.location.recordedAt) < 120_000 ? STATE_COLORS.parked : STATE_COLORS.idle} />
-            {platformAdmin && <Fact icon={Wifi} label="Tracker" value={selState === "offline" || selState === "parked" ? "Offline" : "Online"} color={selState === "offline" || selState === "parked" ? STATE_COLORS.offline : STATE_COLORS.moving} />}
-          </div>
-        </>
-      ) : (
-        <p className="m-0 text-xs text-muted-foreground">{platformAdmin ? "This tracker hasn't reported a position yet." : "No position yet. It appears here as soon as the vehicle reports."}</p>
-      )}
-      <div className="flex gap-2">
-        <Button
-          size="md"
-          className="min-w-0 flex-1"
-          variant={follow ? "primary" : "secondary"}
-          aria-pressed={follow}
-          disabled={!sel.location}
-          onClick={() => {
-            if (!follow) focus(sel.deviceId);
-            setFollow((v) => !v);
-          }}
-        >
-          <LocateFixed /> {follow ? "Following" : "Follow"}
-        </Button>
-        <Button
-          size="md"
-          variant="secondary"
-          className="min-w-0 flex-1"
-          onClick={() => {
-            setHistoryFor(sel.deviceId);
-            setSheetOpen(true);
-          }}
-        >
-          <History /> History
-        </Button>
-        <Button size="md" variant="secondary" className="shrink-0 px-2.5" onClick={() => focus(sel.deviceId)} disabled={!sel.location} aria-label="Center on vehicle" title="Center on vehicle">
-          <Crosshair />
-        </Button>
-        {canShare && sel.vehicle && (
-          <Button size="md" variant="secondary" className="shrink-0 px-2.5" onClick={() => setSharing(true)} aria-label="Share live location" title="Share live location">
-            <Share2 />
-          </Button>
         )}
-      </div>
-    </section>
+        {sel.location ? (
+          <>
+            {selStale ? (
+              // Reporting, but the newest position is old: never show its speed as current.
+              <div className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: tint(STATE_COLORS.idle) }}>
+                <Satellite className="size-5 shrink-0" style={{ color: ink(STATE_COLORS.idle) }} aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="m-0 text-sm font-bold">{platformAdmin ? "No current GPS position" : "Location may be out of date"}</p>
+                  <p className="m-0 text-xs text-muted-foreground">
+                    {platformAdmin
+                      ? `The tracker is online, but its newest position is ${durationText((now - Date.parse(sel.location.recordedAt)) / 60000)} old. It may be uploading stored records or have no GPS signal.`
+                      : `Last known position, ${durationText((now - Date.parse(sel.location.recordedAt)) / 60000)} ago.`}
+                  </p>
+                </div>
+              </div>
+            ) : selState === "offline" || selState === "parked" ? (
+              // Not reporting: say so plainly instead of showing a speed that is no longer true.
+              <div className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: tint(STATE_COLORS.idle) }}>
+                <Radio className="size-5 shrink-0" style={{ color: ink(STATE_COLORS.idle) }} aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="m-0 text-sm font-bold">{sel.lastSeenAt ? `Not reporting for ${durationText((now - Date.parse(sel.lastSeenAt)) / 60000)}` : "No report yet"}</p>
+                  <p className="m-0 text-xs text-muted-foreground">
+                    {platformAdmin
+                      ? selState === "parked"
+                        ? "Unhooked trailer: it reports only on its own battery."
+                        : "Usually no power or no mobile signal."
+                      : selState === "parked"
+                        ? "Parked trailer. Its position updates when it moves."
+                        : "Showing its last known position."}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            <div className={cn("grid gap-1.5", platformAdmin ? "grid-cols-[repeat(4,minmax(0,1fr))]" : "grid-cols-[repeat(3,minmax(0,1fr))]")}>
+              <Fact icon={Gauge} label="Speed" value={selStale || selState === "offline" || selState === "parked" ? "—" : u.fmtSpeed(selState === "moving" ? sel.location.speedKph : 0)} color={selState === "moving" && !selStale ? STATE_COLORS.moving : STATE_COLORS.offline} />
+              <Fact icon={KeyRound} label="Ignition" value={selStale || sel.location.ignition === null ? "Unknown" : sel.location.ignition ? "On" : "Off"} color={selStale ? STATE_COLORS.offline : sel.location.ignition === false ? STATE_COLORS.stopped : sel.location.ignition ? STATE_COLORS.moving : STATE_COLORS.offline} />
+              <Fact icon={Satellite} label={platformAdmin ? "GPS" : "Updated"} value={now - Date.parse(sel.location.recordedAt) < 120_000 ? "Live" : ago(sel.location.recordedAt, now)} color={now - Date.parse(sel.location.recordedAt) < 120_000 ? PRIMARY : STATE_COLORS.idle} />
+              {platformAdmin && <Fact icon={Wifi} label="Tracker" value={selState === "offline" || selState === "parked" ? "Offline" : "Online"} color={selState === "offline" || selState === "parked" ? STATE_COLORS.offline : STATE_COLORS.moving} />}
+            </div>
+            <div className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: tint(PRIMARY, 16) }}>
+              <MapPin className="size-4 shrink-0" style={{ color: ink(PRIMARY) }} aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <span className="sr-only">Last location: </span>
+                <p className="m-0 text-sm font-bold leading-5 [overflow-wrap:anywhere]" title={address?.label}>
+                  {address ? address.line1 : `${sel.location.latitude.toFixed(5)}, ${sel.location.longitude.toFixed(5)}`}
+                </p>
+                <p className="m-0 text-xs text-foreground/80" title={`${time.dateTimeSec(sel.location.recordedAt)} ${time.abbr(sel.location.recordedAt)}`}>
+                  {[address?.line2, selState === "moving" && !selStale && compass(sel.location.headingDeg) ? `heading ${compass(sel.location.headingDeg)}` : null].filter(Boolean).join(" · ") || `Updated ${ago(sel.location.recordedAt, now)}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label={address ? "Copy address" : "Copy coordinates"}
+                title={address ? "Copy address" : "Copy coordinates"}
+                className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg border-0 bg-background text-primary shadow-card hover:bg-muted"
+                onClick={() => {
+                  const text = address?.label ?? `${sel.location!.latitude.toFixed(6)}, ${sel.location!.longitude.toFixed(6)}`;
+                  navigator.clipboard.writeText(text).then(
+                    () => toast.success(address ? "Address copied." : "Coordinates copied."),
+                    () => toast.error("Couldn't copy. Select the text and copy it.")
+                  );
+                }}
+              >
+                <Copy className="size-3.5" aria-hidden="true" />
+              </button>
+              <a
+                className="grid size-8 shrink-0 place-items-center rounded-lg bg-background text-primary shadow-card hover:bg-muted"
+                href={`https://www.google.com/maps/search/?api=1&query=${sel.location.latitude.toFixed(6)},${sel.location.longitude.toFixed(6)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open in Google Maps"
+                title="Open in Google Maps"
+              >
+                <ExternalLink className="size-3.5" aria-hidden="true" />
+              </a>
+            </div>
+          </>
+        ) : (
+          <p className="m-0 text-xs text-muted-foreground">{platformAdmin ? "This tracker hasn't reported a position yet." : "No position yet. It appears here as soon as the vehicle reports."}</p>
+        )}
+        <div className="flex gap-1.5">
+          {vehicleHref && (
+            <Button asChild size="md" className="min-w-0 flex-1">
+              <Link href={vehicleHref}>
+                <Truck /> Vehicle details
+              </Link>
+            </Button>
+          )}
+          <Button
+            size="md"
+            variant="secondary"
+            className="min-w-0 flex-1"
+            onClick={() => {
+              setHistoryFor(sel.deviceId);
+              setSheetOpen(true);
+            }}
+          >
+            <History /> Trip history
+          </Button>
+          <Button
+            size="md"
+            variant={follow ? "primary" : "secondary"}
+            className="shrink-0 px-2.5"
+            aria-pressed={follow}
+            disabled={!sel.location}
+            aria-label={follow ? "Stop following" : "Follow on the map"}
+            title={follow ? "Following: click to stop" : "Follow on the map"}
+            onClick={() => {
+              if (!follow) focus(sel.deviceId);
+              setFollow((v) => !v);
+            }}
+          >
+            <LocateFixed />
+          </Button>
+          {canShare && sel.vehicle && (
+            <Button size="md" variant="secondary" className="shrink-0 px-2.5" onClick={() => setSharing(true)} aria-label="Share live location" title="Share live location">
+              <Share2 />
+            </Button>
+          )}
+        </div>
+      </section>
+      {canStep && (
+        <div aria-hidden="true" className="mt-2 hidden items-center justify-center gap-1 md:flex">
+          {located.length <= 12 ? (
+            located.map((r, i) => <span key={r.d.deviceId} className={cn("h-1.5 rounded-full transition-all", i === selIdx ? "w-4" : "w-1.5 bg-foreground/25")} style={i === selIdx ? { background: STATE_COLORS[selState] } : undefined} />)
+          ) : null}
+          <span className="ml-1.5 rounded-full bg-background/90 px-2 text-[11px] font-bold text-foreground shadow-card">
+            {selIdx + 1} of {located.length}
+          </span>
+        </div>
+      )}
+    </div>
   );
 
   return (
@@ -1240,7 +1388,7 @@ export function LiveMap({
         className={cn(
           "absolute inset-x-0 bottom-0 z-[2] flex flex-col rounded-t-xl border-t border-border bg-background shadow-pop transition-[height] duration-200",
           sheetOpen || historyFor ? "h-[70%]" : "h-[148px]",
-          "md:static md:order-1 md:h-auto md:w-[380px] md:shrink-0 md:rounded-none md:border-r md:border-t-0 md:shadow-none md:transition-none",
+          "md:static md:order-1 md:h-auto md:w-[370px] md:shrink-0 md:rounded-none md:border-r md:border-t-0 md:shadow-none md:transition-none",
           !panelOpen && "md:hidden"
         )}
       >

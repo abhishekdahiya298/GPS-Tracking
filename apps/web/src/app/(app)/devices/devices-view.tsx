@@ -1,6 +1,6 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CircleOff, Cpu, Layers, Link2, Link2Off, Pencil, Plus, Power, PowerOff, Radio, RefreshCw, Unplug, WifiOff } from "lucide-react";
+import { CircleOff, Clock, Cpu, Layers, Link2, Link2Off, Pencil, Power, PowerOff, Radio, RefreshCw, Unplug, UserRound, WifiOff } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
@@ -80,27 +80,38 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
       { id: "status", header: "Status", meta: { sortKey: "state" } satisfies ColumnMeta, cell: ({ row }) => <StatusChip status={row.original.state} label={STATE[row.original.state].label} /> },
       {
         id: "vehicle",
-        header: "Vehicle",
+        header: "Vehicle · driver",
         meta: { sortKey: "vehicle" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) =>
           d.vehicle ? (
             <Link href={`/map?focus=${d.id}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-3 text-foreground no-underline hover:underline">
               <VehiclePicture type={d.vehicle.type} state={pictureState(d.state === "online" ? "moving" : d.state)} className="h-9 w-12" />
               <span className="min-w-0">
-                <span className="block truncate font-medium">{d.vehicle.name}</span>
-                <span className="block truncate text-xs text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(d.vehicle.type)], d.vehicle.licensePlate].filter(Boolean).join(" · ")}</span>
+                <span className="flex min-w-0 items-baseline gap-1.5">
+                  <span className="truncate font-medium">{d.vehicle.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(d.vehicle.type)], d.vehicle.licensePlate].filter(Boolean).join(" · ")}</span>
+                </span>
+                <span className="mt-0.5 flex items-center gap-1 truncate text-xs">
+                  {d.driver ? (
+                    <>
+                      <UserRound className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+                      <span className="truncate font-medium text-foreground">{d.driver.name}</span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">No driver</span>
+                  )}
+                </span>
               </span>
             </Link>
           ) : can.assign ? (
             <Button
               size="sm"
-              variant="secondary"
               onClick={(e) => {
                 e.stopPropagation();
                 setAssignFor(d);
               }}
             >
-              <Plus /> Assign to vehicle
+              <Link2 /> Assign to vehicle
             </Button>
           ) : (
             <span className="text-muted-foreground">Not assigned</span>
@@ -110,7 +121,12 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
         id: "lastSeen",
         header: "Last seen",
         meta: { sortKey: "lastSeen", hideable: true, label: "Last seen" } satisfies ColumnMeta,
-        cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground"><RelativeTime iso={row.original.lastSeenAt} /></span>
+        cell: ({ row }) => (
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
+            <Clock className="size-3.5" aria-hidden="true" />
+            <RelativeTime iso={row.original.lastSeenAt} />
+          </span>
+        )
       },
       { id: "actions", header: () => <span className="sr-only">Actions</span>, meta: { className: "w-0 whitespace-nowrap text-right" } satisfies ColumnMeta, cell: ({ row }) => <RowMenu d={row.original} /> }
     ],
@@ -122,7 +138,7 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
     <>
       <PageHeader
         title="GPS devices"
-        description="Your RIO GPS trackers and the vehicle each one is on."
+        description={`${data.counts.all ?? 0} RIO GPS tracker${data.counts.all === 1 ? "" : "s"}${data.counts.unassigned ? ` · ${data.counts.unassigned} not on a vehicle` : " · all on a vehicle"}`}
         actions={
           <>
             <IconButton label="Refresh" variant="secondary" onClick={refresh} disabled={pending}>
@@ -190,6 +206,7 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
           }
         />
       </Card>
+      <p className="m-0 mt-3 text-xs text-muted-foreground">New trackers are registered to your account by RIO GPS. Need another one? <a href="mailto:support@riogps.com" className="text-primary">Contact support</a>.</p>
 
       {renaming && <RenameDialog device={renaming} onClose={() => setRenaming(null)} onSaved={refresh} />}
       {assignFor && <AssignDialog open onOpenChange={(o) => !o && setAssignFor(null)} mode="vehicle" fixedId={assignFor.id} title={`Assign ${label(assignFor)} to a vehicle`} onDone={refresh} />}

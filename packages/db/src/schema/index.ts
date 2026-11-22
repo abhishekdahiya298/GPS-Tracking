@@ -24,3 +24,4 @@ export * from "./billing";
 export * from "./appReleases";
 export * from "./platformSettings";
 export * from "./drivers";
+export * from "./driverAssignments";

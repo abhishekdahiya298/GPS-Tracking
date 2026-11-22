@@ -1,17 +1,27 @@
 "use client";
-import { dateFormatter, zoneLabel, type TimeFormat } from "@rio-gps/core/timezones";
+import {
+  dateFormatter,
+  zoneLabel,
+  type TimeFormat,
+} from "@rio-gps/core/timezones";
 import { Clock, KeyRound, LocateFixed } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { SegmentedFilter } from "@/components/app/filter-bar";
-import { TimeZoneSelect, deviceTimeZone } from "@/components/app/time-zone-select";
+import {
+  TimeZoneSelect,
+  deviceTimeZone,
+} from "@/components/app/time-zone-select";
 import { PageHeader } from "@/components/app/page-header";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
-import { MIN_PASSWORD_LENGTH, PasswordInput } from "@/components/ui/password-input";
+import {
+  MIN_PASSWORD_LENGTH,
+  PasswordInput,
+} from "@/components/ui/password-input";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { authClient } from "@/lib/client/auth-client";
@@ -21,9 +31,27 @@ import { MenuStyleCard } from "./menu-style-card";
 import type { ThemeChoice } from "@/lib/theme";
 import { TwoStepCard } from "./two-step-card";
 
-type Prefs = { timeZone: string | null; timeFormat: TimeFormat | null; navTheme?: string | null };
+type Prefs = {
+  timeZone: string | null;
+  timeFormat: TimeFormat | null;
+  navTheme?: string | null;
+};
 
-export function AccountForm({ name, email, prefs, orgDefaults, twoStep, theme }: { name: string; email: string; prefs: Prefs; twoStep: boolean; theme: ThemeChoice; orgDefaults: { timeZone: string; timeFormat: TimeFormat } }) {
+export function AccountForm({
+  name,
+  email,
+  prefs,
+  orgDefaults,
+  twoStep,
+  theme,
+}: {
+  name: string;
+  email: string;
+  prefs: Prefs;
+  twoStep: boolean;
+  theme: ThemeChoice;
+  orgDefaults: { timeZone: string; timeFormat: TimeFormat };
+}) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -41,11 +69,15 @@ export function AccountForm({ name, email, prefs, orgDefaults, twoStep, theme }:
     const { error: err } = await authClient.changePassword({
       currentPassword: String(f.get("currentPassword") ?? ""),
       newPassword: next,
-      revokeOtherSessions: true
+      revokeOtherSessions: true,
     });
     setBusy(false);
     if (err) {
-      setError(err.status === 429 ? "Too many attempts. Try again in a minute." : err.message || "Could not change the password.");
+      setError(
+        err.status === 429
+          ? "Too many attempts. Try again in a minute."
+          : err.message || "Could not change the password.",
+      );
       return;
     }
     form.reset();
@@ -54,60 +86,130 @@ export function AccountForm({ name, email, prefs, orgDefaults, twoStep, theme }:
 
   return (
     <>
-      <PageHeader title="My account" description="Your name, sign-in and display settings." breadcrumbs={[{ label: "Settings" }, { label: "My account" }]} />
-      <div className="grid min-w-0 max-w-2xl gap-4">
-        <Card className="p-4">
-          <dl className="m-0 grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
-            <dt className="text-muted-foreground">Name</dt>
-            <dd className="m-0">
-              <NameEditor initial={name} />
-            </dd>
-            <dt className="text-muted-foreground">Email</dt>
-            <dd className="m-0 break-all">{email}</dd>
-          </dl>
-        </Card>
-        <TimePreferences initial={prefs} orgDefaults={orgDefaults} />
-        <AppearanceCard initial={theme} />
-        <MapIconsCard />
-        <MenuStyleCard initial={prefs.navTheme ?? null} />
-        <Card>
-          <CardHeader>
-            <CardTitle>Change password</CardTitle>
-          </CardHeader>
-          <form method="post" onSubmit={onSubmit} className="grid gap-4 p-4 pt-0">
-            <Field id="acc-cur" label="Current password" required>
-              <PasswordInput id="acc-cur" name="currentPassword" autoComplete="current-password" required />
-            </Field>
-            <Field id="acc-new" label="New password" description="At least 6 characters." required>
-              <PasswordInput id="acc-new" name="newPassword" autoComplete="new-password" required minLength={MIN_PASSWORD_LENGTH} maxLength={128} />
-            </Field>
-            <Field id="acc-conf" label="Confirm new password" required>
-              <PasswordInput id="acc-conf" name="confirm" autoComplete="new-password" required minLength={MIN_PASSWORD_LENGTH} maxLength={128} />
-            </Field>
-            {error && <Alert tone="danger">{error}</Alert>}
-            <div>
-              <Button type="submit" loading={busy}>
-                <KeyRound /> Change password
-              </Button>
+      <PageHeader
+        title="My account"
+        description="Your profile, sign-in and how RIO GPS looks for you."
+        breadcrumbs={[{ label: "Settings" }, { label: "My account" }]}
+      />
+      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-2">
+        <div className="grid min-w-0 gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile</CardTitle>
+            </CardHeader>
+            <div className="flex items-start gap-4 p-4 pt-0">
+              <span
+                aria-hidden="true"
+                className="grid size-14 shrink-0 place-items-center rounded-full bg-[linear-gradient(150deg,#2f5bea,#0a2463)] text-lg font-bold text-white"
+              >
+                {name
+                  .split(/\s+/)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((w) => w[0]!.toUpperCase())
+                  .join("") || "?"}
+              </span>
+              <dl className="m-0 grid min-w-0 flex-1 grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
+                <dt className="text-muted-foreground">Name</dt>
+                <dd className="m-0">
+                  <NameEditor initial={name} />
+                </dd>
+                <dt className="text-muted-foreground">Email</dt>
+                <dd className="m-0 break-all">{email}</dd>
+              </dl>
             </div>
-            <p className="m-0 text-xs text-muted-foreground">Changing your password signs you out on your other devices.</p>
-          </form>
-        </Card>
-        <TwoStepCard enabled={twoStep} />
+          </Card>
+          <TimePreferences initial={prefs} orgDefaults={orgDefaults} />
+          <AppearanceCard initial={theme} />
+          <MenuStyleCard initial={prefs.navTheme ?? null} />
+        </div>
+        <div className="grid min-w-0 gap-4">
+          <MapIconsCard />
+          <Card>
+            <CardHeader>
+              <CardTitle>Change password</CardTitle>
+            </CardHeader>
+            <form
+              method="post"
+              onSubmit={onSubmit}
+              className="grid gap-4 p-4 pt-0"
+            >
+              <Field id="acc-cur" label="Current password" required>
+                <PasswordInput
+                  id="acc-cur"
+                  name="currentPassword"
+                  autoComplete="current-password"
+                  required
+                />
+              </Field>
+              <Field
+                id="acc-new"
+                label="New password"
+                description="At least 6 characters."
+                required
+              >
+                <PasswordInput
+                  id="acc-new"
+                  name="newPassword"
+                  autoComplete="new-password"
+                  required
+                  minLength={MIN_PASSWORD_LENGTH}
+                  maxLength={128}
+                />
+              </Field>
+              <Field id="acc-conf" label="Confirm new password" required>
+                <PasswordInput
+                  id="acc-conf"
+                  name="confirm"
+                  autoComplete="new-password"
+                  required
+                  minLength={MIN_PASSWORD_LENGTH}
+                  maxLength={128}
+                />
+              </Field>
+              {error && <Alert tone="danger">{error}</Alert>}
+              <div>
+                <Button type="submit" loading={busy}>
+                  <KeyRound /> Change password
+                </Button>
+              </div>
+              <p className="m-0 text-xs text-muted-foreground">
+                Changing your password signs you out on your other devices.
+              </p>
+            </form>
+          </Card>
+          <TwoStepCard enabled={twoStep} />
+        </div>
       </div>
     </>
   );
 }
 
 /** Personal time zone and clock. "" / null = follow the organization (the usual choice). */
-function TimePreferences({ initial, orgDefaults }: { initial: Prefs; orgDefaults: { timeZone: string; timeFormat: TimeFormat } }) {
+function TimePreferences({
+  initial,
+  orgDefaults,
+}: {
+  initial: Prefs;
+  orgDefaults: { timeZone: string; timeFormat: TimeFormat };
+}) {
   const router = useRouter();
   const [tz, setTz] = useState(initial.timeZone ?? "");
-  const [clock, setClock] = useState<TimeFormat | "org">(initial.timeFormat ?? "org");
+  const [clock, setClock] = useState<TimeFormat | "org">(
+    initial.timeFormat ?? "org",
+  );
   const [saving, setSaving] = useState(false);
-  const next: Prefs = { timeZone: tz || null, timeFormat: clock === "org" ? null : clock };
-  const dirty = next.timeZone !== initial.timeZone || next.timeFormat !== initial.timeFormat;
-  const eff = dateFormatter(next.timeZone ?? orgDefaults.timeZone, next.timeFormat ?? orgDefaults.timeFormat);
+  const next: Prefs = {
+    timeZone: tz || null,
+    timeFormat: clock === "org" ? null : clock,
+  };
+  const dirty =
+    next.timeZone !== initial.timeZone ||
+    next.timeFormat !== initial.timeFormat;
+  const eff = dateFormatter(
+    next.timeZone ?? orgDefaults.timeZone,
+    next.timeFormat ?? orgDefaults.timeFormat,
+  );
   // The device zone is only known in the browser; read it after hydration.
   const [device, setDevice] = useState<string | null>(null);
   useEffect(() => setDevice(deviceTimeZone()), []);
@@ -135,12 +237,20 @@ function TimePreferences({ initial, orgDefaults }: { initial: Prefs; orgDefaults
             defaultOption={`Organization default: ${zoneLabel(orgDefaults.timeZone)} (${orgFmt.abbr()})`}
           />
           <p id="acc-tz-help" className="m-0 text-xs text-muted-foreground">
-            Choose your own only if you work in a different zone from your team, for example a dispatcher in Vancouver for a Toronto fleet.
+            Choose your own only if you work in a different zone from your team,
+            for example a dispatcher in Vancouver for a Toronto fleet.
           </p>
           {device && device !== (tz || orgDefaults.timeZone) && (
             <div>
-              <Button type="button" variant="ghost" size="sm" className="h-auto whitespace-normal py-1 text-left" onClick={() => setTz(device)}>
-                <LocateFixed /> Use this device&apos;s time zone ({device.replace(/_/g, " ")})
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto whitespace-normal py-1 text-left"
+                onClick={() => setTz(device)}
+              >
+                <LocateFixed /> Use this device&apos;s time zone (
+                {device.replace(/_/g, " ")})
               </Button>
             </div>
           )}
@@ -152,14 +262,23 @@ function TimePreferences({ initial, orgDefaults }: { initial: Prefs; orgDefaults
             value={clock}
             onChange={setClock}
             options={[
-              { value: "org", label: `Organization (${orgDefaults.timeFormat === "24h" ? "24-hour" : "12-hour"})` },
+              {
+                value: "org",
+                label: `Organization (${orgDefaults.timeFormat === "24h" ? "24-hour" : "12-hour"})`,
+              },
               { value: "12h", label: "12-hour" },
-              { value: "24h", label: "24-hour" }
+              { value: "24h", label: "24-hour" },
             ]}
           />
         </div>
-        <p className="m-0 rounded-md bg-muted px-3 py-2 text-sm" aria-live="polite">
-          Times will look like: <span className="font-medium" suppressHydrationWarning>{eff.full(Date.now())}</span>
+        <p
+          className="m-0 rounded-md bg-muted px-3 py-2 text-sm"
+          aria-live="polite"
+        >
+          Times will look like:{" "}
+          <span className="font-medium" suppressHydrationWarning>
+            {eff.full(Date.now())}
+          </span>
         </p>
         <div>
           <Button
@@ -169,7 +288,10 @@ function TimePreferences({ initial, orgDefaults }: { initial: Prefs; orgDefaults
             onClick={async () => {
               setSaving(true);
               try {
-                await api("/api/account/preferences", { method: "PATCH", json: next });
+                await api("/api/account/preferences", {
+                  method: "PATCH",
+                  json: next,
+                });
                 toast.success("Time preferences saved.");
                 router.refresh();
               } catch (err) {
@@ -219,7 +341,10 @@ function NameEditor({ initial }: { initial: string }) {
     setBusy(true);
     setError(null);
     try {
-      const out = await api<{ name: string }>("/api/account/profile", { method: "PATCH", json: { name: draft } });
+      const out = await api<{ name: string }>("/api/account/profile", {
+        method: "PATCH",
+        json: { name: draft },
+      });
       setName(out.name);
       setEditing(false);
       toast.success("Name updated");
@@ -234,15 +359,39 @@ function NameEditor({ initial }: { initial: string }) {
   return (
     <form onSubmit={save} className="grid gap-1.5">
       <span className="flex flex-wrap items-center gap-2">
-        <Input aria-label="Your name" value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={200} required autoFocus className="max-w-64" autoComplete="name" />
-        <Button type="submit" size="sm" loading={busy} disabled={!draft.trim() || draft.trim() === name}>
+        <Input
+          aria-label="Your name"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          maxLength={200}
+          required
+          autoFocus
+          className="max-w-64"
+          autoComplete="name"
+        />
+        <Button
+          type="submit"
+          size="sm"
+          loading={busy}
+          disabled={!draft.trim() || draft.trim() === name}
+        >
           Save
         </Button>
-        <Button type="button" size="sm" variant="secondary" onClick={() => setEditing(false)} disabled={busy}>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          onClick={() => setEditing(false)}
+          disabled={busy}
+        >
           Cancel
         </Button>
       </span>
-      {error && <span role="alert" className="text-xs text-danger">{error}</span>}
+      {error && (
+        <span role="alert" className="text-xs text-danger">
+          {error}
+        </span>
+      )}
     </form>
   );
 }

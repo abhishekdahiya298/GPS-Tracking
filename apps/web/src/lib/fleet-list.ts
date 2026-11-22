@@ -26,7 +26,8 @@ export type VehicleState = (typeof VEHICLE_STATES)[number];
 
 export const VehicleListQuery = z.object({
   ...base,
-  sort: z.enum(["name", "plate", "state", "speed", "lastSeen"]).default("state"),
+  /** "order": the company's list order first, then moving first (the default everywhere). */
+  sort: z.enum(["order", "name", "plate", "state", "speed", "lastSeen"]).default("order"),
   state: z.enum(["all", "moving", "idle", "stopped", "offline", "no_device"]).default("all"),
   /** Only vehicles in this group (of the caller's organization). */
   group: z.string().uuid().optional()
@@ -70,6 +71,12 @@ export interface VehicleRow {
   groups: string[];
   /** Who drives it now (an active driver), if anyone. */
   driver: { id: string; name: string; phone: string | null } | null;
+  vin: string | null;
+  modelYear: number | null;
+  make: string | null;
+  model: string | null;
+  unitNumber: string | null;
+  sortOrder: number | null;
 }
 
 export interface Page<T, S extends string> {
@@ -82,6 +89,8 @@ export interface Page<T, S extends string> {
 
 const vehicleBase = (organizationId: string, offlineSeconds: number, now: Date) => sql`
   select v.id, v.name, v.license_plate, v.type as vehicle_type, v.status as vehicle_status,
+         v.vin, v.model_year, v.make, v.model as vehicle_model, v.unit_number, v.sort_order,
+         v.plate_region, v.fuel_type, v.color, v.odometer_km, v.odometer_set_at,
          d.id as device_id, d.name as device_name, d.model as device_model, d.last_seen_at,
          cl.latitude, cl.longitude, cl.speed_kph, cl.heading_deg, cl.ignition, cl.recorded_at,
          (select coalesce(array_agg(g.name order by lower(g.name)), '{}')
@@ -116,7 +125,7 @@ const STATE_RANK = sql`case state when 'moving' then 0 when 'idle' then 1 when '
 export async function listVehiclesPage(organizationId: string, q: VehicleListQuery, now: Date, offlineSeconds: number): Promise<Page<VehicleRow, VehicleState>> {
   const db = getDb();
   const search = q.search
-    ? sql` and (v.name ilike ${likePattern(q.search)} or coalesce(v.license_plate, '') ilike ${likePattern(q.search)} or coalesce(d.name, '') ilike ${likePattern(q.search)} or coalesce(d.model, '') ilike ${likePattern(q.search)} or exists (select 1 from drivers dr where dr.vehicle_id = v.id and dr.organization_id = ${organizationId} and dr.name ilike ${likePattern(q.search)}))`
+    ? sql` and (v.name ilike ${likePattern(q.search)} or coalesce(v.license_plate, '') ilike ${likePattern(q.search)} or coalesce(v.vin, '') ilike ${likePattern(q.search)} or coalesce(v.unit_number, '') ilike ${likePattern(q.search)} or concat_ws(' ', v.model_year, v.make, v.model) ilike ${likePattern(q.search)} or coalesce(d.name, '') ilike ${likePattern(q.search)} or coalesce(d.model, '') ilike ${likePattern(q.search)} or exists (select 1 from drivers dr where dr.vehicle_id = v.id and dr.organization_id = ${organizationId} and dr.name ilike ${likePattern(q.search)}))`
     : sql``;
   // Tenant-scoped membership check: a group id from another organization matches nothing.
   const group = q.group ? sql` and exists (select 1 from vehicle_group_members gm where gm.group_id = ${q.group} and gm.vehicle_id = v.id and gm.organization_id = ${organizationId})` : sql``;
@@ -124,6 +133,7 @@ export async function listVehiclesPage(organizationId: string, q: VehicleListQue
   const stateFilter = q.state === "all" ? sql`true` : q.state === "offline" ? sql`state in ('offline', 'never_seen', 'inactive')` : q.state === "stopped" ? sql`state in ('stopped', 'parked')` : sql`state = ${q.state}`;
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
   const order: SQL = {
+    order: sql`sort_order ${dir} nulls last, ${STATE_RANK} asc, last_seen_at desc nulls last`,
     name: sql`lower(name) ${dir}`,
     plate: sql`lower(license_plate) ${dir} nulls last`,
     state: sql`${STATE_RANK} ${dir}, last_seen_at desc nulls last`,
@@ -152,6 +162,12 @@ export async function listVehiclesPage(organizationId: string, q: VehicleListQue
       state: r.state as VehicleState,
       groups: (r.group_names as string[] | null) ?? [],
       driver: (r.driver as VehicleRow["driver"]) ?? null,
+      vin: (r.vin as string | null) ?? null,
+      modelYear: r.model_year == null ? null : Number(r.model_year),
+      make: (r.make as string | null) ?? null,
+      model: (r.vehicle_model as string | null) ?? null,
+      unitNumber: (r.unit_number as string | null) ?? null,
+      sortOrder: r.sort_order == null ? null : Number(r.sort_order),
       device: r.device_id ? { id: String(r.device_id), name: (r.device_name as string | null) ?? null, model: (r.device_model as string | null) ?? null } : null,
       lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at as string).toISOString() : null,
       location:
@@ -183,6 +199,8 @@ export interface DeviceRow {
   imeiLast4?: string;
   lastSeenAt: string | null;
   vehicle: { id: string; name: string; assignedAt: string; type: string; licensePlate: string | null } | null;
+  /** The active driver on the device's vehicle, if any. */
+  driver: { id: string; name: string } | null;
 }
 
 export async function listDevicesPage(
@@ -201,6 +219,8 @@ export async function listDevicesPage(
   const inner = sql`
     select d.id, d.name, d.model, d.status, d.imei, d.last_seen_at, d.created_at,
            v.id as vehicle_id, v.name as vehicle_name, v.type as vehicle_type, v.license_plate, a.assigned_at,
+           (select dr.id from drivers dr where dr.organization_id = ${organizationId} and dr.vehicle_id = v.id and dr.status = 'active' order by dr.assigned_at desc nulls last limit 1) as driver_id,
+           (select dr.name from drivers dr where dr.organization_id = ${organizationId} and dr.vehicle_id = v.id and dr.status = 'active' order by dr.assigned_at desc nulls last limit 1) as driver_name,
            case
              when d.status = 'retired' then 'retired'
              when d.status <> 'active' then 'inactive'
@@ -244,7 +264,8 @@ export async function listDevicesPage(
       state: r.state as DeviceState,
       ...(opts.includeImeiLast4 ? { imeiLast4: String(r.imei).slice(-4) } : {}),
       lastSeenAt: r.last_seen_at ? new Date(r.last_seen_at as string).toISOString() : null,
-      vehicle: r.vehicle_id ? { id: String(r.vehicle_id), name: String(r.vehicle_name), assignedAt: new Date(r.assigned_at as string).toISOString(), type: String(r.vehicle_type ?? "truck"), licensePlate: (r.license_plate as string | null) ?? null } : null
+      vehicle: r.vehicle_id ? { id: String(r.vehicle_id), name: String(r.vehicle_name), assignedAt: new Date(r.assigned_at as string).toISOString(), type: String(r.vehicle_type ?? "truck"), licensePlate: (r.license_plate as string | null) ?? null } : null,
+      driver: r.driver_id ? { id: String(r.driver_id), name: String(r.driver_name) } : null
     })),
     total: rows.length ? Number(rows[0]!.total) : 0,
     page: q.page,
@@ -254,7 +275,24 @@ export async function listDevicesPage(
 }
 
 export interface VehicleDetail {
-  vehicle: { id: string; name: string; licensePlate: string | null; type: string; status: string };
+  vehicle: {
+    id: string;
+    name: string;
+    licensePlate: string | null;
+    type: string;
+    status: string;
+    vin: string | null;
+    modelYear: number | null;
+    make: string | null;
+    model: string | null;
+    plateRegion: string | null;
+    fuelType: string | null;
+    color: string | null;
+    unitNumber: string | null;
+    odometerKm: number | null;
+    odometerSetAt: string | null;
+    sortOrder: number | null;
+  };
   device: { id: string; name: string | null; model: string | null; status: string; imeiLast4?: string; assignedAt: string } | null;
   lastSeenAt: string | null;
   state: VehicleState;
@@ -273,7 +311,24 @@ export async function getVehicleDetail(organizationId: string, vehicleId: string
     left join device_assignments a on a.device_id = f.device_id and a.organization_id = ${organizationId} and a.unassigned_at is null`);
   if (!r) return null;
   return {
-    vehicle: { id: String(r.id), name: String(r.name), licensePlate: (r.license_plate as string | null) ?? null, type: String(r.vehicle_type ?? "truck"), status: String(r.vehicle_status) },
+    vehicle: {
+      id: String(r.id),
+      name: String(r.name),
+      licensePlate: (r.license_plate as string | null) ?? null,
+      type: String(r.vehicle_type ?? "truck"),
+      status: String(r.vehicle_status),
+      vin: (r.vin as string | null) ?? null,
+      modelYear: r.model_year == null ? null : Number(r.model_year),
+      make: (r.make as string | null) ?? null,
+      model: (r.vehicle_model as string | null) ?? null,
+      plateRegion: (r.plate_region as string | null) ?? null,
+      fuelType: (r.fuel_type as string | null) ?? null,
+      color: (r.color as string | null) ?? null,
+      unitNumber: (r.unit_number as string | null) ?? null,
+      odometerKm: r.odometer_km == null ? null : Number(r.odometer_km),
+      odometerSetAt: r.odometer_set_at ? new Date(r.odometer_set_at as string).toISOString() : null,
+      sortOrder: r.sort_order == null ? null : Number(r.sort_order)
+    },
     device: r.device_id
       ? {
           id: String(r.device_id),
@@ -298,5 +353,37 @@ export async function getVehicleDetail(organizationId: string, vehicleId: string
             recordedAt: new Date(r.recorded_at as string).toISOString()
           }
         : null
+  };
+}
+
+export interface VehicleWeek {
+  /** Days in the window (the company's time zone), oldest first. */
+  days: { day: string; distanceM: number; drivingS: number; trips: number }[];
+  distanceM: number;
+  drivingS: number;
+  idleS: number;
+  trips: number;
+  maxSpeedKph: number;
+}
+
+/** Last 7 days of driving for one vehicle, from the daily summaries of every tracker it carried. */
+export async function vehicleWeek(organizationId: string, vehicleId: string, timeZone: string, now = new Date()): Promise<VehicleWeek> {
+  const rows = await getDb().execute<{ day: string; distance_m: number; driving_s: number; idle_s: number; trips: number; max_kph: number }>(sql`
+    select s.day::text as day, sum(s.distance_m)::int as distance_m, sum(s.driving_s)::int as driving_s, sum(s.idle_s)::int as idle_s,
+           sum(s.trips)::int as trips, max(s.max_speed_kph)::int as max_kph
+    from device_daily_stats s
+    join device_assignments a on a.device_id = s.device_id and a.organization_id = ${organizationId} and a.vehicle_id = ${vehicleId}
+      and s.day >= (a.assigned_at at time zone ${timeZone})::date and s.day <= coalesce((a.unassigned_at at time zone ${timeZone})::date, 'infinity'::date)
+    where s.organization_id = ${organizationId}
+      and s.day > ((${now.toISOString()}::timestamptz at time zone ${timeZone})::date - 7)
+    group by s.day order by s.day`);
+  const days = rows.map((r) => ({ day: r.day, distanceM: Number(r.distance_m), drivingS: Number(r.driving_s), trips: Number(r.trips) }));
+  return {
+    days,
+    distanceM: days.reduce((a, d) => a + d.distanceM, 0),
+    drivingS: days.reduce((a, d) => a + d.drivingS, 0),
+    idleS: rows.reduce((a, r) => a + Number(r.idle_s), 0),
+    trips: days.reduce((a, d) => a + d.trips, 0),
+    maxSpeedKph: rows.reduce((a, r) => Math.max(a, Number(r.max_kph)), 0)
   };
 }

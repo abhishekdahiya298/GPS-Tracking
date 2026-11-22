@@ -1,7 +1,7 @@
 import { contextHasPermission } from "@rio-gps/core";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { listGeofences } from "@/lib/alerts";
+import { listGeofences, listRules } from "@/lib/alerts";
 import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib/authz";
 import { AppError } from "@/lib/errors";
 import { GeofenceEditor } from "./geofence-editor";
@@ -19,5 +19,15 @@ export default async function GeofencesPage() {
     throw err;
   }
   if (!contextHasPermission(ctx, "geofences.read")) redirect("/dashboard");
-  return <GeofenceEditor initial={await listGeofences(ctx.organizationId)} canWrite={contextHasPermission(ctx, "geofences.write")} />;
+  const canAlerts = contextHasPermission(ctx, "alerts.read");
+  const [fences, rules] = await Promise.all([listGeofences(ctx.organizationId), canAlerts ? listRules(ctx.organizationId) : Promise.resolve([])]);
+  return (
+    <GeofenceEditor
+      initial={fences}
+      canWrite={contextHasPermission(ctx, "geofences.write")}
+      canLive={contextHasPermission(ctx, "locations.read")}
+      canAlerts={canAlerts}
+      zoneRules={rules.filter((r) => r.geofenceId).map((r) => ({ geofenceId: r.geofenceId!, type: r.type, active: r.active }))}
+    />
+  );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bearing, compass, csvSafe, hasStaleFix, iconName, iconNames, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, stateBucket, trackStats } from "./fleet-model";
+import { bearing, compass, csvSafe, hasStaleFix, iconName, iconNames, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, stateBucket, timeline, trackStats } from "./fleet-model";
 
 const now = Date.parse("2026-09-25T12:00:00Z");
 const loc = (speedKph: number | null, ignition: boolean | null = null) => ({ latitude: 0, longitude: 0, speedKph, headingDeg: 0, altitudeM: null, ignition, motion: null, recordedAt: "2026-09-25T11:59:00Z", receivedAt: "2026-09-25T11:59:00Z" });
@@ -105,5 +105,26 @@ describe("iconName", () => {
     expect(iconName("bus", "stopped", { style: "top", color: "status" })).toBe("top-truck-stopped");
     expect(iconNames({ style: "pin", color: "status" })).toHaveLength(40);
     expect(iconNames({ style: "top", color: "type" })).toHaveLength(20);
+  });
+});
+
+describe("trip timeline", () => {
+  const at = (min: number, lat: number, speed: number, ign: boolean) => ({ latitude: lat, longitude: -79, speedKph: speed, headingDeg: 0, altitudeM: null, ignition: ign, motion: speed > 5, recordedAt: new Date(Date.UTC(2026, 10, 20, 6, 0) + min * 60_000).toISOString() });
+  it("splits a day into trips and stops, in order", () => {
+    const track = [
+      ...Array.from({ length: 30 }, (_, i) => at(i, 43 + i * 0.01, 90, true)), // 30 min drive
+      ...Array.from({ length: 10 }, (_, i) => at(40 + i * 6, 43.3, 0, false)), // parked an hour
+      ...Array.from({ length: 20 }, (_, i) => at(110 + i, 43.3 - i * 0.01, 80, true)) // 20 min drive
+    ];
+    const ev = timeline(track);
+    expect(ev.map((e) => e.kind)).toEqual(["trip", "stop", "trip"]);
+    expect(ev[0]!.n).toBe(1);
+    expect(ev[2]!.n).toBe(2);
+    expect(ev[1]!.endMs - ev[1]!.startMs).toBeGreaterThan(60 * 60_000);
+    expect(ev[0]!.distanceM).toBeGreaterThan(30_000);
+  });
+  it("calls engine-on time without moving idling, not a trip", () => {
+    const track = Array.from({ length: 20 }, (_, i) => at(i, 43, 0, true));
+    expect(timeline(track).map((e) => e.kind)).toEqual(["idle"]);
   });
 });

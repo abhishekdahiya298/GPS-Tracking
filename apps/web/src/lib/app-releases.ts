@@ -108,3 +108,23 @@ export async function assertAppVersionAllowed(headers: Headers): Promise<void> {
   const p = (await loadAll()).get(platform)!;
   if (updateStatus(v, p) === "required") throw new UpdateRequiredError(p);
 }
+
+/** Public store pages for the mobile app. The platform console's update link wins; otherwise the published listings. */
+export const DEFAULT_STORE_LINKS: Record<AppPlatform, string> = {
+  ios: "https://apps.apple.com/app/id6832835266",
+  android: "https://play.google.com/store/apps/details?id=com.riogps.app"
+};
+
+export async function storeLinks(): Promise<Record<AppPlatform, string>> {
+  try {
+    const rows = await loadAll();
+    const pick = (p: AppPlatform) => {
+      const url = rows.get(p)?.updateUrl;
+      return url && url.startsWith("https://") ? url : DEFAULT_STORE_LINKS[p];
+    };
+    return { ios: pick("ios"), android: pick("android") };
+  } catch {
+    // The sign-in page must render even if the database is briefly unreachable.
+    return DEFAULT_STORE_LINKS;
+  }
+}

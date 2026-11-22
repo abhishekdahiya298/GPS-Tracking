@@ -50,7 +50,7 @@ describe("paged alert list", () => {
   it("pages newest first, with totals and counts, only the caller's org", async () => {
     const { body } = await get("page=1&pageSize=10");
     expect(body.total).toBe(38);
-    expect(body.counts).toEqual({ all: 38, unack: 35 });
+    expect(body.counts).toEqual({ all: 38, unack: 35, byKind: { speeding: 30, zone: 5, offline: 3, ignition: 0, load: 0 } });
     expect(body.items).toHaveLength(10);
     expect(body.items[0].type).toBe("device_offline");
     expect(JSON.stringify(body)).not.toContain("Org B secret rule");
@@ -68,6 +68,15 @@ describe("paged alert list", () => {
     expect((await get("search=100%25")).body.total).toBe(5); // vehicle "100% Diesel"
     expect((await get("search=%25")).body.total).toBe(5); // a bare % is literal, not "match all"
     expect((await get("search=Org%20B")).body.total).toBe(0);
+  });
+
+  it("filters by alert kind; per-kind counts ignore the kind filter", async () => {
+    const zones = await get("kind=zone");
+    expect(zones.body.total).toBe(5);
+    expect(zones.body.counts.byKind).toEqual({ speeding: 30, zone: 5, offline: 3, ignition: 0, load: 0 });
+    expect((await get("kind=offline")).body.total).toBe(3);
+    expect((await get("kind=speeding&search=highway")).body.total).toBe(30);
+    expect((await get("kind=nope")).body.total).toBe(38); // invalid → ignored
   });
 
   it("filters by local calendar day in the viewer's time zone", async () => {

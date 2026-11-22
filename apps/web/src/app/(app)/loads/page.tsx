@@ -1,7 +1,7 @@
 import { contextHasModule, contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
 import { LoadAllowanceNotice } from "@/components/app/load-allowance-notice";
-import { listLoads, loadCounts, LOAD_LIST_FILTERS } from "@/lib/loads";
+import { listLoads, loadCounts, loadsDrivenLast24h, LOAD_LIST_FILTERS } from "@/lib/loads";
 import { loadAllowanceNotice } from "@/lib/plans";
 import { requireTenantPage } from "@/lib/request-context";
 import { LoadsView } from "./loads-view";
@@ -19,9 +19,12 @@ export default async function LoadsPage({ searchParams }: { searchParams: Promis
   const q = typeof sp.q === "string" ? sp.q.slice(0, 80) : "";
   const canWrite = contextHasPermission(ctx, "loads.write");
   const [loads, counts, allowance] = await Promise.all([listLoads(ctx.organizationId, { filter, q }), loadCounts(ctx.organizationId), canWrite ? loadAllowanceNotice(ctx.organizationId) : Promise.resolve(null)]);
+  // Only loads still on the road get the last-24-hours figures.
+  const driven = await loadsDrivenLast24h(ctx.organizationId, loads.filter((l) => !["delivered", "cancelled", "declined"].includes(l.status)));
   return (
     <LoadsView
       loads={loads}
+      driven={driven}
       counts={counts}
       filter={filter}
       q={q}
