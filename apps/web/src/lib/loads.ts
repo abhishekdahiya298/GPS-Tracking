@@ -13,7 +13,7 @@ import {
   type LoadStatus
 } from "@rio-gps/core/loads";
 import { getDb, schema } from "@rio-gps/db";
-import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
 import { getServerEnv } from "./env";
@@ -530,3 +530,54 @@ export async function loadCounts(organizationId: string): Promise<Record<"active
 }
 
 export { LOAD_STATUSES };
+
+/**
+ * How far each load's driver went in the last 24 hours, and for how long they drove:
+ * from the vehicle's tracker (vehicle loads) or the driver's phone pings (phone loads).
+ * Segments longer than 20 minutes (gaps) or faster than 250 km/h (GPS jumps) don't count.
+ */
+export async function loadsDrivenLast24h(organizationId: string, loads: Pick<LoadSummaryDto, "id" | "trackingMode" | "vehicle">[], now = new Date()): Promise<Record<string, { distanceM: number; drivingS: number }>> {
+  const out: Record<string, { distanceM: number; drivingS: number }> = {};
+  const vehicleLoads = loads.filter((l) => l.trackingMode === "vehicle" && l.vehicle);
+  const phoneLoads = loads.filter((l) => l.trackingMode === "phone");
+  const since = new Date(now.getTime() - 24 * 3_600_000).toISOString();
+  const sumSql = (src: SQL) => sql`
+    with pts as (${src}),
+    seg as (
+      select k, extract(epoch from (t - pt)) s,
+             2 * 6371008.8 * asin(least(1, sqrt(power(sin(radians(lat - plat) / 2), 2) + cos(radians(plat)) * cos(radians(lat)) * power(sin(radians(lon - plon) / 2), 2)))) m,
+             spd, pspd
+      from pts where pt is not null
+    )
+    select k, coalesce(sum(m) filter (where s > 0 and s <= 1200 and (m / s) * 3.6 <= 250), 0)::float as m,
+           coalesce(sum(s) filter (where s > 0 and s <= 1200 and (coalesce(spd, 0) >= 5 or coalesce(pspd, 0) >= 5)), 0)::float as s
+    from seg group by k`;
+  if (vehicleLoads.length) {
+    const ids = [...new Set(vehicleLoads.map((l) => l.vehicle!.id))];
+    const rows = await getDb().execute<{ k: string; m: number; s: number }>(
+      sumSql(sql`
+        select vehicle_id::text as k, recorded_at t, latitude lat, longitude lon, speed_kph spd,
+               lag(recorded_at) over w pt, lag(latitude) over w plat, lag(longitude) over w plon, lag(speed_kph) over w pspd
+        from location_history
+        where organization_id = ${organizationId} and vehicle_id in (${sql.join(ids.map((i) => sql`${i}::uuid`), sql`, `)}) and recorded_at > ${since}::timestamptz
+        window w as (partition by vehicle_id order by recorded_at)`)
+    );
+    const byVehicle = new Map(rows.map((r) => [r.k, r]));
+    for (const l of vehicleLoads) {
+      const r = byVehicle.get(l.vehicle!.id);
+      out[l.id] = { distanceM: Math.round(Number(r?.m ?? 0)), drivingS: Math.round(Number(r?.s ?? 0)) };
+    }
+  }
+  if (phoneLoads.length) {
+    const rows = await getDb().execute<{ k: string; m: number; s: number }>(
+      sumSql(sql`
+        select load_id::text as k, recorded_at t, latitude lat, longitude lon, speed_kph spd,
+               lag(recorded_at) over w pt, lag(latitude) over w plat, lag(longitude) over w plon, lag(speed_kph) over w pspd
+        from load_pings
+        where organization_id = ${organizationId} and load_id in (${sql.join(phoneLoads.map((l) => sql`${l.id}::uuid`), sql`, `)}) and recorded_at > ${since}::timestamptz
+        window w as (partition by load_id order by recorded_at)`)
+    );
+    for (const r of rows) out[r.k] = { distanceM: Math.round(Number(r.m)), drivingS: Math.round(Number(r.s)) };
+  }
+  return out;
+}

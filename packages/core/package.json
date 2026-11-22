@@ -29,6 +29,7 @@
     "./renewals": "./src/renewals.ts",
     "./loads": "./src/loads.ts",
     "./app-version": "./src/app-version.ts",
-    "./freshness": "./src/freshness.ts"
+    "./freshness": "./src/freshness.ts",
+    "./trips": "./src/trips.ts"
   }
 }

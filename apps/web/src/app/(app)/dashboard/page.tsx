@@ -6,7 +6,6 @@ import { cache, Suspense } from "react";
 import { LocalTime } from "@/components/app/local-time";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/app/states";
-import { StatusBadge } from "@/components/app/status-badge";
 import { STATUS_THEME } from "@/components/app/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -208,13 +207,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       )}
       </div>
 
-      {/* Bento: the map is the big tile; status, alerts, quick actions and trips fill around it. */}
-      <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {/* Bento: the live map is the big tile; status and alerts stack beside it, actions and trips below. */}
+      <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {can("locations.read") && (
           <FleetGlance
             offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS}
             className="flex min-w-0 flex-col overflow-hidden md:col-span-2 xl:row-span-2"
-            mapClassName="h-[320px] xl:h-auto xl:min-h-[440px] xl:flex-1"
+            mapClassName="h-[320px] xl:h-auto xl:min-h-[460px] xl:flex-1"
           />
         )}
         <Card className="min-w-0">
@@ -235,25 +234,25 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           />
         </Card>
         {can("alerts.read") ? (
-          <div className="min-w-0 xl:row-span-2 [&>*]:h-full">
-            <RecentAlertsCard alerts={recentAlerts} now={now} timeZone={rc.timeZone} canWrite={can("alerts.write")} emptyHint={loadsDash ? "Speeding, zone, offline and load alerts will appear here." : "Speeding, zone and offline alerts will appear here."} />
+          <div className="min-w-0 [&>*]:h-full">
+            <RecentAlertsCard alerts={recentAlerts.slice(0, 5)} now={now} timeZone={rc.timeZone} canWrite={can("alerts.write")} emptyHint={loadsDash ? "Speeding, zone, offline and load alerts will appear here." : "Speeding, zone and offline alerts will appear here."} />
           </div>
         ) : null}
         <Card className="min-w-0">
           <CardHeader>
             <IconTitle icon={Zap}>Quick actions</IconTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-3 gap-2">
+          <CardContent className="grid grid-cols-3 gap-2.5">
             {can("locations.read") && <QuickAction href="/map" icon={MapIcon} label="Live map" hint="Every vehicle now" tone="navy" />}
             {can("history.read") && <QuickAction href="/reports" icon={Route} label="Reports" hint="Trips, stops, miles" tone="amber" />}
-            {can("vehicles.create") && <QuickAction href="/vehicles" icon={Plus} label="Add vehicle" hint="Truck, trailer, van" tone="green" />}
+            {can("vehicles.create") && <QuickAction href="/vehicles" icon={Plus} label="Add vehicle" hint="Vehicle, trailer or asset" tone="green" />}
             {can("vehicles.read") && <QuickAction href="/drivers" icon={Users} label="Drivers" hint="Who drives what" tone="purple" />}
             {can("geofences.write") && <QuickAction href="/geofences" icon={Hexagon} label="Zones" hint="Yards and sites" tone="purple" />}
             {can("loads.write") ? <QuickAction href="/loads/new" icon={Package} label="New load" hint="Track a shipment" tone="red" /> : can("alerts.write") ? <QuickAction href="/alerts" icon={Bell} label="Alert rules" hint="Speed, zones, offline" tone="red" /> : null}
           </CardContent>
         </Card>
         {can("history.read") && (
-          <div className="min-w-0 md:col-span-2 xl:col-span-4">
+          <div className="min-w-0 md:col-span-2 [&>*]:h-full">
             <Suspense fallback={<TripsSkeleton />}>
               <RecentTrips ctx={ctx} devices={devices} now={now} u={u} />
             </Suspense>
@@ -303,19 +302,36 @@ function RecentAlertsCard({ alerts, now, timeZone, canWrite, emptyHint }: { aler
                   {alerts.map((a) => {
                     const m = alertMeta(a.type);
                     return (
-                      <li key={a.id} className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-primary-soft/40 sm:px-5">
-                        <span className={cn("grid size-8 shrink-0 place-items-center rounded-full", m.severity === "high" ? "bg-danger-soft text-danger" : m.severity === "medium" ? "bg-warning-soft text-warning" : "bg-info-soft text-info")}>
-                          <AlertTriangle className="size-4" aria-hidden="true" />
-                        </span>
-                        <div className="min-w-0 flex-1 text-sm">
-                          <p className="m-0 truncate">
-                            <strong className="font-medium">{a.vehicleName ?? (a.ruleName.startsWith("Load ") ? a.ruleName : "A device")}</strong> {m.short}
-                          </p>
-                          <p className="m-0 truncate text-xs text-muted-foreground">
-                            {a.ruleName} · {relativeTime(a.occurredAt, now.getTime(), timeZone)}
-                          </p>
-                        </div>
-                        {!a.acknowledgedAt && <StatusBadge tone="danger" label="New" />}
+                      <li key={a.id}>
+                        <Link
+                          href="/alerts"
+                          className={cn(
+                            "relative flex items-start gap-3 py-2.5 pl-5 pr-4 text-foreground no-underline transition-colors hover:bg-primary-soft/40 sm:pr-5",
+                            "before:absolute before:inset-y-2 before:left-2 before:w-[3px] before:rounded-full",
+                            m.severity === "high" ? "before:bg-danger" : m.severity === "medium" ? "before:bg-warning" : "before:bg-info"
+                          )}
+                        >
+                          <span className={cn("mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg", m.severity === "high" ? "bg-danger-soft text-danger" : m.severity === "medium" ? "bg-warning-soft text-warning" : "bg-info-soft text-info")}>
+                            <AlertTriangle className="size-4" aria-hidden="true" />
+                          </span>
+                          <div className="min-w-0 flex-1 text-sm">
+                            <p className="m-0 line-clamp-2 leading-snug">
+                              <strong className="font-semibold">{a.vehicleName ?? (a.ruleName.startsWith("Load ") ? a.ruleName : "A device")}</strong> {m.short}
+                            </p>
+                            <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground" title={a.ruleName}>
+                              {a.ruleName}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1 text-xs text-muted-foreground">
+                            <span className="whitespace-nowrap">{relativeTime(a.occurredAt, now.getTime(), timeZone)}</span>
+                            {!a.acknowledgedAt && (
+                              <span className="inline-flex items-center gap-1 font-medium text-danger">
+                                <span className="size-1.5 rounded-full bg-danger" aria-hidden="true" />
+                                New
+                              </span>
+                            )}
+                          </div>
+                        </Link>
                       </li>
                     );
                   })}
@@ -410,7 +426,7 @@ async function RecentTrips({ ctx, devices, now, u }: { ctx: TenantContext; devic
       {trips.length === 0 ? (
         <CardContent className="text-sm text-muted-foreground">No trips in the last 24 hours.</CardContent>
       ) : (
-        <ul className="m-0 grid list-none p-0 lg:grid-cols-2 [&>li]:border-b [&>li]:border-border lg:[&>li:nth-child(odd)]:border-r">
+        <ul className="m-0 grid list-none p-0 [&>li]:border-b [&>li]:border-border [&>li:last-child]:border-b-0">
           {trips.slice(0, 6).map((t) => (
             <li key={`${t.deviceId}-${t.startAt}`}>
               <Link

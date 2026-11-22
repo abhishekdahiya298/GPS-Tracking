@@ -1,5 +1,7 @@
 "use client";
-import { CalendarCheck, History, MoreHorizontal, Plus, Trash2, Wrench } from "lucide-react";
+import { AlertTriangle, CalendarCheck, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, History, Layers, Plus, Trash2, Wrench, X } from "lucide-react";
+import { FilterTiles } from "@/components/app/list-kit";
+import { VehiclePicture } from "@/components/app/vehicle-picture";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
@@ -7,7 +9,7 @@ import { SegmentedFilter } from "@/components/app/filter-bar";
 import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
-import { StatusBadge, type StatusTone } from "@/components/app/status-badge";
+import { StatusBadge } from "@/components/app/status-badge";
 import { wallTimeToUtc } from "@rio-gps/core/timezones";
 import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
@@ -15,7 +17,6 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Checkbox, Input, Select } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
@@ -25,12 +26,16 @@ import type { ItemDto } from "@/lib/maintenance";
 import { MaintenanceTabs } from "./maintenance-tabs";
 
 type Opt = { id: string; label: string };
+type VehicleOpt = Opt & { type?: string; detail?: string | null; odometerKm?: number | null };
+const COLOR = { overdue: "#b91c1c", due_soon: "#c2410c", ok: "#15803d" } as const;
+const RANK = { overdue: 0, due_soon: 1, ok: 2 } as const;
+/** How far through its interval a service is (0–100), by distance or date, whichever is further. */
+function used(i: ItemDto) {
+  const a = i.intervalKm ? (i.status.kmSinceService / i.intervalKm) * 100 : 0;
+  const b = i.intervalDays && i.status.daysRemaining !== null ? ((i.intervalDays - i.status.daysRemaining) / i.intervalDays) * 100 : 0;
+  return Math.min(100, Math.max(3, a, b));
+}
 type Filter = "all" | "overdue" | "due_soon" | "ok";
-const STATE: Record<string, { tone: StatusTone; label: string }> = {
-  ok: { tone: "success", label: "OK" },
-  due_soon: { tone: "warning", label: "Due soon" },
-  overdue: { tone: "danger", label: "Overdue" }
-};
 const PRESETS = [
   { name: "Oil change", km: 16_093, days: 180 }, // 10,000 mi
   { name: "Tire rotation", km: 12_070, days: null }, // 7,500 mi
@@ -39,7 +44,7 @@ const PRESETS = [
   { name: "Registration renewal", km: null, days: 365 }
 ];
 
-export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[]; members: Opt[]; myUserId: string; canWrite: boolean; renewalsDue?: number }) {
+export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: VehicleOpt[]; members: Opt[]; myUserId: string; canWrite: boolean; renewalsDue?: number }) {
   const u = useUnits();
   const time = useTime();
   const router = useRouter();
@@ -49,6 +54,10 @@ export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[];
   const [adding, setAdding] = useState(false);
   const [servicing, setServicing] = useState<ItemDto | null>(null);
   const [deleting, setDeleting] = useState<ItemDto | null>(null);
+  const [view, setView] = useState<"vehicle" | "all">("vehicle");
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const [recordId, setRecordId] = useState<string | null>(null);
+  const [addFor, setAddFor] = useState<string | null>(null);
 
   async function refresh() {
     setItems((await api<{ items: ItemDto[] }>("/api/maintenance")).items);
@@ -62,11 +71,35 @@ export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[];
   }, [items]);
   const q = search.trim().toLowerCase();
   const shown = items.filter((i) => (filter === "all" || i.status.state === filter) && (!q || i.vehicleName.toLowerCase().includes(q) || i.name.toLowerCase().includes(q)));
+  // One group per vehicle, most urgent first; inside a vehicle, most urgent service first.
   const byVehicle = useMemo(() => {
     const m = new Map<string, ItemDto[]>();
-    for (const i of shown) m.set(i.vehicleName, [...(m.get(i.vehicleName) ?? []), i]);
-    return [...m.entries()];
+    for (const i of shown) m.set(i.vehicleId, [...(m.get(i.vehicleId) ?? []), i]);
+    return [...m.entries()]
+      .map(([vehicleId, list]) => {
+        const sorted = [...list].sort((a, b) => RANK[a.status.state] - RANK[b.status.state] || used(b) - used(a));
+        return { vehicleId, name: list[0]!.vehicleName, list: sorted, worst: sorted[0]! };
+      })
+      .sort((a, b) => RANK[a.worst.status.state] - RANK[b.worst.status.state] || a.name.localeCompare(b.name, undefined, { numeric: true }));
   }, [shown]);
+  const vehicleById = useMemo(() => new Map(props.vehicles.map((v) => [v.id, v])), [props.vehicles]);
+  const record = items.find((i) => i.id === recordId) ?? null;
+  // The most urgent vehicle starts open, so the page shows what needs doing first.
+  const firstOpen = byVehicle[0]?.vehicleId;
+  const isOpen = (id: string) => open.has(id) || (open.size === 0 && id === firstOpen);
+  const toggle = (id: string) =>
+    setOpen((cur) => {
+      const n = new Set(cur.size === 0 && firstOpen ? [firstOpen] : cur);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const dueText = (i: ItemDto) => {
+    const s = i.status;
+    if (s.state === "overdue") return s.daysRemaining !== null && s.daysRemaining <= 0 ? `${-s.daysRemaining || 0} days overdue` : s.kmRemaining !== null ? `${u.fmtDist(Math.abs(s.kmRemaining), 0)} overdue` : "Overdue";
+    const parts = [s.kmRemaining !== null ? `in ${u.fmtDist(s.kmRemaining, 0)}` : null, s.daysRemaining !== null ? `in ${s.daysRemaining} days` : null].filter(Boolean);
+    return parts.join(" or ");
+  };
 
   const every = (i: ItemDto) => [i.intervalKm ? u.fmtDist(i.intervalKm, 0) : null, i.intervalDays ? `${i.intervalDays} days` : null].filter(Boolean).join(" or ");
   const remaining = (i: ItemDto) => {
@@ -85,11 +118,11 @@ export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[];
     <>
       <PageHeader
         title="Maintenance"
-        description="Service reminders by distance or date. Distance is measured from GPS since the last service (driving only)."
+        description="Every service for every vehicle. We count the miles from GPS and remind you before it's due."
         actions={
           props.canWrite && (
             <Button onClick={() => setAdding(true)} disabled={props.vehicles.length === 0}>
-              <Plus /> Add reminder
+              <Plus /> Add service
             </Button>
           )
         }
@@ -114,88 +147,109 @@ export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[];
         </Card>
       ) : (
         <>
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <SearchInput value={search} onChange={setSearch} placeholder="Search vehicle or service…" label="Search reminders" className="sm:w-64" debounceMs={100} />
-            <SegmentedFilter<Filter>
-              label="Filter by status"
-              value={filter}
-              onChange={setFilter}
-              options={[
-                { value: "all", label: "All", count: counts.all },
-                { value: "overdue", label: "Overdue", count: counts.overdue },
-                { value: "due_soon", label: "Due soon", count: counts.due_soon },
-                { value: "ok", label: "OK", count: counts.ok }
-              ]}
-            />
-          </div>
-          {byVehicle.length === 0 ? (
-            <Card>
+          <FilterTiles<Filter>
+            label="Filter by status"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "all", label: "All services", count: counts.all, icon: Layers, color: "#133a8f" },
+              { value: "overdue", label: "Overdue", count: counts.overdue, icon: AlertTriangle, color: "#b91c1c" },
+              { value: "due_soon", label: "Due soon", count: counts.due_soon, icon: Clock, color: "#c2410c" },
+              { value: "ok", label: "Up to date", count: counts.ok, icon: CheckCircle2, color: "#15803d" }
+            ]}
+          />
+          <Card className="min-w-0 overflow-hidden">
+            <div className="flex flex-col gap-2 border-b border-border px-4 py-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+              <SegmentedFilter<"vehicle" | "all">
+                label="View"
+                value={view}
+                onChange={setView}
+                options={[
+                  { value: "vehicle", label: "By vehicle" },
+                  { value: "all", label: "All services" }
+                ]}
+              />
+              <SearchInput value={search} onChange={setSearch} placeholder="Search vehicle or service…" label="Search services" className="sm:w-72" debounceMs={100} />
+              <span className="text-xs text-muted-foreground sm:ml-auto">Most urgent first · distance from GPS since the last service</span>
+            </div>
+            {byVehicle.length === 0 ? (
               <EmptyState title="Nothing matches these filters" />
-            </Card>
-          ) : (
-            <div className="grid gap-4">
-              {byVehicle.map(([vehicle, list]) => (
-                <Card key={vehicle}>
-                  <div className="border-b border-border px-4 py-3">
-                    <h2 className="m-0 text-[15px] font-semibold">{vehicle}</h2>
-                  </div>
-                  <ul className="m-0 list-none divide-y divide-border p-0">
-                    {list.map((i) => (
-                      <li key={i.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <StatusBadge tone={STATE[i.status.state]!.tone} label={STATE[i.status.state]!.label} />
-                            <span className="font-medium">{i.name}</span>
-                            <span className="text-xs text-muted-foreground">every {every(i)}</span>
-                          </div>
-                          <div className={cn("mt-1 text-sm", i.status.state === "overdue" ? "text-danger" : "text-foreground")}>{remaining(i)}</div>
-                          <div className="mt-0.5 text-xs text-muted-foreground">
-                            {u.fmtDist(i.status.kmSinceService)} since last service on {time.date(i.lastServiceAt)}
-                            {i.lastServiceOdometerKm !== null ? ` (odometer ${u.fmtDist(i.lastServiceOdometerKm, 0)})` : ""}
-                          </div>
-                          {i.note && <div className="mt-0.5 text-xs text-muted-foreground">{i.note}</div>}
-                          {i.history.length > 0 && (
-                            <details className="mt-1 text-xs">
-                              <summary className="inline-flex cursor-pointer items-center gap-1 text-muted-foreground">
-                                <History className="size-3.5" aria-hidden="true" /> Service history ({i.history.length})
-                              </summary>
-                              <ul className="m-0 mt-1 grid gap-0.5 pl-5">
-                                {i.history.map((h) => (
-                                  <li key={h.servicedAt}>
-                                    {time.date(h.servicedAt)}
-                                    {h.kmSincePrevious !== null ? ` · ${u.fmtDist(h.kmSincePrevious, 0)} since previous` : ""}
-                                    {h.odometerKm !== null ? ` · odometer ${u.fmtDist(h.odometerKm, 0)}` : ""}
-                                    {h.note ? ` · ${h.note}` : ""}
-                                  </li>
-                                ))}
-                              </ul>
-                            </details>
-                          )}
-                        </div>
+            ) : view === "vehicle" ? (
+              <ul className="m-0 list-none divide-y divide-border p-0">
+                {byVehicle.map(({ vehicleId, name, list, worst }) => {
+                  const v = vehicleById.get(vehicleId);
+                  const expanded = isOpen(vehicleId);
+                  const c = (k: keyof typeof COLOR) => list.filter((i) => i.status.state === k).length;
+                  return (
+                    <li key={vehicleId} className={cn(expanded && "bg-primary-soft/40")}>
+                      <div className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                        <button type="button" aria-expanded={expanded} aria-label={`${expanded ? "Hide" : "Show"} services for ${name}`} onClick={() => toggle(vehicleId)} className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-muted-foreground hover:bg-muted">
+                          {expanded ? <ChevronDown className="size-4" aria-hidden="true" /> : <ChevronRight className="size-4" aria-hidden="true" />}
+                        </button>
+                        <button type="button" onClick={() => toggle(vehicleId)} className="flex min-w-[14rem] flex-1 cursor-pointer items-center gap-3 border-0 bg-transparent p-0 text-left">
+                          <VehiclePicture type={v?.type} state={worst.status.state === "overdue" ? "stopped" : worst.status.state === "due_soon" ? "idle" : "moving"} className="h-8 w-12 shrink-0" />
+                          <span className="grid min-w-0">
+                            <b className="truncate text-sm text-foreground">{name}</b>
+                            <span className="truncate text-xs text-muted-foreground">{[v?.detail, v?.odometerKm != null ? `odometer ${u.fmtDist(v.odometerKm, 0)}` : null].filter(Boolean).join(" · ") || `${list.length} service${list.length === 1 ? "" : "s"}`}</span>
+                          </span>
+                        </button>
+                        <span className="flex flex-wrap gap-1">
+                          {c("overdue") > 0 && <StatusBadge tone="danger" label={`${c("overdue")} overdue`} />}
+                          {c("due_soon") > 0 && <StatusBadge tone="warning" label={`${c("due_soon")} due soon`} />}
+                          {c("ok") > 0 && <StatusBadge tone="neutral" label={`${c("ok")} OK`} />}
+                        </span>
+                        <button type="button" onClick={() => setRecordId(worst.id)} className="flex min-w-[11rem] cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left">
+                          <span className="grid size-7 shrink-0 place-items-center rounded-lg text-white" style={{ background: COLOR[worst.status.state] }}>
+                            <Wrench className="size-3.5" aria-hidden="true" />
+                          </span>
+                          <span className="grid min-w-0 leading-tight">
+                            <b className="truncate text-[13px] text-foreground">{worst.name}</b>
+                            <span className="text-xs font-semibold" style={{ color: COLOR[worst.status.state] }}>
+                              {dueText(worst)}
+                            </span>
+                          </span>
+                        </button>
                         {props.canWrite && (
-                          <div className="flex shrink-0 gap-2">
-                            <Button size="sm" variant={i.status.state === "ok" ? "secondary" : "primary"} onClick={() => setServicing(i)}>
-                              <CalendarCheck /> Mark serviced
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${i.name}`}>
-                                  <MoreHorizontal />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent>
-                                <DropdownMenuItem destructive onSelect={() => setDeleting(i)}>
-                                  <Trash2 /> Delete reminder
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
+                          <Button size="icon-sm" variant="secondary" aria-label={`Add a service for ${name}`} title="Add a service" onClick={() => { setAddFor(vehicleId); setAdding(true); }}>
+                            <Plus />
+                          </Button>
                         )}
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              ))}
+                      </div>
+                      {expanded && (
+                        <ul className="m-0 grid list-none gap-1.5 px-4 pb-3 pl-14">
+                          {list.map((i) => (
+                            <ServiceRow key={i.id} i={i} active={i.id === recordId} every={every(i)} due={dueText(i)} canWrite={props.canWrite} onOpen={() => setRecordId(i.id)} onDone={() => setServicing(i)} />
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <ul className="m-0 grid list-none gap-1.5 p-3">
+                {byVehicle
+                  .flatMap((g) => g.list)
+                  .sort((a, b) => RANK[a.status.state] - RANK[b.status.state] || used(b) - used(a))
+                  .map((i) => (
+                    <ServiceRow key={i.id} i={i} vehicle={i.vehicleName} active={i.id === recordId} every={every(i)} due={dueText(i)} canWrite={props.canWrite} onOpen={() => setRecordId(i.id)} onDone={() => setServicing(i)} />
+                  ))}
+              </ul>
+            )}
+          </Card>
+
+          {record && (
+            <div className="fixed inset-x-2 bottom-2 top-16 z-40 overflow-y-auto overscroll-contain rounded-2xl animate-in sm:left-auto sm:right-4 sm:top-[72px] sm:w-[400px]">
+              <ServiceRecord
+                i={record}
+                every={every(record)}
+                due={dueText(record)}
+                remaining={remaining(record)}
+                canWrite={props.canWrite}
+                onClose={() => setRecordId(null)}
+                onDone={() => setServicing(record)}
+                onDelete={() => setDeleting(record)}
+              />
             </div>
           )}
         </>
@@ -205,7 +259,11 @@ export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[];
         <>
           <AddReminderDialog
             open={adding}
-            onOpenChange={setAdding}
+            onOpenChange={(o) => {
+              setAdding(o);
+              if (!o) setAddFor(null);
+            }}
+            vehicleId={addFor}
             vehicles={props.vehicles}
             members={props.members}
             myUserId={props.myUserId}
@@ -243,7 +301,7 @@ export function MaintenanceManager(props: { initial: ItemDto[]; vehicles: Opt[];
   );
 }
 
-function AddReminderDialog({ open, onOpenChange, vehicles, members, myUserId, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; vehicles: Opt[]; members: Opt[]; myUserId: string; onCreated: () => Promise<void> }) {
+function AddReminderDialog({ open, onOpenChange, vehicleId, vehicles, members, myUserId, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; vehicleId?: string | null; vehicles: Opt[]; members: Opt[]; myUserId: string; onCreated: () => Promise<void> }) {
   const u = useUnits();
   const time = useTime();
   // Service dates are calendar days in the viewer's zone, stored as local noon (never slips a day).
@@ -301,7 +359,7 @@ function AddReminderDialog({ open, onOpenChange, vehicles, members, myUserId, on
         <form method="post" onSubmit={submit} className="grid gap-4" key={preset?.name ?? "custom"}>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field id="m-vehicle" label="Vehicle" required>
-              <Select id="m-vehicle" name="vehicleId" required>
+              <Select id="m-vehicle" name="vehicleId" required defaultValue={vehicleId ?? undefined}>
                 {vehicles.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.label}
@@ -418,5 +476,139 @@ function ServiceDialog({ item, onClose, onDone }: { item: ItemDto | null; onClos
         </DialogContent>
       )}
     </Dialog>
+  );
+}
+
+/** One service of a vehicle: what, how often, a progress bar to the due point, and a quick "done". */
+function ServiceRow({ i, vehicle, active, every, due, canWrite, onOpen, onDone }: { i: ItemDto; vehicle?: string; active: boolean; every: string; due: string; canWrite: boolean; onOpen: () => void; onDone: () => void }) {
+  const time = useTime();
+  const c = COLOR[i.status.state];
+  return (
+    <li className={cn("grid grid-cols-[28px_minmax(0,1.4fr)_minmax(0,1fr)_auto] items-center gap-3 rounded-xl bg-background px-3 py-2", active ? "shadow-[inset_0_0_0_2px_var(--color-primary)]" : "shadow-[inset_0_0_0_1px_var(--color-border)]")}>
+      <span className="grid size-7 place-items-center rounded-lg text-white" style={{ background: c }}>
+        <Wrench className="size-3.5" aria-hidden="true" />
+      </span>
+      <button type="button" onClick={onOpen} className="grid min-w-0 cursor-pointer border-0 bg-transparent p-0 text-left leading-tight">
+        <b className="truncate text-[13px] text-foreground">{vehicle ? `${vehicle} · ${i.name}` : i.name}</b>
+        <span className="truncate text-xs text-muted-foreground">
+          Every {every} · last done {time.date(i.lastServiceAt)}
+        </span>
+      </button>
+      <span className="grid min-w-0 gap-1">
+        <span className="h-1.5 overflow-hidden rounded-full bg-muted">
+          <span className="block h-full rounded-full" style={{ width: `${used(i)}%`, background: c }} />
+        </span>
+        <span className="truncate text-xs font-bold" style={{ color: c }}>
+          {due}
+        </span>
+      </span>
+      <span className="flex items-center gap-1">
+        {canWrite && (
+          <Button size="icon-sm" variant={i.status.state === "ok" ? "secondary" : "primary"} aria-label={`Mark ${i.name} done`} title="Mark as done" onClick={onDone}>
+            <Check />
+          </Button>
+        )}
+        <Button size="icon-sm" variant="ghost" aria-label={`Open ${i.name}`} title="Details and history" onClick={onOpen}>
+          <ChevronRight />
+        </Button>
+      </span>
+    </li>
+  );
+}
+
+/** The service's record: progress, schedule, actions and its full service history. */
+function ServiceRecord({ i, every, due, remaining, canWrite, onClose, onDone, onDelete }: { i: ItemDto; every: string; due: string; remaining: string; canWrite: boolean; onClose: () => void; onDone: () => void; onDelete: () => void }) {
+  const u = useUnits();
+  const time = useTime();
+  const c = COLOR[i.status.state];
+  const label = { overdue: "Overdue", due_soon: "Due soon", ok: "Up to date" }[i.status.state];
+  return (
+    <aside aria-label={`${i.name} for ${i.vehicleName}`} className="overflow-hidden rounded-2xl border border-border bg-background shadow-pop">
+      <div className="flex items-start gap-3 border-b border-border px-4 py-3" style={{ background: `linear-gradient(120deg, var(--color-background) 40%, color-mix(in srgb, ${c} 12%, var(--color-background)))` }}>
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl text-white" style={{ background: c }}>
+          <Wrench className="size-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="m-0 truncate text-xs text-muted-foreground">{i.vehicleName}</p>
+          <h2 className="m-0 truncate text-lg font-extrabold text-primary">{i.name}</h2>
+          <span className="mt-1 inline-flex h-6 items-center rounded-full px-2.5 text-xs font-bold" style={{ color: c, background: `color-mix(in srgb, ${c} 12%, var(--color-background))` }}>
+            {label} · {due}
+          </span>
+        </div>
+        <button type="button" aria-label="Close" onClick={onClose} className="grid size-8 cursor-pointer place-items-center rounded-md border-0 bg-transparent text-muted-foreground hover:bg-muted">
+          <X className="size-4" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="grid gap-3 p-4">
+        <div className="grid gap-1">
+          <span className="h-2 overflow-hidden rounded-full bg-muted">
+            <span className="block h-full rounded-full" style={{ width: `${used(i)}%`, background: c }} />
+          </span>
+          <span className="text-xs text-muted-foreground">{remaining || "—"}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {(
+            [
+              ["Repeats", `Every ${every}`],
+              ["Since last service", u.fmtDist(i.status.kmSinceService, 0)],
+              ["Last done", time.date(i.lastServiceAt)],
+              ["Odometer then", i.lastServiceOdometerKm !== null ? u.fmtDist(i.lastServiceOdometerKm, 0) : "—"],
+              ["Due date", i.status.dueDate ? time.date(`${i.status.dueDate}T12:00:00Z`) : "By distance"],
+              ["Reminders to", `${i.notifyUserIds.length} ${i.notifyUserIds.length === 1 ? "person" : "people"}`]
+            ] as const
+          ).map(([l, v]) => (
+            <div key={l} className="min-w-0 rounded-lg bg-canvas px-2.5 py-1.5 shadow-[inset_0_0_0_1px_var(--color-border)]">
+              <span className="block text-[11px] text-muted-foreground">{l}</span>
+              <b className="block truncate text-[13px]">{v}</b>
+            </div>
+          ))}
+        </div>
+        {canWrite && (
+          <div className="flex gap-2">
+            <Button className="flex-1" onClick={onDone}>
+              <CalendarCheck /> Mark as done
+            </Button>
+            <Button variant="secondary" onClick={onDelete} aria-label="Delete this service" title="Delete this service" className="px-2.5 text-danger">
+              <Trash2 />
+            </Button>
+          </div>
+        )}
+        <section aria-labelledby="svc-history">
+          <h3 id="svc-history" className="m-0 mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+            <History className="size-3.5" aria-hidden="true" /> Service history
+          </h3>
+          {i.history.length === 0 ? (
+            <p className="m-0 rounded-lg bg-canvas px-3 py-2 text-xs text-muted-foreground">No services recorded yet. Use Mark as done after each service.</p>
+          ) : (
+            <ol className="m-0 grid list-none p-0">
+              {i.history.map((h, n) => (
+                <li key={h.servicedAt} className="grid grid-cols-[22px_minmax(0,1fr)] gap-2">
+                  <span className="flex flex-col items-center">
+                    <span className="mt-1 grid size-5 shrink-0 place-items-center rounded-full bg-success text-white">
+                      <Check className="size-3" aria-hidden="true" />
+                    </span>
+                    {n < i.history.length - 1 && <span className="w-0.5 flex-1 bg-border" />}
+                  </span>
+                  <div className="pb-2.5">
+                    <p className="m-0 text-[13px] font-semibold">
+                      {time.date(h.servicedAt)}
+                      {h.odometerKm !== null && <span className="font-normal text-muted-foreground"> · {u.fmtDist(h.odometerKm, 0)}</span>}
+                    </p>
+                    {h.note && <p className="m-0 text-xs">{h.note}</p>}
+                    {h.kmSincePrevious !== null && <p className="m-0 text-[11px] text-muted-foreground">{u.fmtDist(h.kmSincePrevious, 0)} since the previous service</p>}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
+        {i.note && (
+          <div className="rounded-lg bg-canvas px-3 py-2 text-xs shadow-[inset_0_0_0_1px_var(--color-border)]">
+            <b>Notes</b>
+            <p className="m-0 mt-0.5 text-foreground/80">{i.note}</p>
+          </div>
+        )}
+      </div>
+    </aside>
   );
 }

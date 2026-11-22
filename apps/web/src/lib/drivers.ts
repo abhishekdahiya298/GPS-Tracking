@@ -1,6 +1,6 @@
 import type { TenantContext } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
-import { and, eq, ne, sql, type SQL } from "drizzle-orm";
+import { and, eq, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
 import { NotFoundError } from "./errors";
@@ -52,7 +52,7 @@ export const DriverInputSchema = z.object({
 export const DriverPatchSchema = DriverInputSchema.partial();
 export type DriverInput = z.infer<typeof DriverInputSchema>;
 
-export const DRIVER_FILTERS = ["all", "driving", "assigned", "unassigned", "license", "inactive"] as const;
+export const DRIVER_FILTERS = ["all", "active", "driving", "assigned", "unassigned", "license", "inactive"] as const;
 export const DriverListQuery = z.object({
   page: z.coerce.number().int().min(1).max(100_000).default(1),
   pageSize: z.coerce
@@ -61,7 +61,8 @@ export const DriverListQuery = z.object({
     .refine((n) => (PAGE_SIZES as readonly number[]).includes(n))
     .default(25),
   search: z.string().trim().max(100).default(""),
-  sort: z.enum(["name", "vehicle", "license", "updated"]).default("name"),
+  /** "driving": drivers on the road first, then with a vehicle, then the rest (the default). */
+  sort: z.enum(["driving", "name", "vehicle", "license", "updated"]).default("driving"),
   direction: z.enum(["asc", "desc"]).default("asc"),
   state: z.enum(DRIVER_FILTERS).default("all")
 });
@@ -96,6 +97,7 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
     where d.organization_id = ${organizationId}${search}`;
   const filters: Record<(typeof DRIVER_FILTERS)[number], SQL> = {
     all: sql`true`,
+    active: sql`d.status = 'active'`,
     driving: sql`d.status = 'active' and coalesce(cl.speed_kph, 0) >= 5 and cl.recorded_at > now() - interval '10 minutes'`,
     assigned: sql`d.status = 'active' and d.vehicle_id is not null`,
     unassigned: sql`d.status = 'active' and d.vehicle_id is null`,
@@ -104,6 +106,7 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
   };
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
   const order = {
+    driving: sql`(coalesce(cl.speed_kph, 0) >= 5 and cl.recorded_at > now() - interval '10 minutes') desc, (d.vehicle_id is null) asc, lower(d.name) ${dir}`,
     name: sql`lower(d.name) ${dir}`,
     vehicle: sql`lower(v.name) ${dir} nulls last`,
     license: sql`d.license_expires_on ${dir} nulls last`,
@@ -118,6 +121,7 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
       limit ${q.pageSize} offset ${(q.page - 1) * q.pageSize}`),
     db.execute<Record<string, number>>(sql`
       select count(*)::int as all,
+        count(*) filter (where ${filters.active})::int as active,
         count(*) filter (where ${filters.driving})::int as driving,
         count(*) filter (where ${filters.assigned})::int as assigned,
         count(*) filter (where ${filters.unassigned})::int as unassigned,
@@ -156,7 +160,7 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
     total: Number(rows[0]?.total ?? 0),
     page: q.page,
     pageSize: q.pageSize,
-    counts: (counts[0] ?? { all: 0, driving: 0, assigned: 0, unassigned: 0, license: 0, inactive: 0 }) as Record<(typeof DRIVER_FILTERS)[number], number>
+    counts: (counts[0] ?? { all: 0, active: 0, driving: 0, assigned: 0, unassigned: 0, license: 0, inactive: 0 }) as Record<(typeof DRIVER_FILTERS)[number], number>
   };
 }
 
@@ -187,6 +191,82 @@ async function takeVehicle(tx: Tx, organizationId: string, vehicleId: string, dr
     .where(and(eq(schema.drivers.organizationId, organizationId), eq(schema.drivers.vehicleId, vehicleId), ...(driverId ? [ne(schema.drivers.id, driverId)] : [])));
 }
 
+
+/**
+ * Keeps driver_assignments in step with drivers.vehicle_id: closes the driver's open
+ * row (and any other driver's open row on the new vehicle), then opens a new one.
+ */
+async function recordAssignment(tx: Tx, organizationId: string, driverId: string, vehicleId: string | null, at: Date) {
+  await tx
+    .update(schema.driverAssignments)
+    .set({ unassignedAt: at })
+    .where(
+      and(
+        eq(schema.driverAssignments.organizationId, organizationId),
+        eq(schema.driverAssignments.driverId, driverId),
+        isNull(schema.driverAssignments.unassignedAt),
+        ...(vehicleId ? [ne(schema.driverAssignments.vehicleId, vehicleId)] : [])
+      )
+    );
+  if (!vehicleId) return;
+  await tx
+    .update(schema.driverAssignments)
+    .set({ unassignedAt: at })
+    .where(
+      and(
+        eq(schema.driverAssignments.organizationId, organizationId),
+        eq(schema.driverAssignments.vehicleId, vehicleId),
+        isNull(schema.driverAssignments.unassignedAt),
+        ne(schema.driverAssignments.driverId, driverId)
+      )
+    );
+  const [open] = await tx
+    .select({ id: schema.driverAssignments.id })
+    .from(schema.driverAssignments)
+    .where(and(eq(schema.driverAssignments.driverId, driverId), eq(schema.driverAssignments.vehicleId, vehicleId), isNull(schema.driverAssignments.unassignedAt)));
+  if (!open) await tx.insert(schema.driverAssignments).values({ organizationId, driverId, vehicleId, assignedAt: at });
+}
+
+export interface AssignmentRow {
+  id: string;
+  driver: { id: string; name: string; status: "active" | "inactive" };
+  vehicle: { id: string; name: string; type: string; licensePlate: string | null };
+  assignedAt: string;
+  unassignedAt: string | null;
+  /** Distance the vehicle's trackers recorded on the days of this assignment (whole days, so approximate at the edges). */
+  distanceM: number;
+}
+
+/** Assignment history for one driver or one vehicle, newest first. */
+export async function assignmentHistory(organizationId: string, by: { driverId: string } | { vehicleId: string }, limit = 20): Promise<AssignmentRow[]> {
+  const where = "driverId" in by ? sql`h.driver_id = ${by.driverId}` : sql`h.vehicle_id = ${by.vehicleId}`;
+  const rows = await getDb().execute<Record<string, unknown>>(sql`
+    select h.id, h.assigned_at, h.unassigned_at,
+           d.id as d_id, d.name as d_name, d.status as d_status,
+           v.id as v_id, v.name as v_name, v.type as v_type, v.license_plate as v_plate,
+           coalesce((
+             select sum(s.distance_m) from device_assignments a
+             join device_daily_stats s on s.device_id = a.device_id and s.organization_id = ${organizationId}
+             where a.vehicle_id = h.vehicle_id and a.organization_id = ${organizationId}
+               and s.day >= h.assigned_at::date and s.day <= coalesce(h.unassigned_at, now())::date
+               and s.day >= a.assigned_at::date and s.day <= coalesce(a.unassigned_at, now())::date
+           ), 0)::bigint as distance_m
+    from driver_assignments h
+    join drivers d on d.id = h.driver_id and d.organization_id = ${organizationId}
+    join vehicles v on v.id = h.vehicle_id and v.organization_id = ${organizationId}
+    where h.organization_id = ${organizationId} and ${where}
+    order by h.assigned_at desc
+    limit ${limit}`);
+  return rows.map((r) => ({
+    id: String(r.id),
+    driver: { id: String(r.d_id), name: String(r.d_name), status: r.d_status as "active" | "inactive" },
+    vehicle: { id: String(r.v_id), name: String(r.v_name), type: String(r.v_type ?? "truck"), licensePlate: (r.v_plate as string | null) ?? null },
+    assignedAt: new Date(r.assigned_at as string).toISOString(),
+    unassignedAt: r.unassigned_at ? new Date(r.unassigned_at as string).toISOString() : null,
+    distanceM: Number(r.distance_m ?? 0)
+  }));
+}
+
 export async function createDriver(ctx: TenantContext, input: DriverInput, meta: Meta) {
   const d = await getDb().transaction(async (tx) => {
     if (input.vehicleId) await takeVehicle(tx, ctx.organizationId, input.vehicleId, null);
@@ -205,6 +285,7 @@ export async function createDriver(ctx: TenantContext, input: DriverInput, meta:
         notes: input.notes ?? null
       })
       .returning();
+    if (row!.vehicleId) await recordAssignment(tx, ctx.organizationId, row!.id, row!.vehicleId, row!.assignedAt ?? new Date());
     return row!;
   });
   await writeAudit({ action: "driver.created", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "driver", targetId: d.id, metadata: { name: d.name }, ...meta });
@@ -238,6 +319,7 @@ export async function updateDriver(ctx: TenantContext, id: string, patch: Partia
       })
       .where(eq(schema.drivers.id, id))
       .returning();
+    if (deactivating || vehicleChanged) await recordAssignment(tx, ctx.organizationId, id, row!.vehicleId, new Date());
     return row!;
   });
   await writeAudit({ action: "driver.updated", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "driver", targetId: id, metadata: { fields: Object.keys(patch) }, ...meta });
@@ -253,3 +335,32 @@ export async function deleteDriver(ctx: TenantContext, id: string, meta: Meta) {
   await writeAudit({ action: "driver.deleted", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "driver", targetId: id, metadata: { name: d.name }, ...meta });
 }
 
+
+export interface DriverRecord {
+  history: AssignmentRow[];
+  /** Last 7 days on the vehicles this driver drove (only the days they were assigned). */
+  week: { distanceM: number; drivingS: number; trips: number; speeding: number };
+}
+
+/** A driver's record: vehicle history and the last 7 days, for the side panel on Drivers. */
+export async function driverRecord(organizationId: string, driverId: string, now = new Date()): Promise<DriverRecord> {
+  const [history, stats, speeding] = await Promise.all([
+    assignmentHistory(organizationId, { driverId }, 20),
+    getDb().execute<{ distance_m: number; driving_s: number; trips: number }>(sql`
+      select coalesce(sum(s.distance_m), 0)::bigint as distance_m, coalesce(sum(s.driving_s), 0)::bigint as driving_s, coalesce(sum(s.trips), 0)::int as trips
+      from driver_assignments h
+      join device_assignments a on a.vehicle_id = h.vehicle_id and a.organization_id = ${organizationId}
+      join device_daily_stats s on s.device_id = a.device_id and s.organization_id = ${organizationId}
+      where h.organization_id = ${organizationId} and h.driver_id = ${driverId}
+        and s.day > (${now.toISOString()}::timestamptz)::date - 7
+        and s.day >= h.assigned_at::date and s.day <= coalesce(h.unassigned_at, now())::date
+        and s.day >= a.assigned_at::date and s.day <= coalesce(a.unassigned_at, now())::date`),
+    getDb().execute<{ n: number }>(sql`
+      select count(*)::int as n from alert_events e
+      join driver_assignments h on h.vehicle_id = e.vehicle_id and h.organization_id = ${organizationId} and h.driver_id = ${driverId}
+        and e.occurred_at >= h.assigned_at and e.occurred_at < coalesce(h.unassigned_at, 'infinity')
+      where e.organization_id = ${organizationId} and e.type = 'speeding' and e.occurred_at > ${now.toISOString()}::timestamptz - interval '7 days'`)
+  ]);
+  const st = stats[0];
+  return { history, week: { distanceM: Number(st?.distance_m ?? 0), drivingS: Number(st?.driving_s ?? 0), trips: Number(st?.trips ?? 0), speeding: Number(speeding[0]?.n ?? 0) } };
+}

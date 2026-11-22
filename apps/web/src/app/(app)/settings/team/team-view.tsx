@@ -33,6 +33,35 @@ const ROLE_HELP: Record<Role, string> = {
   VIEWER: "Read-only: live map, vehicles, history, alerts."
 };
 
+const ROLE_COLOR: Record<Role, string> = { ORG_ADMIN: "#c42121", FLEET_MANAGER: "#1d4ed8", DISPATCHER: "#7c3aed", VIEWER: "#64748b" };
+const AVATAR_BG = ["#1d4ed8", "#0f766e", "#7c3aed", "#b45309", "#be123c", "#0369a1"];
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("") || "?";
+const avatarColor = (key: string) => AVATAR_BG[[...key].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_BG.length]!;
+
+function Avatar({ name, id }: { name: string; id: string }) {
+  return (
+    <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ background: `linear-gradient(150deg, color-mix(in srgb, ${avatarColor(id)} 80%, #fff), ${avatarColor(id)})` }}>
+      {initials(name)}
+    </span>
+  );
+}
+
+function RoleChip({ role }: { role: string }) {
+  const c = ROLE_COLOR[role as Role] ?? "#64748b";
+  return (
+    <span className="inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs font-semibold" style={{ color: `color-mix(in srgb, ${c} 85%, var(--color-foreground))`, background: `color-mix(in srgb, ${c} 10%, transparent)`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${c} 30%, transparent)` }}>
+      <ShieldCheck className="size-3.5" aria-hidden="true" />
+      {ROLE_LABEL[role] ?? role}
+    </span>
+  );
+}
+
 /** Calendar days in the viewer's zone ("Yesterday" = the previous local date, not 24 h ago). */
 function LastActive({ iso }: { iso: string | null }) {
   const time = useTime();
@@ -67,11 +96,14 @@ export function TeamView({ data, query, you, canManage }: { data: TeamPage; quer
         cell: ({ row }) => {
           const m = row.original;
           return (
-            <div className="min-w-0">
-              <div className="font-medium">
-                {m.name} {m.userId === you && <span className="font-normal text-muted-foreground">(you)</span>}
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar name={m.name} id={m.userId} />
+              <div className="min-w-0">
+                <div className="font-medium">
+                  {m.name} {m.userId === you && <span className="font-normal text-muted-foreground">(you)</span>}
+                </div>
+                <div className="break-all text-xs text-muted-foreground">{m.email}</div>
               </div>
-              <div className="break-all text-xs text-muted-foreground">{m.email}</div>
             </div>
           );
         }
@@ -81,8 +113,8 @@ export function TeamView({ data, query, you, canManage }: { data: TeamPage; quer
         header: "Role",
         meta: { sortKey: "role" } as ColumnMeta,
         cell: ({ row }) => (
-          <span className="inline-flex items-center gap-1.5">
-            {ROLE_LABEL[row.original.role]}
+          <span className="inline-flex flex-wrap items-center gap-1.5">
+            <RoleChip role={row.original.role} />
             {row.original.isSuperAdmin && <StatusBadge tone="primary" label="Platform admin" />}
           </span>
         )
@@ -180,13 +212,14 @@ export function TeamView({ data, query, you, canManage }: { data: TeamPage; quer
           }
           mobileRow={(m) => (
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 text-sm">
+              <Avatar name={m.name} id={m.userId} />
+              <div className="min-w-0 flex-1 text-sm">
                 <div className="font-medium">
                   {m.name} {m.userId === you && <span className="font-normal text-muted-foreground">(you)</span>}
                 </div>
                 <div className="break-all text-xs text-muted-foreground">{m.email}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  {ROLE_LABEL[m.role]} · <LastActive iso={m.lastSignInAt} />
+                  <RoleChip role={m.role} /> <LastActive iso={m.lastSignInAt} />
                 </div>
               </div>
               {canManage && m.userId !== you && <RowMenu m={m} />}
@@ -196,13 +229,34 @@ export function TeamView({ data, query, you, canManage }: { data: TeamPage; quer
         />
       </Card>
 
-      <div className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-        {ROLES.map((r) => (
-          <p key={r} className="m-0">
-            <strong className="text-foreground">{ROLE_LABEL[r]}:</strong> {ROLE_HELP[r]}
-          </p>
-        ))}
-      </div>
+      <Card className="mt-4 overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <span className="grid size-8 place-items-center rounded-lg bg-success-soft text-success">
+            <ShieldCheck className="size-4" aria-hidden="true" />
+          </span>
+          <h2 className="m-0 text-base font-semibold text-[#0a2463] dark:text-foreground">What each role can do</h2>
+        </div>
+        <ul className="m-0 grid list-none gap-2 p-3 sm:grid-cols-2">
+          {ROLES.map((r) => (
+            <li
+              key={r}
+              className="relative flex items-center gap-3 overflow-hidden rounded-xl border py-2.5 pl-4 pr-3"
+              style={{ borderColor: `color-mix(in srgb, ${ROLE_COLOR[r]} 22%, var(--color-border))`, backgroundImage: `linear-gradient(110deg, var(--color-background) 45%, color-mix(in srgb, ${ROLE_COLOR[r]} 9%, var(--color-background)) 100%)` }}
+            >
+              <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1" style={{ background: ROLE_COLOR[r] }} />
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg text-white" style={{ background: `linear-gradient(150deg, color-mix(in srgb, ${ROLE_COLOR[r]} 75%, #fff), ${ROLE_COLOR[r]})` }}>
+                <ShieldCheck className="size-4" aria-hidden="true" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">
+                  {ROLE_LABEL[r]} <span className="font-normal text-muted-foreground">· {data.counts[r] ?? 0}</span>
+                </span>
+                <span className="block text-xs text-muted-foreground">{ROLE_HELP[r]}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Card>
 
       {canManage && (
         <>

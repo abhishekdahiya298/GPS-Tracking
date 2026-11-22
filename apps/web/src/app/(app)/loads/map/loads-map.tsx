@@ -295,6 +295,16 @@ export function LoadsMap({ initial, canWrite }: { initial: LoadSummaryDto[]; can
     );
   }, [sel, detail, loaded]);
 
+  // /loads/map?focus=<loadId> (from the Loads list): select it once the map is ready.
+  const focused = useRef(false);
+  useEffect(() => {
+    if (focused.current || !loaded) return;
+    const id = new URLSearchParams(window.location.search).get("focus");
+    focused.current = true;
+    if (id && rows.some((r) => r.load.id === id)) select(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, rows]);
+
   function select(id: string, fly = true) {
     setSelected(id);
     setSheetOpen(false);

@@ -10,6 +10,7 @@ import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import type { AddressProvider, MapsSettings, MapStyleChoice } from "@/lib/maps-settings";
 import { cn } from "@/lib/cn";
+import { iconName } from "@/app/(app)/map/fleet-model";
 
 const PROVIDERS: ReadonlyArray<{ value: AddressProvider; name: string; cost: string; text: string }> = [
   { value: "off", name: "Off", cost: "Free", text: "Screens show GPS coordinates only." },
@@ -185,7 +186,7 @@ export function MapsSettingsView({ initial, keys }: { initial: MapsSettings; key
                     className={cn("flex cursor-pointer flex-col items-center gap-1 rounded-lg border-2 p-2 text-xs font-semibold", on ? "border-primary bg-primary-soft text-primary" : "border-border bg-background text-muted-foreground hover:border-input")}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element -- small static icon from /public */}
-                    <img src={`/fleet-art/map/icons/${c.value === "top" ? "top-truck-moving" : `${c.value}-${v.iconColor}-truck-moving`}.png`} alt="" className="h-12 w-auto" />
+                    <img src={`/fleet-art/map/icons/${iconName("truck", "moving", { style: c.value, color: v.iconColor })}.png`} alt="" className="h-12 w-auto" />
                     {c.label}
                   </button>
                 );

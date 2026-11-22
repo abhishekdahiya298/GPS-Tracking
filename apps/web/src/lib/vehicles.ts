@@ -1,6 +1,6 @@
 import type { TenantContext } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
-import { and, asc, count, eq, isNull } from "drizzle-orm";
+import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
 import { ConflictError, NotFoundError, ValidationError } from "./errors";
@@ -20,7 +20,64 @@ export function parseOrThrow<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, bod
   return r.data;
 }
 
-export interface VehicleDto {
+/** Optional vehicle details, shared by lists, forms and the vehicle page. */
+export interface VehicleDetails {
+  vin: string | null;
+  modelYear: number | null;
+  make: string | null;
+  model: string | null;
+  plateRegion: string | null;
+  fuelType: string | null;
+  color: string | null;
+  unitNumber: string | null;
+  odometerKm: number | null;
+  odometerSetAt: string | null;
+  sortOrder: number | null;
+}
+
+export function vehicleDetails(v: typeof schema.vehicles.$inferSelect): VehicleDetails {
+  return {
+    vin: v.vin,
+    modelYear: v.modelYear,
+    make: v.make,
+    model: v.model,
+    plateRegion: v.plateRegion,
+    fuelType: v.fuelType,
+    color: v.color,
+    unitNumber: v.unitNumber,
+    odometerKm: v.odometerKm,
+    odometerSetAt: v.odometerSetAt?.toISOString() ?? null,
+    sortOrder: v.sortOrder
+  };
+}
+
+/** Columns to write from a create/patch body (only keys that were sent). */
+function detailColumns(input: Partial<z.infer<typeof VehicleInputSchema>>, now: Date): Partial<typeof schema.vehicles.$inferInsert> {
+  const out: Partial<typeof schema.vehicles.$inferInsert> = {};
+  if (input.vin !== undefined) out.vin = input.vin;
+  if (input.modelYear !== undefined) out.modelYear = input.modelYear;
+  if (input.make !== undefined) out.make = input.make;
+  if (input.model !== undefined) out.model = input.model;
+  if (input.plateRegion !== undefined) out.plateRegion = input.plateRegion;
+  if (input.fuelType !== undefined) out.fuelType = input.fuelType;
+  if (input.color !== undefined) out.color = input.color;
+  if (input.unitNumber !== undefined) out.unitNumber = input.unitNumber;
+  if (input.sortOrder !== undefined) out.sortOrder = input.sortOrder;
+  if (input.odometerKm !== undefined) {
+    out.odometerKm = input.odometerKm;
+    out.odometerSetAt = input.odometerKm === null ? null : now;
+  }
+  return out;
+}
+
+function isVinConflict(err: unknown) {
+  const e = err as { code?: string; constraint_name?: string; cause?: { code?: string; constraint_name?: string } };
+  const code = e?.code ?? e?.cause?.code;
+  const name = e?.constraint_name ?? e?.cause?.constraint_name ?? "";
+  return code === "23505" && (name === "" || name === "vehicles_org_vin_uq");
+}
+
+export interface VehicleDto extends VehicleDetails {
   id: string;
   name: string;
   licensePlate: string | null;
@@ -35,7 +92,7 @@ export async function listVehicles(organizationId: string): Promise<VehicleDto[]
     .select()
     .from(schema.vehicles)
     .where(eq(schema.vehicles.organizationId, organizationId))
-    .orderBy(asc(schema.vehicles.name));
+    .orderBy(sql`${schema.vehicles.sortOrder} asc nulls last`, asc(schema.vehicles.name));
   const assigned = await db
     .select({
       vehicleId: schema.deviceAssignments.vehicleId,
@@ -56,6 +113,7 @@ export async function listVehicles(organizationId: string): Promise<VehicleDto[]
     licensePlate: v.licensePlate,
     type: v.type,
     status: v.status,
+    ...vehicleDetails(v),
     devices: assigned
       .filter((a) => a.vehicleId === v.id)
       .map((a) => ({ id: a.deviceId, model: a.model, name: a.name, assignedAt: a.assignedAt.toISOString() }))
@@ -65,26 +123,46 @@ export async function listVehicles(organizationId: string): Promise<VehicleDto[]
 type Meta = { ipAddress: string | null; userAgent: string | null };
 
 export async function createVehicle(ctx: TenantContext, input: z.infer<typeof VehicleInputSchema>, meta: Meta) {
-  const [v] = await getDb()
-    .insert(schema.vehicles)
-    .values({ organizationId: ctx.organizationId, name: input.name, licensePlate: input.licensePlate ?? null, status: input.status ?? "active", ...(input.type ? { type: input.type } : {}) })
-    .returning();
+  let v: typeof schema.vehicles.$inferSelect | undefined;
+  try {
+    [v] = await getDb()
+      .insert(schema.vehicles)
+      .values({
+        organizationId: ctx.organizationId,
+        name: input.name,
+        licensePlate: input.licensePlate ?? null,
+        status: input.status ?? "active",
+        ...(input.type ? { type: input.type } : {}),
+        ...detailColumns(input, new Date())
+      })
+      .returning();
+  } catch (err) {
+    if (isVinConflict(err)) throw new ConflictError("Another vehicle already has this VIN");
+    throw err;
+  }
   await writeAudit({ action: "vehicle.created", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "vehicle", targetId: v!.id, metadata: { name: v!.name }, ...meta });
   return v!;
 }
 
 export async function updateVehicle(ctx: TenantContext, id: string, patch: z.infer<typeof VehiclePatchSchema>, meta: Meta) {
-  const [v] = await getDb()
-    .update(schema.vehicles)
-    .set({
-      ...(patch.name !== undefined ? { name: patch.name } : {}),
-      ...(patch.licensePlate !== undefined ? { licensePlate: patch.licensePlate } : {}),
-      ...(patch.type !== undefined ? { type: patch.type } : {}),
-      ...(patch.status !== undefined ? { status: patch.status } : {}),
-      updatedAt: new Date()
-    })
-    .where(and(eq(schema.vehicles.id, id), eq(schema.vehicles.organizationId, ctx.organizationId)))
-    .returning();
+  let v: typeof schema.vehicles.$inferSelect | undefined;
+  try {
+    [v] = await getDb()
+      .update(schema.vehicles)
+      .set({
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.licensePlate !== undefined ? { licensePlate: patch.licensePlate } : {}),
+        ...(patch.type !== undefined ? { type: patch.type } : {}),
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...detailColumns(patch, new Date()),
+        updatedAt: new Date()
+      })
+      .where(and(eq(schema.vehicles.id, id), eq(schema.vehicles.organizationId, ctx.organizationId)))
+      .returning();
+  } catch (err) {
+    if (isVinConflict(err)) throw new ConflictError("Another vehicle already has this VIN");
+    throw err;
+  }
   if (!v) throw new NotFoundError("Vehicle not found");
   await writeAudit({ action: "vehicle.updated", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "vehicle", targetId: id, metadata: { fields: Object.keys(patch) }, ...meta });
   return v;

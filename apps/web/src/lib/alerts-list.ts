@@ -1,8 +1,9 @@
 import { addDays, canonicalTimeZone, isValidTimeZone, startOfLocalDay } from "@rio-gps/core/timezones";
 import { ALERT_TYPES, LOAD_ALERT_TYPES } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
-import { and, count, desc, eq, gte, ilike, isNotNull, isNull, lt, or, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, or, type SQL } from "drizzle-orm";
 import { z } from "zod";
+import { ALERT_KINDS, kindOf, KIND_TYPES, type AlertKind } from "./alert-kinds";
 import type { AlertEventDto } from "./alerts";
 import { PAGE_SIZES } from "./fleet-list";
 
@@ -19,6 +20,7 @@ export const AlertListQuery = z.object({
     .default(25),
   status: z.enum(["all", "unack", "ack"]).default("all"),
   type: z.enum(["all", ...ALERT_TYPES, ...LOAD_ALERT_TYPES]).default("all"),
+  kind: z.enum(["all", ...ALERT_KINDS]).default("all"),
   search: z.string().trim().max(100).default(""),
   /** Local calendar days (YYYY-MM-DD) interpreted in `tz`. */
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -33,7 +35,8 @@ export interface AlertPage {
   total: number;
   page: number;
   pageSize: number;
-  counts: { all: number; unack: number };
+  /** all/unack follow the type filter; byKind ignores it, so every tile keeps its number. */
+  counts: { all: number; unack: number; byKind: Record<AlertKind, number> };
 }
 
 const likePattern = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -43,19 +46,21 @@ export async function listAlertsPage(organizationId: string, q: AlertListQuery, 
   const tz = canonicalTimeZone(q.tz ?? defaultTz) ?? "UTC";
   const e = schema.alertEvents;
   const v = schema.vehicles;
-  const base: SQL[] = [eq(e.organizationId, organizationId)];
-  if (q.type !== "all") base.push(eq(e.type, q.type));
+  const scope: SQL[] = [eq(e.organizationId, organizationId)];
   if (q.search) {
     const p = likePattern(q.search);
-    base.push(or(ilike(e.ruleName, p), ilike(v.name, p))!);
+    scope.push(or(ilike(e.ruleName, p), ilike(v.name, p))!);
   }
-  if (q.from) base.push(gte(e.occurredAt, startOfLocalDay(q.from, tz)));
-  if (q.to) base.push(lt(e.occurredAt, startOfLocalDay(addDays(q.to, 1), tz)));
+  if (q.from) scope.push(gte(e.occurredAt, startOfLocalDay(q.from, tz)));
+  if (q.to) scope.push(lt(e.occurredAt, startOfLocalDay(addDays(q.to, 1), tz)));
+  const base: SQL[] = [...scope];
+  if (q.type !== "all") base.push(eq(e.type, q.type));
+  if (q.kind !== "all") base.push(inArray(e.type, [...KIND_TYPES[q.kind]]));
   const status = q.status === "unack" ? [isNull(e.acknowledgedAt)] : q.status === "ack" ? [isNotNull(e.acknowledgedAt)] : [];
   const db = getDb();
   const join = and(eq(v.id, e.vehicleId), eq(v.organizationId, organizationId));
 
-  const [rows, [tot], [allCount], [unackCount]] = await Promise.all([
+  const [rows, [tot], [allCount], [unackCount], perType] = await Promise.all([
     db
       .select({ ev: e, vehicleName: v.name })
       .from(e)
@@ -66,8 +71,14 @@ export async function listAlertsPage(organizationId: string, q: AlertListQuery, 
       .offset((q.page - 1) * q.pageSize),
     db.select({ n: count() }).from(e).leftJoin(v, join).where(and(...base, ...status)),
     db.select({ n: count() }).from(e).leftJoin(v, join).where(and(...base)),
-    db.select({ n: count() }).from(e).leftJoin(v, join).where(and(...base, isNull(e.acknowledgedAt)))
+    db.select({ n: count() }).from(e).leftJoin(v, join).where(and(...base, isNull(e.acknowledgedAt))),
+    db.select({ type: e.type, n: count() }).from(e).leftJoin(v, join).where(and(...scope)).groupBy(e.type)
   ]);
+  const byKind = Object.fromEntries(ALERT_KINDS.map((k) => [k, 0])) as Record<AlertKind, number>;
+  for (const r of perType) {
+    const k = kindOf(r.type);
+    if (k) byKind[k] += r.n;
+  }
   return {
     items: rows.map(({ ev, vehicleName }) => ({
       id: ev.id,
@@ -85,6 +96,6 @@ export async function listAlertsPage(organizationId: string, q: AlertListQuery, 
     total: tot?.n ?? 0,
     page: q.page,
     pageSize: q.pageSize,
-    counts: { all: allCount?.n ?? 0, unack: unackCount?.n ?? 0 }
+    counts: { all: allCount?.n ?? 0, unack: unackCount?.n ?? 0, byKind }
   };
 }

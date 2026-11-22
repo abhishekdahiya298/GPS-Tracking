@@ -32,7 +32,7 @@ export default async function MaintenancePage() {
   return (
     <MaintenanceManager
       initial={items}
-      vehicles={vehicles.map((v) => ({ id: v.id, label: v.name }))}
+      vehicles={vehicles.map((v) => ({ id: v.id, label: v.name, type: v.type, detail: [v.modelYear, v.make, v.model].filter(Boolean).join(" ") || null, odometerKm: v.odometerKm }))}
       members={members.map((m) => ({ id: m.userId, label: `${m.name} <${m.email}>` }))}
       myUserId={ctx.userId}
       canWrite={canWrite}

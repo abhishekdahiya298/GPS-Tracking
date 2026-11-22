@@ -22,6 +22,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { ActivityReport, ActivityReportType, IdleRow, MileageRow, SpeedRow, StopRow } from "@/lib/activity-reports";
+import { useAddress } from "@/lib/use-address";
 import { ReportTabs } from "./report-tabs";
 
 type Dev = { id: string; label: string };
@@ -483,6 +484,7 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
                           <>
                             <TH>{type === "speeding" ? "When" : "From"}</TH>
                             {many && <TH>Vehicle</TH>}
+                            <TH className="min-w-[220px]">Where</TH>
                             <TH className="text-right">Duration</TH>
                             {type === "speeding" && <TH className="text-right">Top speed</TH>}
                             <TH>
@@ -511,6 +513,9 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
                                 <div className="text-xs text-muted-foreground">{r.endAt ? (r.endAt === r.startAt ? "single reading" : `to ${time.dateTime(r.endAt)}`) : "still stopped"}</div>
                               </TD>
                               {many && <TD className="max-w-[14rem] truncate">{r.vehicle}</TD>}
+                              <TD>
+                                <Where lat={r.lat} lon={r.lon} />
+                              </TD>
                               <TD className="whitespace-nowrap text-right tabular-nums">{"durationS" in r ? secs(r.durationS) : hm(r.durationMin)}</TD>
                               {"maxSpeedKph" in r && (
                                 <TD className="whitespace-nowrap text-right tabular-nums">
@@ -544,6 +549,7 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
                         <li key={`${r.startAt}${r.deviceId}`} className="flex items-center justify-between gap-3 px-4 py-3">
                           <div className="min-w-0 text-sm">
                             <div className="font-medium">{time.dateTime(r.startAt)}</div>
+                            <Where lat={r.lat} lon={r.lon} />
                             <div className="truncate text-xs text-muted-foreground">
                               {many ? `${r.vehicle} · ` : ""}
                               {"durationS" in r ? `${secs(r.durationS)} · top ${u.fmtSpeed(r.maxSpeedKph)}` : `${hm(r.durationMin)}${r.endAt ? "" : " · still stopped"}`}
@@ -576,5 +582,16 @@ function MapLink({ row }: { row: StopRow | IdleRow | SpeedRow }) {
         <MapPinned /> Map
       </Link>
     </Button>
+  );
+}
+
+/** Street address of a stop / idle / speeding point (coordinates while it loads or with addresses off). */
+function Where({ lat, lon }: { lat: number; lon: number }) {
+  const a = useAddress(lat, lon);
+  const text = a ? [a.line1, a.line2].filter(Boolean).join(", ") : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+  return (
+    <span className="line-clamp-2 text-xs leading-4 [overflow-wrap:anywhere]" title={a?.label ?? text}>
+      {text}
+    </span>
   );
 }

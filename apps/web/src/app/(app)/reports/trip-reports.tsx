@@ -22,6 +22,7 @@ import { Input, Select } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { TripDto, TripReport } from "@/lib/reports";
+import { useAddress } from "@/lib/use-address";
 import { ReportTabs } from "./report-tabs";
 
 type Dev = { id: string; label: string };
@@ -297,12 +298,12 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
                     <CardTitle className="text-sm">Distance per day</CardTitle>
                   </CardHeader>
                   <div className="px-4 pb-4">
-                    <ColumnChart data={dayPoints} ariaLabel="Distance per day" tableHeads={["Day", "Distance"]} color="#6d28d9" labelEvery={dayPoints.length > 10 ? 5 : 1} className="h-44" />
+                    <ColumnChart data={dayPoints} ariaLabel="Distance per day" tableHeads={["Day", "Distance"]} color="#6d28d9" labelEvery={dayPoints.length > 10 ? 5 : 1} />
                   </div>
                 </Card>
                 <Card className="min-w-0">
                   <CardHeader>
-                    <CardTitle className="text-sm">Driving time</CardTitle>
+                    <CardTitle className="text-sm">Driving vs idling</CardTitle>
                   </CardHeader>
                   <DriveDonut driving={drivingMin} idle={totalIdle} />
                 </Card>
@@ -314,7 +315,7 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
                     </span>
                   </CardHeader>
                   <div className="px-4 pb-4">
-                    <ColumnChart data={speedPoints} ariaLabel="Top speed per day" tableHeads={["Day", "Top speed"]} color="#dc2626" labelEvery={speedPoints.length > 10 ? 5 : 1} className="h-44" />
+                    <ColumnChart data={speedPoints} ariaLabel="Top speed per day" tableHeads={["Day", "Top speed"]} color="#dc2626" labelEvery={speedPoints.length > 10 ? 5 : 1} />
                   </div>
                 </Card>
               </div>
@@ -332,6 +333,7 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
                         <TH className="w-10">#</TH>
                         {sortHead("start", "Start")}
                         <TH>End</TH>
+                        <TH className="min-w-[200px]">Route</TH>
                         {sortHead("duration", "Duration", "text-right")}
                         {sortHead("distance", "Distance", "text-right")}
                         {sortHead("max", "Max speed", "text-right")}
@@ -346,6 +348,9 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
                           <TD className="tabular-nums text-muted-foreground">{(page - 1) * PAGE + i + 1}</TD>
                           <TD className="whitespace-nowrap">{fmt(t.startAt)}</TD>
                           <TD className="whitespace-nowrap">{fmt(t.endAt)}</TD>
+                          <TD>
+                            <TripRoute t={t} />
+                          </TD>
                           <TD className="whitespace-nowrap text-right tabular-nums">
                             <span className="inline-flex items-center gap-1">
                               <Clock className="size-3.5 text-[#15803d]" aria-hidden="true" />
@@ -374,6 +379,7 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
                     <li key={t.startAt} className="flex items-center justify-between gap-3 px-4 py-3">
                       <div className="min-w-0 text-sm">
                         <div className="font-medium">{fmt(t.startAt)}</div>
+                        <TripRoute t={t} />
                         <div className="text-xs text-muted-foreground">
                           {hm(t.durationMin)} · {u.fmtDist(t.distanceKm)} · max {u.fmtSpeed(t.maxSpeedKph)}
                         </div>
@@ -415,9 +421,9 @@ function DriveDonut({ driving, idle }: { driving: number; idle: number }) {
   const d = total ? (driving / total) * C : 0;
   const pct = (v: number) => (total ? Math.round((v / total) * 100) : 0);
   return (
-    <div className="flex flex-wrap items-center gap-5 px-5 pb-5">
-      <svg viewBox="0 0 100 100" className="size-36 shrink-0 -rotate-90" aria-hidden="true">
-        <circle cx="50" cy="50" r={R} fill="none" stroke="#cbd5e1" strokeWidth="12" />
+    <div className="flex flex-wrap items-center gap-5 px-5 py-4">
+      <svg viewBox="0 0 100 100" className="size-32 shrink-0 -rotate-90" aria-hidden="true">
+        <circle cx="50" cy="50" r={R} fill="none" stroke="#f59e0b" strokeWidth="12" />
         <circle cx="50" cy="50" r={R} fill="none" stroke="#16a34a" strokeWidth="12" strokeDasharray={`${d} ${C}`} strokeLinecap={d > 0 && d < C ? "round" : "butt"} />
         <text x="50" y="47" transform="rotate(90 50 50)" textAnchor="middle" dominantBaseline="central" className="fill-foreground text-[11px] font-bold tabular-nums">
           {hm(total)}
@@ -426,7 +432,7 @@ function DriveDonut({ driving, idle }: { driving: number; idle: number }) {
           total
         </text>
       </svg>
-      <ul className="m-0 grid min-w-36 flex-1 list-none gap-2 p-0 text-sm">
+      <ul className="m-0 grid min-w-44 flex-1 list-none gap-2.5 p-0 text-sm [&_strong]:whitespace-nowrap">
         <li className="flex items-center gap-2">
           <span aria-hidden="true" className="size-2.5 rounded-full bg-[#16a34a]" />
           <span className="flex-1 text-muted-foreground">Driving</span>
@@ -434,13 +440,29 @@ function DriveDonut({ driving, idle }: { driving: number; idle: number }) {
           <span className="w-10 text-right text-xs text-muted-foreground">{pct(driving)}%</span>
         </li>
         <li className="flex items-center gap-2">
-          <span aria-hidden="true" className="size-2.5 rounded-full bg-[#cbd5e1]" />
-          <span className="flex-1 text-muted-foreground">Idle / stop</span>
+          <span aria-hidden="true" className="size-2.5 rounded-full bg-[#f59e0b]" />
+          <span className="flex-1 text-muted-foreground">Idling</span>
           <strong className="tabular-nums">{hm(idle)}</strong>
           <span className="w-10 text-right text-xs text-muted-foreground">{pct(idle)}%</span>
         </li>
       </ul>
     </div>
+  );
+}
+
+/** Short place name for a point: the town line of the address, or coordinates while it loads. */
+function Place({ lat, lon }: { lat: number; lon: number }) {
+  const a = useAddress(lat, lon);
+  const text = a ? (a.line2 ?? a.line1) : `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+  return <span title={a?.label ?? text}>{text}</span>;
+}
+
+/** Where the trip started → where it ended. */
+function TripRoute({ t }: { t: TripDto }) {
+  return (
+    <span className="line-clamp-2 text-xs leading-4 text-muted-foreground [overflow-wrap:anywhere]">
+      <Place lat={t.start.lat} lon={t.start.lon} /> <span aria-label="to">→</span> <Place lat={t.end.lat} lon={t.end.lon} />
+    </span>
   );
 }
 

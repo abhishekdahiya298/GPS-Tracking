@@ -1,10 +1,13 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CircleStop, Clock, Cpu, Gauge, MapPin, Power, History, Layers, Navigation, Timer, Unplug, WifiOff, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2, Truck } from "lucide-react";
+import { CircleStop, Clock, Cpu, MapPin, History, Layers, Navigation, Timer, Unplug, WifiOff, Link2, Link2Off, Map as MapIcon, MoreHorizontal, Pencil, Plus, RefreshCw, Share2, Trash2, Truck } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
+import { DensityToggle, IgnitionDot, OrderBadge, PlateTag, useDensity, VinTag, yearMakeModel } from "@/components/app/vehicle-tags";
+import { StatusChip } from "@/components/app/status-chip";
 import { ACTION_COLOR, FilterTiles, RowActions } from "@/components/app/list-kit";
 import { useAddress } from "@/lib/use-address";
 import { DriverAvatar } from "../drivers/drivers-view";
@@ -31,21 +34,20 @@ import type { EditableVehicle } from "../_fleet/vehicle-form-dialog";
 
 // Drawer and dialogs (with their form/validation code) load on first use, not with the page.
 const AssignDialog = dynamic(() => import("../_fleet/assign-dialog").then((m) => m.AssignDialog));
-const VehicleDetailSheet = dynamic(() => import("../_fleet/vehicle-detail-sheet").then((m) => m.VehicleDetailSheet));
 const ShareDialog = dynamic(() => import("./share-dialog").then((m) => m.ShareDialog));
 const GroupsDialog = dynamic(() => import("./groups-dialog").then((m) => m.GroupsDialog));
 const VehicleFormDialog = dynamic(() => import("../_fleet/vehicle-form-dialog").then((m) => m.VehicleFormDialog));
 import { VehicleStateBadge } from "../_fleet/vehicle-state";
 import { deviceDisplayName } from "@/lib/device-name";
 
-/** Street address (or coordinates while it loads) with a pin; one short line. */
+/** Full street address (or coordinates while it loads) with a pin; wraps to a second line when long. */
 function LocationCell({ lat, lon, moving }: { lat: number; lon: number; moving: boolean }) {
   const a = useAddress(lat, lon, moving);
   const text = a ? [a.line1, a.line2].filter(Boolean).join(", ") : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
   return (
-    <span className="flex min-w-0 max-w-52 items-center gap-1.5 text-sm" title={a?.label ?? text}>
-      <MapPin className="size-4 shrink-0 text-[#2563eb]" aria-hidden="true" />
-      <span className="truncate">{text}</span>
+    <span className="flex min-w-0 items-start gap-1 text-xs leading-4 text-foreground/80" title={a?.label ?? text}>
+      <MapPin className="mt-px size-3.5 shrink-0 text-[#2563eb]" aria-hidden="true" />
+      <span className="line-clamp-2 [overflow-wrap:anywhere]">{text}</span>
     </span>
   );
 }
@@ -58,8 +60,8 @@ type Can = { create: boolean; update: boolean; remove: boolean; assign: boolean;
 export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleRow, VehicleState>; query: VehicleListQuery; can: Can; groups: GroupDto[] }) {
   const u = useUnits();
   const t = useTime();
+  const router = useRouter();
   const { set, refresh, pending } = useListParams();
-  const [detailId, setDetailId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<EditableVehicle | null>(null);
   const [assignFor, setAssignFor] = useState<VehicleRow | null>(null);
@@ -70,9 +72,8 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
   const [sharing, setSharing] = useState<VehicleRow | null>(null);
   const filtered = query.search !== "" || query.state !== "all" || !!query.group;
 
-  /** Midnight today in the viewer's zone, for the "today's trips" link. */
-  const todayStart = () => new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
-  const openEdit = (v: VehicleRow) => {
+  const [density, setDensity] = useDensity("vehicles");
+  const openEdit = (v: Pick<VehicleRow, "id" | "name" | "licensePlate" | "type" | "vehicleStatus">) => {
     setEditing({ id: v.id, name: v.name, licensePlate: v.licensePlate, type: v.type, vehicleStatus: v.vehicleStatus });
     setFormOpen(true);
   };
@@ -85,8 +86,10 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        <DropdownMenuItem onSelect={() => setDetailId(v.id)}>
-          <Truck aria-hidden="true" /> View details
+        <DropdownMenuItem asChild>
+          <Link href={`/vehicles/${v.id}`}>
+            <Truck aria-hidden="true" /> Vehicle details
+          </Link>
         </DropdownMenuItem>
         {can.map && v.device && v.location && (
           <DropdownMenuItem asChild>
@@ -132,98 +135,88 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
       {
         id: "vehicle",
         header: "Vehicle",
-        meta: { sortKey: "name" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) => (
-          <div className="flex min-w-0 items-center gap-3">
-            <VehiclePicture type={v.type} state={pictureState(v.device ? v.state : null)} className="h-10 w-14" />
-            <div className="min-w-0 max-w-[15rem]">
-              <p className="m-0 truncate font-semibold text-foreground">{v.name}</p>
-              <p className="m-0 truncate text-xs text-muted-foreground" title={[VEHICLE_TYPE_LABEL[asVehicleType(v.type)], v.licensePlate, ...v.groups].filter(Boolean).join(" · ")}>
-                {[VEHICLE_TYPE_LABEL[asVehicleType(v.type)], v.licensePlate, ...v.groups].filter(Boolean).join(" · ")}
-              </p>
-            </div>
-          </div>
-        )
-      },
-      {
-        id: "status",
-        header: "Status · device",
-        meta: { sortKey: "state" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) => (
-          <div className="grid justify-items-start gap-1">
-            <VehicleStateBadge state={v.state} />
-            <span className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-muted-foreground">
-              <Cpu className="size-3" aria-hidden="true" />
-              {v.device ? deviceDisplayName(v.device.name, v.device.model) : "No GPS device"}
-            </span>
-          </div>
-        )
-      },
-      {
-        id: "driver",
-        header: "Driver",
-        meta: { hideable: true, label: "Driver" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) =>
-          v.driver ? (
-            <Link href={`/drivers?search=${encodeURIComponent(v.driver.name)}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-2 text-foreground no-underline hover:underline">
-              <DriverAvatar name={v.driver.name} className="size-7 text-[11px]" />
-              <span className="truncate">{v.driver.name}</span>
-            </Link>
-          ) : (
-            <Link href="/drivers" onClick={(e) => e.stopPropagation()} className="whitespace-nowrap text-sm text-muted-foreground no-underline hover:text-primary hover:underline">
-              No driver
-            </Link>
-          )
-      },
-      {
-        id: "location",
-        header: "Location",
-        meta: { hideable: true, label: "Location" } satisfies ColumnMeta,
-        cell: ({ row: { original: v } }) => (v.location ? <LocationCell lat={v.location.latitude} lon={v.location.longitude} moving={v.state === "moving"} /> : <span className="text-muted-foreground">{v.device ? "No position yet" : "—"}</span>)
-      },
-      {
-        id: "live",
-        header: "Speed · ignition",
-        meta: { sortKey: "speed", hideable: true, label: "Speed and ignition" } satisfies ColumnMeta,
-        // A silent tracker's last speed is history, not now: show a dash, never "65 mph" for a truck that stopped reporting days ago.
+        meta: { sortKey: "name", width: "31%" } satisfies ColumnMeta,
         cell: ({ row: { original: v } }) => {
-          const live = v.location && !SILENT.has(v.state);
-          const ign = v.location?.ignition;
+          const ymm = yearMakeModel(v);
           return (
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold">
-              <span className={live && v.state === "moving" ? "inline-flex h-6 items-center gap-1 rounded-full bg-[#15803d]/12 px-2 text-[#15803d] dark:text-[#4ade80]" : "inline-flex h-6 items-center gap-1 rounded-full bg-muted px-2 text-muted-foreground"}>
-                <Gauge className="size-3.5" aria-hidden="true" />
-                {live ? u.fmtSpeed(v.location!.speedKph) : "—"}
-              </span>
-              <span className={ign ? "inline-flex h-6 items-center gap-1 rounded-full bg-[#16a34a]/12 px-2 text-[#15803d] dark:text-[#4ade80]" : "inline-flex h-6 items-center gap-1 rounded-full bg-muted px-2 text-muted-foreground"} title="Ignition">
-                <Power className="size-3.5" aria-hidden="true" />
-                {ign == null ? "—" : ign ? "On" : "Off"}
-              </span>
-            </span>
+            <div className="flex min-w-0 items-center gap-2.5">
+              <VehiclePicture type={v.type} state={pictureState(v.device ? v.state : null)} className={density === "compact" ? "h-8 w-12" : "h-10 w-14"} />
+              <div className="grid min-w-0 gap-0.5">
+                <p className="m-0 flex min-w-0 items-baseline gap-1.5 whitespace-nowrap" title={[v.name, ymm, ...v.groups].filter(Boolean).join(" · ")}>
+                  <span className="font-semibold text-foreground">{v.name}</span>
+                  <OrderBadge order={v.sortOrder} className="self-center" />
+                  {ymm && <span className="truncate text-xs text-muted-foreground">{ymm}</span>}
+                </p>
+                <p className="m-0 flex flex-wrap items-center gap-1">
+                  <PlateTag plate={v.licensePlate} />
+                  <VinTag vin={v.vin} />
+                  {!v.licensePlate && !v.vin && <span className="text-xs text-muted-foreground">{VEHICLE_TYPE_LABEL[asVehicleType(v.type)]}</span>}
+                </p>
+              </div>
+            </div>
           );
         }
       },
       {
+        id: "status",
+        header: "Status · speed",
+        meta: { sortKey: "state", width: "18%" } satisfies ColumnMeta,
+        // A silent tracker's last speed is history, not now: speed only shows while it's moving and reporting.
+        cell: ({ row: { original: v } }) => {
+          const live = v.location && !SILENT.has(v.state);
+          return (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <StatusChip status={v.state} label={v.state === "moving" && live ? `Moving · ${u.fmtSpeed(v.location!.speedKph)}` : undefined} />
+              {live && <IgnitionDot ignition={v.location!.ignition} />}
+            </div>
+          );
+        }
+      },
+      {
+        id: "driver",
+        header: "Driver · location",
+        meta: { hideable: true, label: "Driver and location", width: "29%" } satisfies ColumnMeta,
+        cell: ({ row: { original: v } }) => (
+          <div className="grid min-w-0 gap-0.5">
+            {v.driver ? (
+              <Link href={`/drivers?search=${encodeURIComponent(v.driver.name)}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-foreground no-underline hover:underline">
+                <DriverAvatar name={v.driver.name} className="size-5 text-[9px]" />
+                <span className="truncate">{v.driver.name}</span>
+              </Link>
+            ) : (
+              <span className="text-xs text-muted-foreground">No driver</span>
+            )}
+            {v.location ? <LocationCell lat={v.location.latitude} lon={v.location.longitude} moving={v.state === "moving"} /> : <span className="text-xs text-muted-foreground">{v.device ? "No position yet" : "No GPS device"}</span>}
+          </div>
+        )
+      },
+      {
         id: "lastSeen",
         header: "Last seen",
-        meta: { sortKey: "lastSeen", hideable: true, label: "Last seen" } satisfies ColumnMeta,
+        meta: { sortKey: "lastSeen", hideable: true, label: "Last seen", width: "10%" } satisfies ColumnMeta,
         cell: ({ row: { original: v } }) => (
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-muted-foreground">
-            <Clock className="size-4 text-[#64748b]" aria-hidden="true" />
-            {v.device ? <RelativeTime iso={v.lastSeenAt} /> : "—"}
-          </span>
+          <div className="grid min-w-0 gap-0.5">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-semibold text-foreground">
+              <Clock className="size-3.5 shrink-0 text-[#64748b]" aria-hidden="true" />
+              {v.device ? <RelativeTime iso={v.lastSeenAt} /> : "—"}
+            </span>
+            <span className="inline-flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground" title={v.device ? deviceDisplayName(v.device.name, v.device.model) : "No GPS device"}>
+              <Cpu className="size-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">{v.device ? deviceDisplayName(v.device.name, v.device.model) : "No device"}</span>
+            </span>
+          </div>
         )
       },
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-0 whitespace-nowrap text-right" } satisfies ColumnMeta,
+        meta: { className: "whitespace-nowrap text-right", width: "12%" } satisfies ColumnMeta,
         // The common actions one click away (each in its own colour); the rest stay in the ⋯ menu.
         cell: ({ row: { original: v } }) => (
           <RowActions
             actions={[
               { icon: MapIcon, label: `Show ${v.name} on the map`, color: ACTION_COLOR.map, href: v.device ? `/map?focus=${v.device.id}` : undefined, hidden: !can.map || !v.device || !v.location },
-              { icon: History, label: `${v.name}: today's trips`, color: ACTION_COLOR.history, href: v.device ? `/map?device=${v.device.id}&from=${encodeURIComponent(todayStart())}&to=${encodeURIComponent(new Date().toISOString())}` : undefined, hidden: !can.map || !v.device || !v.location },
+              { icon: History, label: `${v.name}: trip history`, color: ACTION_COLOR.history, href: v.device ? `/map?trips=${v.device.id}` : undefined, hidden: !can.map || !v.device || !v.location },
               { icon: Pencil, label: `Edit ${v.name}`, color: ACTION_COLOR.edit, onClick: () => openEdit(v), hidden: !can.update },
               { icon: Link2, label: `Assign a device to ${v.name}`, color: ACTION_COLOR.link, onClick: () => setAssignFor(v), hidden: !can.assign || !!v.device }
             ]}
@@ -234,7 +227,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
       }
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [u, can]
+    [u, can, density, router]
   );
 
   return (
@@ -291,12 +284,15 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
           onSort={(sort, direction) => set({ sort, direction })}
           onPage={(page) => set({ page })}
           onPageSize={(pageSize) => set({ pageSize })}
-          onRowClick={(v) => setDetailId(v.id)}
+          onRowClick={(v) => router.push(`/vehicles/${v.id}`)}
           rowLabel={(v) => `Open ${v.name}`}
           loading={pending}
+          layout="fixed"
+          minWidth={1000}
+          density={density}
           toolbar={
             <>
-              <SearchInput value={query.search} onChange={(search) => set({ search })} placeholder="Search name, plate or device…" label="Search vehicles" />
+              <SearchInput value={query.search} onChange={(search) => set({ search })} placeholder="Search name, plate, VIN, driver…" label="Search vehicles" />
               <Select
                 aria-label="Sort vehicles"
                 className="w-auto min-w-[12rem]"
@@ -306,6 +302,7 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
                   set({ sort: sort!, direction: direction! });
                 }}
               >
+                <option value="order:asc">Sort: Your order, then moving</option>
                 <option value="state:asc">Sort: Moving first</option>
                 <option value="lastSeen:desc">Sort: Recently active</option>
                 <option value="speed:desc">Sort: Fastest first</option>
@@ -324,6 +321,8 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
                   ))}
                 </Select>
               )}
+              <span className="hidden flex-1 md:block" />
+              <DensityToggle value={density} onChange={setDensity} />
             </>
           }
           mobileRow={(v) => (
@@ -356,17 +355,6 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
         />
       </Card>
 
-      {detailId && <VehicleDetailSheet
-        vehicleId={detailId}
-        onOpenChange={(o) => !o && setDetailId(null)}
-        actions={(d) =>
-          can.update ? (
-            <Button size="sm" variant="secondary" onClick={() => { setDetailId(null); openEdit({ id: d.vehicle.id, name: d.vehicle.name, licensePlate: d.vehicle.licensePlate, type: d.vehicle.type, vehicleStatus: d.vehicle.status } as VehicleRow); }}>
-              <Pencil aria-hidden="true" /> Edit
-            </Button>
-          ) : null
-        }
-      />}
       {formOpen && <VehicleFormDialog open={formOpen} onOpenChange={setFormOpen} vehicle={editing} onSaved={refresh} />}
       {assignFor && (
         <AssignDialog open onOpenChange={(o) => !o && setAssignFor(null)} mode="device" fixedId={assignFor.id} title={`Assign a device to ${assignFor.name}`} onDone={refresh} />

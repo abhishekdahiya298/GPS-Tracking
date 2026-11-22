@@ -1,5 +1,9 @@
 "use client";
-import { AlertTriangle, ArrowRight, Map as MapIcon, PackagePlus, PauseCircle, Package } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, Map as MapIcon, MapPin, PackagePlus, PauseCircle, Package } from "lucide-react";
+import { haversineMeters } from "@rio-gps/core/geo";
+import { useUnits } from "@/components/app/units-context";
+import { useAddress } from "@/lib/use-address";
+import { DriverAvatar } from "../drivers/drivers-view";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
@@ -64,8 +68,66 @@ export function fmtMinutes(min: number): string {
   return r ? `${h} h ${r} min` : `${h} h`;
 }
 
-export function LoadsView({ loads, counts, filter, q, canWrite, notice, fleet = true }: { loads: LoadSummaryDto[]; counts: { active: number; ended: number }; filter: "active" | "ended" | "all"; q: string; canWrite: boolean; notice?: ReactNode; fleet?: boolean }) {
+/** Where the load is now: full street address (coordinates until it loads) and when it was updated. */
+function CurrentPlace({ load }: { load: LoadSummaryDto }) {
+  const p = load.lastPosition;
+  const a = useAddress(p ? p.latitude : null, p ? p.longitude : null, (p?.speedKph ?? 0) >= 5);
+  if (!p) return <span className="text-xs text-muted-foreground">No location yet</span>;
+  const text = a ? [a.line1, a.line2].filter(Boolean).join(", ") : `${p.latitude.toFixed(4)}, ${p.longitude.toFixed(4)}`;
+  return (
+    <span className="flex min-w-0 items-start gap-1">
+      <MapPin className="mt-0.5 size-3.5 shrink-0 text-[#2563eb]" aria-hidden="true" />
+      <span className="grid min-w-0">
+        <span className="line-clamp-2 text-xs leading-4 [overflow-wrap:anywhere]" title={a?.label ?? text}>
+          {text}
+        </span>
+        <span className="text-[11px] text-muted-foreground">
+          <RelativeTime iso={p.at} />
+        </span>
+      </span>
+    </span>
+  );
+}
+
+/** Pickup → delivery with how far is left and the ETA. */
+function RouteCell({ load }: { load: LoadSummaryDto }) {
+  const u = useUnits();
+  const t = useTime();
+  const total = haversineMeters([load.pickup.longitude, load.pickup.latitude], [load.delivery.longitude, load.delivery.latitude]);
+  const ended = load.status === "delivered";
+  const left = ended ? 0 : load.eta && load.eta.target === "delivery" ? load.eta.distanceM : total;
+  const pct = ended ? 100 : total > 0 && load.eta?.target === "delivery" ? Math.min(100, Math.max(2, (1 - left / total) * 100)) : 2;
+  const color = load.eta?.late ? "#b91c1c" : ended ? "#1d4ed8" : load.eta?.target === "delivery" ? "#15803d" : "#c2410c";
+  return (
+    <div className="grid min-w-0 gap-1">
+      <span className="flex min-w-0 items-center gap-1 text-xs font-medium">
+        <i className="size-2 shrink-0 rounded-full bg-[#15803d]" aria-hidden="true" />
+        <span className="truncate">{shortPlace(load.pickup.name, load.pickup.address)}</span>
+        <ArrowRight className="size-3 shrink-0 text-muted-foreground" aria-label="to" />
+        <i className="size-2 shrink-0 rounded-full bg-[#b91c1c]" aria-hidden="true" />
+        <span className="truncate">{shortPlace(load.delivery.name, load.delivery.address)}</span>
+      </span>
+      <span className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <span className="block h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+      </span>
+      <span className="flex justify-between gap-2 text-[11px]">
+        <b style={{ color }}>{ended ? "Delivered" : `${u.fmtDist(left / 1000, 0)} left`}</b>
+        <span className="truncate text-muted-foreground">
+          {load.eta ? `ETA ${t.time(load.eta.at)}${load.eta.lateByMinutes !== null ? (load.eta.late ? ` · ${fmtMinutes(load.eta.lateByMinutes)} late` : " · on time") : ""}` : "—"}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function hm(seconds: number) {
+  const m = Math.round(seconds / 60);
+  return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
+}
+
+export function LoadsView({ loads, driven = {}, counts, filter, q, canWrite, notice, fleet = true }: { loads: LoadSummaryDto[]; driven?: Record<string, { distanceM: number; drivingS: number }>; counts: { active: number; ended: number }; filter: "active" | "ended" | "all"; q: string; canWrite: boolean; notice?: ReactNode; fleet?: boolean }) {
   const router = useRouter();
+  const u = useUnits();
   const pathname = usePathname();
   const go = (next: { filter?: string; q?: string }) => {
     const sp = new URLSearchParams();
@@ -128,47 +190,82 @@ export function LoadsView({ loads, counts, filter, q, canWrite, notice, fleet = 
             action={!q && canWrite ? newButton : undefined}
           />
         ) : (
-          <Table>
-            <THead>
-              <TR>
-                <TH>Load</TH>
-                <TH>Lane</TH>
-                <TH>Driver</TH>
-                <TH>Status</TH>
-                <TH>Last location</TH>
-                <TH>ETA</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {loads.map((l) => (
-                <TR key={l.id} className="cursor-pointer" onClick={() => router.push(`/loads/${l.id}`)}>
-                  <TD className="whitespace-nowrap font-medium">
-                    <Link href={`/loads/${l.id}`} className="text-primary no-underline hover:underline" onClick={(e) => e.stopPropagation()}>
-                      {l.reference}
-                    </Link>
-                  </TD>
-                  <TD>
-                    <span className="inline-flex flex-wrap items-center gap-1">
-                      {shortPlace(l.pickup.name, l.pickup.address)} <ArrowRight className="size-3.5 text-muted-foreground" aria-label="to" /> {shortPlace(l.delivery.name, l.delivery.address)}
-                    </span>
-                  </TD>
-                  <TD>
-                    <div className="flex flex-col">
-                      <span>{l.driverName ?? l.driverPhone ?? l.vehicle?.name ?? "—"}</span>
-                      {(l.vehicle || l.carrierName) && <span className="text-xs text-muted-foreground">{[l.vehicle && `Tracker: ${l.vehicle.name}`, l.carrierName].filter(Boolean).join(" · ")}</span>}
-                    </div>
-                  </TD>
-                  <TD>
-                    <LoadStatusCell load={l} />
-                  </TD>
-                  <TD className="whitespace-nowrap text-muted-foreground">{l.lastPosition ? <RelativeTime iso={l.lastPosition.at} /> : "—"}</TD>
-                  <TD className="whitespace-nowrap">
-                    <EtaCell load={l} />
-                  </TD>
+          <>
+            <Table className="min-w-[1000px] table-fixed">
+              <THead>
+                <TR>
+                  <TH style={{ width: "15%" }}>Load</TH>
+                  <TH style={{ width: "24%" }}>Route · remaining</TH>
+                  <TH style={{ width: "16%" }}>Driver · vehicle</TH>
+                  <TH style={{ width: "11%" }}>Last 24 h</TH>
+                  <TH style={{ width: "25%" }}>Current location</TH>
+                  <TH style={{ width: "9%" }} className="text-right">
+                    <span className="sr-only">Actions</span>
+                  </TH>
                 </TR>
-              ))}
-            </TBody>
-          </Table>
+              </THead>
+              <TBody>
+                {loads.map((l) => {
+                  const d = driven[l.id];
+                  const who = l.driverName ?? l.driverPhone;
+                  return (
+                    <TR key={l.id} className="cursor-pointer" onClick={() => router.push(`/loads/${l.id}`)}>
+                      <TD className="overflow-hidden py-2">
+                        <div className="grid min-w-0 gap-1">
+                          <Link href={`/loads/${l.id}`} className="truncate font-bold text-primary no-underline hover:underline" onClick={(e) => e.stopPropagation()}>
+                            {l.reference}
+                          </Link>
+                          {l.carrierName && <span className="truncate text-xs text-muted-foreground">{l.carrierName}</span>}
+                          <LoadStatusCell load={l} />
+                        </div>
+                      </TD>
+                      <TD className="overflow-hidden py-2">
+                        <RouteCell load={l} />
+                      </TD>
+                      <TD className="overflow-hidden py-2">
+                        {who || l.vehicle ? (
+                          <div className="grid min-w-0 gap-0.5">
+                            {who && (
+                              <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold">
+                                <DriverAvatar name={who} className="size-5 text-[9px]" />
+                                <span className="truncate">{who}</span>
+                              </span>
+                            )}
+                            <span className="truncate text-xs text-muted-foreground">{l.vehicle ? l.vehicle.name : "Driver's phone"}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Link sent</span>
+                        )}
+                      </TD>
+                      <TD className="overflow-hidden py-2">
+                        {d ? (
+                          <div className="grid gap-0.5 tabular-nums">
+                            <b className="text-sm">{u.fmtDist(d.distanceM / 1000, 0)}</b>
+                            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                              <Clock className="size-3" aria-hidden="true" /> {hm(d.drivingS)} driving
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TD>
+                      <TD className="overflow-hidden py-2">
+                        <CurrentPlace load={l} />
+                      </TD>
+                      <TD className="py-2 text-right">
+                        <Button asChild size="icon-sm" variant="secondary" aria-label={`Show ${l.reference} on the loads map`} title="Show on the loads map">
+                          <Link href={`/loads/map?focus=${l.id}`} onClick={(e) => e.stopPropagation()}>
+                            <MapIcon aria-hidden="true" />
+                          </Link>
+                        </Button>
+                      </TD>
+                    </TR>
+                  );
+                })}
+              </TBody>
+            </Table>
+            <p className="m-0 border-t border-border px-4 py-2 text-xs text-muted-foreground">Driven figures are the last 24 hours. Addresses update as the load moves.</p>
+          </>
         )}
       </Card>
     </>

@@ -20,6 +20,12 @@ import { api, errorMessage } from "@/lib/client/api";
 import type { DriverListQuery, DriverRow } from "@/lib/drivers";
 import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 import { DriverFormDialog, type VehicleOption } from "./driver-form-dialog";
+import { DriverRecordPanel } from "./driver-record";
+import { StatusChip } from "@/components/app/status-chip";
+import { DensityToggle, PlateTag, useDensity } from "@/components/app/vehicle-tags";
+import { useTime } from "@/components/app/time-context";
+import { cn } from "@/lib/cn";
+import { Select } from "@/components/ui/input";
 
 type Data = { items: DriverRow[]; total: number; page: number; pageSize: number; counts: Record<DriverListQuery["state"], number> };
 type Can = { create: boolean; update: boolean; remove: boolean; map: boolean };
@@ -57,6 +63,10 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
   const [form, setForm] = useState<{ driver: DriverRow | null } | null>(null);
   const [deleting, setDeleting] = useState<DriverRow | null>(null);
   const [freeing, setFreeing] = useState<DriverRow | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = data.items.find((d) => d.id === selectedId) ?? null;
+  const [density, setDensity] = useDensity("drivers");
+  const time = useTime();
   const c = data.counts;
   const filtered = query.search !== "" || query.state !== "all";
 
@@ -65,12 +75,18 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
       {
         id: "name",
         header: "Driver",
-        meta: { sortKey: "name" } satisfies ColumnMeta,
+        meta: { sortKey: "name", width: "30%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => (
-          <div className="flex min-w-0 items-center gap-3">
-            <DriverAvatar name={d.name} />
+          <div className={cn("flex min-w-0 items-center gap-3", d.status === "inactive" && "opacity-60")}>
+            <span className="relative shrink-0">
+              <DriverAvatar name={d.name} className="size-8 text-xs" />
+              <span title={d.status === "active" ? "Active" : "Inactive"} className={cn("absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-background", d.status === "active" ? "bg-success" : "bg-muted-foreground/60")} />
+            </span>
             <div className="min-w-0">
-              <p className="m-0 truncate font-medium text-foreground">{d.name}</p>
+              <p className="m-0 flex items-center gap-1.5 truncate font-semibold text-foreground">
+                {d.name}
+                {d.status === "inactive" && <span className="inline-flex h-[18px] items-center rounded-full bg-muted px-1.5 text-[10.5px] font-bold text-muted-foreground">Inactive</span>}
+              </p>
               <p className="m-0 flex items-center gap-1 truncate text-xs text-muted-foreground">
                 {d.phone ? (
                   <a href={`tel:${d.phone}`} onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 text-muted-foreground no-underline hover:text-primary">
@@ -87,15 +103,18 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
       },
       {
         id: "vehicle",
-        header: "Vehicle",
-        meta: { sortKey: "vehicle" } satisfies ColumnMeta,
+        header: "Vehicle now",
+        meta: { sortKey: "vehicle", width: "27%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) =>
           d.vehicle ? (
-            <Link href={`/vehicles?search=${encodeURIComponent(d.vehicle.name)}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-3 text-foreground no-underline hover:underline">
-              <VehiclePicture type={d.vehicle.type} state={d.vehicle.moving ? "moving" : d.vehicle.deviceId ? "stopped" : undefined} className="h-9 w-12" />
-              <span className="min-w-0">
-                <span className="block truncate font-medium">{d.vehicle.name}</span>
-                <span className="block truncate text-xs text-muted-foreground">{[VEHICLE_TYPE_LABEL[asVehicleType(d.vehicle.type)], d.vehicle.licensePlate].filter(Boolean).join(" · ")}</span>
+            <Link href={`/vehicles/${d.vehicle.id}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-2.5 text-foreground no-underline hover:underline" title={VEHICLE_TYPE_LABEL[asVehicleType(d.vehicle.type)]}>
+              <VehiclePicture type={d.vehicle.type} state={d.vehicle.moving ? "moving" : d.vehicle.deviceId ? "stopped" : undefined} className="h-8 w-11" />
+              <span className="grid min-w-0">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate font-semibold">{d.vehicle.name}</span>
+                  <PlateTag plate={d.vehicle.licensePlate} />
+                </span>
+                <span className="truncate text-xs text-muted-foreground">{d.assignedAt ? `since ${time.date(d.assignedAt)}` : "Assigned"}</span>
               </span>
             </Link>
           ) : d.status === "active" && can.update ? (
@@ -116,18 +135,21 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
       {
         id: "now",
         header: "Now",
+        meta: { width: "16%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => {
-          if (d.status === "inactive") return <span className="text-muted-foreground">Inactive</span>;
-          if (!d.vehicle?.deviceId) return <span className="text-muted-foreground">—</span>;
+          if (d.status === "inactive") return <span className="text-xs text-muted-foreground">Off</span>;
+          if (!d.vehicle) return <span className="text-xs text-muted-foreground">No vehicle</span>;
+          if (!d.vehicle.deviceId) return <span className="text-xs text-muted-foreground">No GPS device</span>;
           return d.vehicle.moving ? (
-            <span className="inline-flex items-center gap-1.5 font-semibold text-[#15803d] dark:text-[#4ade80]">
-              <Navigation className="size-3.5" aria-hidden="true" />
-              Driving · {u.fmtSpeed(d.vehicle.speedKph ?? 0)}
-            </span>
+            <StatusChip status="moving" label={`Driving · ${u.fmtSpeed(d.vehicle.speedKph ?? 0)}`} />
           ) : (
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-              <span className="size-2 rounded-full bg-[#b91c1c]" aria-hidden="true" />
-              Not driving{d.vehicle.lastSeenAt ? <> · <RelativeTime iso={d.vehicle.lastSeenAt} /></> : null}
+            <span className="grid gap-0.5">
+              <StatusChip status="stopped" label="Not driving" />
+              {d.vehicle.lastSeenAt && (
+                <span className="text-[11px] text-muted-foreground">
+                  <RelativeTime iso={d.vehicle.lastSeenAt} />
+                </span>
+              )}
             </span>
           );
         }
@@ -135,25 +157,20 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
       {
         id: "license",
         header: "Licence",
-        meta: { sortKey: "license", hideable: true, label: "Licence" } satisfies ColumnMeta,
+        meta: { sortKey: "license", hideable: true, label: "Licence", width: "15%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => {
           const days = licenseDays(d.licenseExpiresOn);
+          if (days == null) return <span className="text-xs text-muted-foreground">{d.licenseNumber ?? "—"}</span>;
           return (
-            <div className="min-w-0 text-sm">
-              <div className="truncate font-mono text-xs text-muted-foreground">{d.licenseNumber ?? "—"}</div>
-              {days != null && (
-                <span
-                  className={
-                    days < 0
-                      ? "text-xs font-semibold text-[#b91c1c]"
-                      : days <= 30
-                        ? "text-xs font-semibold text-[#c2410c]"
-                        : "text-xs text-muted-foreground"
-                  }
-                >
-                  {days < 0 ? `Expired ${d.licenseExpiresOn}` : days <= 30 ? `Expires in ${days} d` : `Valid to ${d.licenseExpiresOn}`}
-                </span>
+            <div className="grid min-w-0 gap-0.5" title={d.licenseNumber ? `Licence ${d.licenseNumber}` : undefined}>
+              {days < 0 ? (
+                <span className="inline-flex h-5 w-fit items-center rounded-full bg-danger-soft px-2 text-[11px] font-bold text-danger">Expired</span>
+              ) : days <= 30 ? (
+                <span className="inline-flex h-5 w-fit items-center rounded-full bg-warning-soft px-2 text-[11px] font-bold text-warning">{days} days left</span>
+              ) : (
+                <span className="text-xs font-semibold text-foreground/80">Valid</span>
               )}
+              <span className="truncate text-[11px] text-muted-foreground">{time.date(`${d.licenseExpiresOn}T12:00:00Z`)}</span>
             </div>
           );
         }
@@ -161,7 +178,7 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "w-0 whitespace-nowrap text-right" } satisfies ColumnMeta,
+        meta: { className: "whitespace-nowrap text-right", width: "12%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => (
           <RowActions
             actions={[
@@ -182,7 +199,7 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
       }
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [can, u]
+    [can, u, time]
   );
 
   return (
@@ -204,6 +221,7 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
         onChange={(state) => set({ state: state === "all" ? null : state })}
         options={[
           { value: "all", label: "All drivers", count: c.all ?? 0, icon: Layers, color: "#133a8f" },
+          { value: "active", label: "Active", count: c.active ?? 0, icon: UserCheck, color: "#15803d" },
           { value: "driving", label: "Driving now", count: c.driving ?? 0, icon: Navigation, color: "#15803d" },
           { value: "assigned", label: "With a vehicle", count: c.assigned ?? 0, icon: UserCheck, color: "#0f766e" },
           { value: "unassigned", label: "No vehicle", count: c.unassigned ?? 0, icon: Users, color: "#b45309" },
@@ -211,7 +229,7 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
           { value: "inactive", label: "Inactive", count: c.inactive ?? 0, icon: UserX, color: "#475569" }
         ]}
       />
-      <Card>
+      <Card className="min-w-0">
         <DataTable
           columns={columns}
           data={data.items}
@@ -224,10 +242,33 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
           onSort={(sort, direction) => set({ sort, direction })}
           onPage={(page) => set({ page })}
           onPageSize={(pageSize) => set({ pageSize })}
-          onRowClick={can.update ? (d) => setForm({ driver: d }) : undefined}
-          rowLabel={(d) => `Edit ${d.name}`}
+          onRowClick={(d) => setSelectedId(d.id === selectedId ? null : d.id)}
+          rowLabel={(d) => `Open ${d.name}'s record`}
           loading={pending}
-          toolbar={<SearchInput value={query.search} onChange={(search) => set({ search })} placeholder="Search name, phone, licence or vehicle…" label="Search drivers" />}
+          layout="fixed"
+          minWidth={760}
+          density={density}
+          toolbar={
+            <>
+              <SearchInput value={query.search} onChange={(search) => set({ search })} placeholder="Search name, phone, licence or vehicle…" label="Search drivers" />
+              <Select
+                aria-label="Sort drivers"
+                className="w-auto min-w-[11rem]"
+                value={`${query.sort}:${query.direction}`}
+                onChange={(e) => {
+                  const [sort, direction] = e.target.value.split(":");
+                  set({ sort: sort!, direction: direction! });
+                }}
+              >
+                <option value="driving:asc">Sort: Driving first</option>
+                <option value="name:asc">Sort: Name A–Z</option>
+                <option value="vehicle:asc">Sort: Vehicle</option>
+                <option value="license:asc">Sort: Licence expiry</option>
+              </Select>
+              <span className="hidden flex-1 md:block" />
+              <DensityToggle value={density} onChange={setDensity} />
+            </>
+          }
           empty={
             <EmptyState
               icon={IdCard}
@@ -244,6 +285,12 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
           }
         />
       </Card>
+      {/* The record opens as a drawer over the right of the page, so the table keeps its full width. */}
+      {selected && (
+        <div className="fixed inset-x-2 bottom-2 top-16 z-40 overflow-y-auto overscroll-contain rounded-2xl animate-in sm:left-auto sm:right-4 sm:top-[72px] sm:w-[400px]">
+          <DriverRecordPanel driver={selected} canUpdate={can.update} onEdit={() => setForm({ driver: selected })} onClose={() => setSelectedId(null)} onChanged={refresh} />
+        </div>
+      )}
       {form && <DriverFormDialog open onOpenChange={(o) => !o && setForm(null)} driver={form.driver} vehicles={vehicles} onSaved={refresh} />}
       <ConfirmDialog
         open={!!freeing}
