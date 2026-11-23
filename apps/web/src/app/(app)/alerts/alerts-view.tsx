@@ -15,13 +15,14 @@ import { useListParams } from "@/components/app/use-list-params";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Sheet, SheetContent } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { DateRangeButton } from "@/components/app/date-range-calendar";
 import { toast } from "@/components/ui/toaster";
 import type { AlertEventDto, AlertRuleDto } from "@/lib/alerts";
 import { kindOf, type AlertKind } from "@/lib/alert-kinds";
 import type { AlertListQuery, AlertPage } from "@/lib/alerts-list";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
+import { placeText, useAddressState } from "@/lib/use-address";
 import { alertMapHref, describeAlert, SEVERITY, SEVERITY_COLOR, TYPE_LABEL } from "./alert-meta";
 import { RulesPanel } from "./rules-panel";
 
@@ -148,11 +149,15 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
         <Card className="min-w-0 overflow-hidden">
           <div className="flex flex-col gap-2 border-b border-border p-3 sm:flex-row sm:flex-wrap sm:items-center sm:px-4">
             <SearchInput value={query.search} onChange={(v) => set({ search: v })} placeholder="Search vehicle or alert…" label="Search alerts" className="sm:w-64" />
-            <div className="flex items-center gap-2">
-              <Input type="date" aria-label="From date" className="w-[150px]" value={query.from ?? ""} max={query.to} onChange={(e) => set({ from: e.target.value || null, tz: null })} />
-              <span className="text-xs text-muted-foreground">to</span>
-              <Input type="date" aria-label="To date" className="w-[150px]" value={query.to ?? ""} min={query.from} onChange={(e) => set({ to: e.target.value || null, tz: null })} />
-            </div>
+            <DateRangeButton
+              className="sm:w-60"
+              fromDay={query.from ?? null}
+              toDay={query.to ?? null}
+              today={time.dayKey(Date.now())}
+              maxDays={366}
+              onChange={(from, to) => set({ from, to, tz: null })}
+              onClear={() => set({ from: null, to: null, tz: null })}
+            />
             {filtered && (
               <Button variant="ghost" size="sm" onClick={clearAll}>
                 Clear filters
@@ -216,8 +221,8 @@ export function AlertsView({ data, query, rules, geofences, vehicles, canWrite, 
               {detail.latitude !== null && detail.longitude !== null && (
                 <>
                   <dt className="text-muted-foreground">Location</dt>
-                  <dd className="m-0 tabular-nums">
-                    {detail.latitude.toFixed(5)}, {detail.longitude.toFixed(5)}
+                  <dd className="m-0">
+                    <AlertPlace lat={detail.latitude} lon={detail.longitude} />
                   </dd>
                 </>
               )}
@@ -290,4 +295,9 @@ function AlertRow({ e, title, timeLabel, canMap, canWrite, busy, onOpen, onAck }
       </div>
     </li>
   );
+}
+
+function AlertPlace({ lat, lon }: { lat: number; lon: number }) {
+  const a = useAddressState(lat, lon);
+  return <span title={a.address?.label}>{placeText(a, lat, lon)}</span>;
 }

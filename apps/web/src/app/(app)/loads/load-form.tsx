@@ -195,7 +195,19 @@ function StopFields({ id, title, color, stop, onChange, error }: { id: string; t
           </p>
         )}
       </div>
-      <StopMap stop={stop} color={color} onMove={(lat, lon) => onChange({ ...stop, latitude: lat, longitude: lon, address: stop.address || `${lat.toFixed(5)}, ${lon.toFixed(5)}` })} />
+      <StopMap
+        stop={stop}
+        color={color}
+        onMove={(lat, lon) => {
+          // Clicked on the map: fill the street address for that spot (coordinates only if none is found).
+          const fallback = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+          const base = { ...stop, latitude: lat, longitude: lon };
+          onChange({ ...base, address: "Finding address…" });
+          api<{ address: { label: string } | null }>(`/api/geocode/reverse?lat=${lat}&lon=${lon}`)
+            .then((r) => onChange({ ...base, address: r.address?.label ?? fallback }))
+            .catch(() => onChange({ ...base, address: fallback }));
+        }}
+      />
       <div className="grid gap-3 sm:grid-cols-2">
         <Field id={`${id}-radius`} label="Arrival area" description="Inside this circle counts as arrived.">
           <Select id={`${id}-radius`} value={stop.radiusM} onChange={(e) => onChange({ ...stop, radiusM: Number(e.target.value) })}>

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { friendlyZodMessage } from "@/lib/validation-message";
 import { z } from "zod";
 import { requirePermission, requireTenantContext } from "@/lib/authz";
 import { getServerEnv } from "@/lib/env";
@@ -29,7 +30,7 @@ export async function GET(request: Request) {
     const params = Object.fromEntries(new URL(request.url).searchParams);
     const parsed = QuerySchema.safeParse(params);
     if (!parsed.success) {
-      throw new ValidationError(parsed.error.issues.map((i) => `${i.path.join(".") || "query"}: ${i.message}`).join("; "));
+      throw new ValidationError(friendlyZodMessage(parsed.error));
     }
     const q = parsed.data;
     const to = q.to ? new Date(q.to) : new Date();

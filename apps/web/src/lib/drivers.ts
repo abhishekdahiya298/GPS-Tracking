@@ -1,4 +1,5 @@
 import type { TenantContext } from "@rio-gps/core";
+import { normalizePhone, PHONE_HINT } from "./phone";
 import { getDb, schema } from "@rio-gps/db";
 import { and, eq, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
@@ -23,13 +24,27 @@ const optionalText = (max: number) =>
 
 export const DriverInputSchema = z.object({
   name: z.string().trim().min(1, "Enter the driver's name").max(120),
-  phone: optionalText(40),
+  phone: z
+    .string()
+    .trim()
+    .max(40)
+    .transform((s, c) => {
+      if (s === "") return null;
+      const p = normalizePhone(s);
+      if (!p) {
+        c.addIssue({ code: z.ZodIssueCode.custom, message: PHONE_HINT });
+        return z.NEVER;
+      }
+      return p;
+    })
+    .nullable()
+    .optional(),
   email: z
     .string()
     .trim()
     .max(200)
     .transform((s) => (s === "" ? null : s))
-    .pipe(z.string().email("Enter a valid email").nullable())
+    .pipe(z.string().email("Enter an email like name@company.com").nullable())
     .nullable()
     .optional(),
   licenseNumber: optionalText(60),

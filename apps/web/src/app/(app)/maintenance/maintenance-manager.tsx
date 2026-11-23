@@ -328,7 +328,8 @@ function AddReminderDialog({ open, onOpenChange, vehicleId, vehicles, members, m
           // Entered in the organization's unit; stored in km.
           intervalKm: dist === null ? null : Math.round(u.toKm(dist)),
           intervalDays: num(f.get("intervalDays")),
-          lastServiceAt: wallTimeToUtc(`${String(f.get("lastServiceAt"))}T12:00`, time.timeZone).toISOString(),
+          // Today means "just now" (noon could still be in the future); other days use local noon.
+          lastServiceAt: String(f.get("lastServiceAt")) === today ? new Date().toISOString() : wallTimeToUtc(`${String(f.get("lastServiceAt"))}T12:00`, time.timeZone).toISOString(),
           lastServiceOdometerKm: odo === null ? null : Math.round(u.toKm(odo)),
           notifyUserIds: f.getAll("notify").map(String),
           note: String(f.get("note") ?? "").trim() || null

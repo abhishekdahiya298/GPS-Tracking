@@ -8,41 +8,159 @@ export interface StreetAddress {
   label: string;
 }
 
-const memo = new Map<string, StreetAddress | null>();
+/** loading: still asking · found: address known · none: no address for this spot · off: addresses are turned off. */
+export type AddressState = "loading" | "found" | "none" | "off";
+type Answer = {
+  address: StreetAddress | null;
+  state: AddressState;
+  approximate: boolean;
+};
+type Reply = {
+  address: StreetAddress | null;
+  provider?: string;
+  approximate?: boolean;
+  retryAfter?: number;
+};
+
+const memo = new Map<string, Answer>();
+const inflight = new Map<string, Promise<Answer>>();
+const RETRY_STEPS = [3, 8, 20, 45, 90];
+
+function ask(key: string): Promise<Answer> {
+  const running = inflight.get(key);
+  if (running) return running;
+  const [la, lo] = key.split(",");
+  const p = api<Reply>(`/api/geocode/reverse?lat=${la}&lon=${lo}`)
+    .then((r): Answer => ({
+      address: r.address,
+      state: r.address
+        ? "found"
+        : r.provider === "off"
+          ? "off"
+          : r.retryAfter
+            ? "loading"
+            : "none",
+      approximate: Boolean(r.approximate),
+    }))
+    .finally(() => inflight.delete(key));
+  inflight.set(key, p);
+  return p;
+}
 
 /**
- * Street address for a position from the server (Maps & addresses in the platform console).
- * Rounded to ~11 m (~110 m while moving) and remembered for the page's life, so a moving truck asks again only when it
- * has actually moved; while it loads (or with addresses off) the screen shows coordinates.
+ * Street address for a position, with its state, from the server (Maps & addresses in the platform console).
+ * Rounded to ~11 m (~110 m while moving) and remembered for the page's life. When the address
+ * service is busy the hook keeps asking (3 s, 8 s, 20 s…) so the screen ends up with an address, not
+ * coordinates; a nearby cached address is shown meanwhile.
  */
-export function useAddress(lat: number | null, lon: number | null, moving = false): StreetAddress | null {
-  // Moving: ~110 m steps, so a driving truck asks a few times a minute, not every update.
+export function useAddressState(
+  lat: number | null,
+  lon: number | null,
+  moving = false,
+): Answer {
   const digits = moving ? 3 : 4;
-  const key = lat === null || lon === null ? null : `${lat.toFixed(digits)},${lon.toFixed(digits)}`;
-  const [value, setValue] = useState<StreetAddress | null>(key ? (memo.get(key) ?? null) : null);
+  const key =
+    lat === null ||
+    lon === null ||
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lon)
+      ? null
+      : `${lat.toFixed(digits)},${lon.toFixed(digits)}`;
+  const [value, setValue] = useState<Answer>(
+    () =>
+      (key && memo.get(key)) || {
+        address: null,
+        state: key ? "loading" : "none",
+        approximate: false,
+      },
+  );
   useEffect(() => {
     if (!key) {
-      setValue(null);
+      setValue({ address: null, state: "none", approximate: false });
       return;
     }
-    if (memo.has(key)) {
-      setValue(memo.get(key) ?? null);
-      return;
+    const known = memo.get(key);
+    if (known) {
+      setValue(known);
+      if (!known.approximate) return;
+    } else {
+      setValue((v) =>
+        v.address
+          ? { ...v, approximate: true }
+          : { address: null, state: "loading", approximate: false },
+      );
     }
     let live = true;
-    const t = setTimeout(() => {
-      const [la, lo] = key.split(",");
-      api<{ address: StreetAddress | null }>(`/api/geocode/reverse?lat=${la}&lon=${lo}`)
-        .then((r) => {
-          memo.set(key, r.address);
-          if (live) setValue(r.address);
+    let attempt = 0;
+    // Out of retries with nothing: stop showing "finding" (the screen falls back to coordinates).
+    const giveUp = () =>
+      setValue((v) =>
+        v.address ? v : { address: null, state: "none", approximate: false },
+      );
+    let timer: ReturnType<typeof setTimeout>;
+    const run = () => {
+      ask(key)
+        .then((a) => {
+          if (!live) return;
+          if (a.address || a.state !== "loading") {
+            memo.set(key, a);
+            setValue(a);
+          }
+          // Busy, or only a nearby address so far: ask again a little later.
+          if (
+            (a.state === "loading" || a.approximate) &&
+            attempt < RETRY_STEPS.length
+          )
+            timer = setTimeout(run, RETRY_STEPS[attempt++]! * 1000);
+          else if (a.state === "loading") giveUp();
         })
-        .catch(() => undefined);
-    }, 250);
+        .catch(() => {
+          if (!live) return;
+          if (attempt < RETRY_STEPS.length)
+            timer = setTimeout(run, RETRY_STEPS[attempt++]! * 1000);
+          else giveUp();
+        });
+    };
+    timer = setTimeout(run, known ? RETRY_STEPS[0]! * 1000 : 150);
     return () => {
       live = false;
-      clearTimeout(t);
+      clearTimeout(timer);
     };
   }, [key]);
   return value;
+}
+
+/** Street address for a position, or null while unknown (see useAddressState for why). */
+export function useAddress(
+  lat: number | null,
+  lon: number | null,
+  moving = false,
+): StreetAddress | null {
+  return useAddressState(lat, lon, moving).address;
+}
+
+/** Coordinates as a last resort only (addresses turned off, or no address exists for the spot). */
+export const coordsText = (lat: number, lon: number) =>
+  `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+
+export const FINDING_ADDRESS = "Finding address…";
+
+/**
+ * Text for a place: the address (whole, first line, or town), "Finding address…" while it loads,
+ * and coordinates only when addresses are off or none exists for the spot.
+ */
+export function placeText(
+  a: Answer,
+  lat: number,
+  lon: number,
+  form: "full" | "line1" | "town" = "full",
+): string {
+  if (a.address)
+    return form === "line1"
+      ? a.address.line1
+      : form === "town"
+        ? (a.address.line2 ?? a.address.line1)
+        : [a.address.line1, a.address.line2].filter(Boolean).join(", ");
+  if (a.state === "loading") return FINDING_ADDRESS;
+  return coordsText(lat, lon);
 }

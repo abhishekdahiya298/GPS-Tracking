@@ -5,7 +5,7 @@ import { z } from "zod";
 import { writeAudit } from "./audit";
 import { isEmailEnabled, maintenanceEmail, sendEmail } from "./email";
 import { getServerEnv } from "./env";
-import { NotFoundError, ValidationError } from "./errors";
+import { ConflictError, NotFoundError, ValidationError } from "./errors";
 import { logger } from "./logger";
 
 /**
@@ -158,6 +158,13 @@ async function getOwned(organizationId: string, id: string): Promise<Row> {
 
 export async function createItem(ctx: TenantContext, input: z.infer<typeof ItemInputSchema>, meta: Meta) {
   await assertRefs(ctx.organizationId, input.vehicleId, input.notifyUserIds);
+  // One reminder per service name per vehicle: a second "Oil change" would double the alerts.
+  const [dup] = await getDb()
+    .select({ id: schema.maintenanceItems.id })
+    .from(schema.maintenanceItems)
+    .where(and(eq(schema.maintenanceItems.organizationId, ctx.organizationId), eq(schema.maintenanceItems.vehicleId, input.vehicleId), sql`lower(${schema.maintenanceItems.name}) = lower(${input.name})`))
+    .limit(1);
+  if (dup) throw new ConflictError(`This vehicle already has a "${input.name}" reminder. Edit that one, or use a different name.`);
   const [row] = await getDb()
     .insert(schema.maintenanceItems)
     .values({ ...input, organizationId: ctx.organizationId })

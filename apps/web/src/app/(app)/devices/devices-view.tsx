@@ -187,7 +187,7 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
                 <p className="m-0 truncate font-medium">{label(d)}</p>
-                <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground">
+                <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground" suppressHydrationWarning>
                   {[d.vehicle ? d.vehicle.name : "Not assigned", d.imeiLast4 ? `IMEI …${d.imeiLast4}` : null, relativeTime(d.lastSeenAt, Date.now(), t.timeZone)].filter(Boolean).join(" · ")}
                 </p>
                 <div className="mt-1.5">

@@ -18,15 +18,16 @@ import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input, Select } from "@/components/ui/input";
+import { Select } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { TripDto, TripReport } from "@/lib/reports";
-import { useAddress } from "@/lib/use-address";
+import { placeText, useAddressState } from "@/lib/use-address";
+import { DateRangeButton } from "@/components/app/date-range-calendar";
 import { ReportTabs } from "./report-tabs";
 
 type Dev = { id: string; label: string };
-type Preset = "7d" | "yesterday" | "today" | "30d" | "custom";
+type Preset = "24h" | "7d" | "yesterday" | "today" | "30d" | "custom";
 type SortKey = "start" | "duration" | "distance" | "max";
 const PAGE = 25;
 
@@ -36,6 +37,8 @@ const hm = (m: number) => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "
 function presetRange(p: Exclude<Preset, "custom">, tz: string): [string, string] {
   const today = dateFormatter(tz).dayKey(Date.now());
   switch (p) {
+    case "24h":
+      return [dateFormatter(tz).dayKey(Date.now() - 86_400_000), today];
     case "today":
       return [today, today];
     case "yesterday":
@@ -53,6 +56,8 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
   const tz = time.timeZone;
   const [deviceId, setDeviceId] = useState(devices[0]?.id ?? "");
   const [preset, setPreset] = useState<Preset>("7d");
+  // End of the rolling "Last 24 hours" window: the moment it was picked.
+  const [rollingEnd, setRollingEnd] = useState(() => Date.now());
   const [[fromDay, toDay], setDays] = useState<[string, string]>(() => presetRange("7d", tz));
   const [report, setReport] = useState<TripReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,8 +82,10 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
 
   const range = useMemo(() => {
     // Midnight to midnight in the report's zone (23 or 25 hours on DST change days).
+    // "Last 24 hours" is a rolling window ending when it was picked.
+    if (preset === "24h") return { from: new Date(rollingEnd - 86_400_000).toISOString(), to: new Date(rollingEnd).toISOString() };
     return { from: startOfLocalDay(fromDay, tz).toISOString(), to: startOfLocalDay(addDays(toDay, 1), tz).toISOString() };
-  }, [fromDay, toDay, tz]);
+  }, [fromDay, toDay, tz, preset, rollingEnd]);
   const qs = useMemo(() => new URLSearchParams({ deviceId, from: range.from, to: range.to, tz }).toString(), [deviceId, range, tz]);
 
   const load = useCallback(async () => {
@@ -195,7 +202,7 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
       <ReportTabs active="trips" />
 
       <Card className="mb-4">
-        <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_auto] lg:items-end">
+        <div className="grid gap-3 p-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] lg:items-end">
           <label className="grid gap-1.5 text-sm font-medium">
             <span className="inline-flex items-center gap-1.5">
               <Truck className="size-4 text-[#15803d]" aria-hidden="true" /> Vehicle
@@ -208,38 +215,28 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
               ))}
             </Select>
           </label>
-          <label className="grid gap-1.5 text-sm font-medium">
-            From
-            <Input
-              type="date"
-              value={fromDay}
-              max={toDay}
-              onChange={(e) => {
+          <div className="grid gap-1.5 text-sm font-medium">
+            Dates
+            <DateRangeButton
+              fromDay={fromDay}
+              toDay={toDay}
+              today={dateFormatter(tz).dayKey(Date.now())}
+              onChange={(f, t) => {
                 setPreset("custom");
-                setDays([e.target.value, toDay]);
+                setDays([f, t]);
               }}
             />
-          </label>
-          <label className="grid gap-1.5 text-sm font-medium">
-            To
-            <Input
-              type="date"
-              value={toDay}
-              min={fromDay}
-              onChange={(e) => {
-                setPreset("custom");
-                setDays([fromDay, e.target.value]);
-              }}
-            />
-          </label>
+          </div>
           <SegmentedFilter<Preset>
             label="Quick range"
             value={preset}
             onChange={(p) => {
               setPreset(p);
+              if (p === "24h") setRollingEnd(Date.now());
               if (p !== "custom") setDays(presetRange(p, tz));
             }}
             options={[
+              { value: "24h", label: "Last 24 hours" },
               { value: "today", label: "Today" },
               { value: "yesterday", label: "Yesterday" },
               { value: "7d", label: "Last 7 days" },
@@ -452,9 +449,9 @@ function DriveDonut({ driving, idle }: { driving: number; idle: number }) {
 
 /** Short place name for a point: the town line of the address, or coordinates while it loads. */
 function Place({ lat, lon }: { lat: number; lon: number }) {
-  const a = useAddress(lat, lon);
-  const text = a ? (a.line2 ?? a.line1) : `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
-  return <span title={a?.label ?? text}>{text}</span>;
+  const a = useAddressState(lat, lon);
+  const text = placeText(a, lat, lon, "town");
+  return <span title={a.address?.label ?? text}>{text}</span>;
 }
 
 /** Where the trip started → where it ended. */

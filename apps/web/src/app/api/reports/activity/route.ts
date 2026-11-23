@@ -1,4 +1,5 @@
 import { canonicalTimeZone } from "@rio-gps/core/timezones";
+import { friendlyZodMessage } from "@/lib/validation-message";
 import { getDb, schema } from "@rio-gps/db";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
     const ctx = await requireTenantContext(request);
     requirePermission(ctx, "history.read");
     const q = ActivityQuery.safeParse(Object.fromEntries(new URL(request.url).searchParams));
-    if (!q.success) throw new ValidationError(q.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
+    if (!q.success) throw new ValidationError(friendlyZodMessage(q.error));
     const from = new Date(q.data.from);
     const to = new Date(q.data.to);
     if (from >= to) throw new ValidationError("from must be earlier than to");

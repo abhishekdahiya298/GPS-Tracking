@@ -2,7 +2,7 @@
 import { AlertTriangle, ArrowRight, Clock, Map as MapIcon, MapPin, PackagePlus, PauseCircle, Package } from "lucide-react";
 import { haversineMeters } from "@rio-gps/core/geo";
 import { useUnits } from "@/components/app/units-context";
-import { useAddress } from "@/lib/use-address";
+import { placeText, useAddressState } from "@/lib/use-address";
 import { DriverAvatar } from "../drivers/drivers-view";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -71,14 +71,14 @@ export function fmtMinutes(min: number): string {
 /** Where the load is now: full street address (coordinates until it loads) and when it was updated. */
 function CurrentPlace({ load }: { load: LoadSummaryDto }) {
   const p = load.lastPosition;
-  const a = useAddress(p ? p.latitude : null, p ? p.longitude : null, (p?.speedKph ?? 0) >= 5);
+  const a = useAddressState(p ? p.latitude : null, p ? p.longitude : null, (p?.speedKph ?? 0) >= 5);
   if (!p) return <span className="text-xs text-muted-foreground">No location yet</span>;
-  const text = a ? [a.line1, a.line2].filter(Boolean).join(", ") : `${p.latitude.toFixed(4)}, ${p.longitude.toFixed(4)}`;
+  const text = placeText(a, p.latitude, p.longitude);
   return (
     <span className="flex min-w-0 items-start gap-1">
       <MapPin className="mt-0.5 size-3.5 shrink-0 text-[#2563eb]" aria-hidden="true" />
       <span className="grid min-w-0">
-        <span className="line-clamp-2 text-xs leading-4 [overflow-wrap:anywhere]" title={a?.label ?? text}>
+        <span className="line-clamp-2 text-xs leading-4 [overflow-wrap:anywhere]" title={a.address?.label ?? text}>
           {text}
         </span>
         <span className="text-[11px] text-muted-foreground">
