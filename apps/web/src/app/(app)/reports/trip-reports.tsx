@@ -6,7 +6,7 @@
  * and paged in the browser without extra requests.
  */
 import { addDays, dateFormatter, startOfLocalDay, zoneLabel } from "@rio-gps/core/timezones";
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarRange, Clock, Download, Gauge, Mail, MapPinned, Milestone, Route, Timer, Truck } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarRange, Clock, Download, Gauge, Mail, MapPinned, Milestone, Route, Timer, Truck, Lock } from "lucide-react";
 import { ColumnChart } from "@/components/app/charts";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -24,6 +24,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { TripDto, TripReport } from "@/lib/reports";
 import { placeText, useAddressState } from "@/lib/use-address";
 import { DateRangeButton } from "@/components/app/date-range-calendar";
+import { usePlan } from "@/components/app/plan/plan-ui";
 import { ReportTabs } from "./report-tabs";
 
 type Dev = { id: string; label: string };
@@ -59,6 +60,8 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
   // End of the rolling "Last 24 hours" window: the moment it was picked.
   const [rollingEnd, setRollingEnd] = useState(() => Date.now());
   const [[fromDay, toDay], setDays] = useState<[string, string]>(() => presetRange("7d", tz));
+  const { plan, requestUpgrade } = usePlan();
+  const csvLocked = !!plan?.lockedFeatures.includes("csv_export");
   const [report, setReport] = useState<TripReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -188,13 +191,18 @@ export function TripReports({ devices, canSchedule = false }: { devices: Dev[]; 
                 </Link>
               </Button>
             )}
-            {report && report.trips.length > 0 && (
-              <Button asChild>
-                <a href={`/api/reports/trips?${qs}&format=csv`} download>
-                  <Download /> Export
-                </a>
-              </Button>
-            )}
+            {report && report.trips.length > 0 &&
+              (csvLocked ? (
+                <Button onClick={() => requestUpgrade([])}>
+                  <Lock /> Export
+                </Button>
+              ) : (
+                <Button asChild>
+                  <a href={`/api/reports/trips?${qs}&format=csv`} download>
+                    <Download /> Export
+                  </a>
+                </Button>
+              ))}
           </>
         }
       />

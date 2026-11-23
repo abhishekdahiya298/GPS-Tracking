@@ -1,3 +1,4 @@
+import { lockedPageFor } from "@/lib/plan-gate";
 import { contextHasPermission } from "@rio-gps/core";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -22,6 +23,8 @@ export default async function SchedulesPage() {
     if (err instanceof AppError && err.status === 403) redirect("/dashboard");
     throw err;
   }
+  const locked = await lockedPageFor(ctx, "emailed_reports", "Emailed reports", "Reports in your inbox every week");
+  if (locked) return locked;
   if (!contextHasPermission(ctx, "reports.manage")) redirect("/reports");
   const [schedules, members, devices] = await Promise.all([listSchedules(ctx.organizationId), listMembers(ctx.organizationId), listDevices(ctx.organizationId)]);
   return (

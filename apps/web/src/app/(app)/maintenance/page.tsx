@@ -1,3 +1,4 @@
+import { lockedPageFor } from "@/lib/plan-gate";
 import { contextHasPermission } from "@rio-gps/core";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -21,6 +22,8 @@ export default async function MaintenancePage() {
     if (err instanceof AppError && err.status === 403) redirect("/dashboard");
     throw err;
   }
+  const locked = await lockedPageFor(ctx, "maintenance", "Maintenance", "Services and reminders");
+  if (locked) return locked;
   if (!contextHasPermission(ctx, "maintenance.read")) redirect("/dashboard");
   const canWrite = contextHasPermission(ctx, "maintenance.write");
   const [items, renewals, vehicles, members] = await Promise.all([

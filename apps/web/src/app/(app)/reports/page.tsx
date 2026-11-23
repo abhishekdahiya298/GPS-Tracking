@@ -1,3 +1,4 @@
+import { lockedPageFor } from "@/lib/plan-gate";
 import { contextHasPermission } from "@rio-gps/core";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -19,6 +20,8 @@ export default async function ReportsPage() {
     if (err instanceof AppError && err.status === 403) redirect("/dashboard");
     throw err;
   }
+  const locked = await lockedPageFor(ctx, "reports", "Reports", "Mileage, stops, idling and trips");
+  if (locked) return locked;
   if (!contextHasPermission(ctx, "history.read")) redirect("/dashboard");
   const devices = (await listDevices(ctx.organizationId)).map((d) => ({ id: d.id, label: d.vehicle ? `${d.vehicle.name} (${deviceDisplayName(d.name, d.model)})` : deviceDisplayName(d.name, d.model) + (d.status === "active" ? "" : " — inactive") }));
   return <TripReports devices={devices} canSchedule={contextHasPermission(ctx, "reports.manage")} />;

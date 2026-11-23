@@ -43,6 +43,12 @@ export const organizations = pgTable("organizations", {
   /** Demo or internal test account (store review, sales demos). Platform admins can hide these from their lists. */
   isDemo: boolean("is_demo").notNull().default(false),
   /** Company map display defaults set by the company admin (icon style, names, nearby chips…); see lib/org-map-prefs. */
+  /** How the company signed up: fleet | operator | broker (null = created in the console). */
+  signupRole: text("signup_role"),
+  /** The verified phone it signed up with (one free company per phone). */
+  signupPhone: text("signup_phone"),
+  /** Code drivers type to join the company ("DHILLON-4821"). */
+  joinCode: text("join_code").unique(),
   mapPrefs: jsonb("map_prefs").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()

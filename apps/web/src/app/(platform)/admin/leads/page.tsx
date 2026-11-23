@@ -15,7 +15,7 @@ export default async function LeadsPage() {
   const { leads, newCount } = await listLeads();
   return (
     <>
-      <PageHeader title="Leads" description={`Pricing requests from the public site. ${newCount} new.`} />
+      <PageHeader title="Leads" description={`Pricing requests, upgrade requests and new sign-ups. ${newCount} new.`} />
       <LeadsView leads={leads} />
     </>
   );

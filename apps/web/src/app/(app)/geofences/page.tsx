@@ -1,3 +1,4 @@
+import { lockedPageFor } from "@/lib/plan-gate";
 import { contextHasPermission } from "@rio-gps/core";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -18,6 +19,8 @@ export default async function GeofencesPage() {
     if (err instanceof AppError && err.status === 403) redirect("/dashboard");
     throw err;
   }
+  const locked = await lockedPageFor(ctx, "zones", "Zones", "Yards, customers and borders");
+  if (locked) return locked;
   if (!contextHasPermission(ctx, "geofences.read")) redirect("/dashboard");
   const canAlerts = contextHasPermission(ctx, "alerts.read");
   const [fences, rules] = await Promise.all([listGeofences(ctx.organizationId), canAlerts ? listRules(ctx.organizationId) : Promise.resolve([])]);

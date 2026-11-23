@@ -62,7 +62,7 @@ export function errorResponse(err: unknown, fields: Record<string, unknown> = {}
         error: {
           code: err.code,
           message: err.message,
-          ...(err instanceof ValidationError && err.details ? { details: err.details } : {})
+          ...((err as { details?: unknown }).details ? { details: (err as { details?: unknown }).details } : {})
         }
       },
       { status: err.status }

@@ -3,7 +3,7 @@ import { getDb, schema } from "@rio-gps/db";
 import { and, asc, eq } from "drizzle-orm";
 import { getAuth } from "./auth";
 import { ForbiddenError, OrganizationUnavailableError, PlatformOnlyError, UnauthenticatedError } from "./errors";
-import { organizationModules } from "./plans";
+import { organizationPlanAccess } from "./plans";
 import { assertAppVersionAllowed } from "./app-releases";
 
 /**
@@ -71,7 +71,7 @@ export async function resolveTenantContext(user: AuthenticatedUser): Promise<Ten
         .from(schema.organizations)
         .where(eq(schema.organizations.id, user.activeOrganizationId))
         .limit(1);
-      if (org) return { userId: user.userId, organizationId: org.id, role: null, isSuperAdmin: true, modules: await organizationModules(org.id) };
+      if (org) return { userId: user.userId, organizationId: org.id, role: null, isSuperAdmin: true, ...planContext(await organizationPlanAccess(org.id)) };
     }
     throw new PlatformOnlyError();
   }
@@ -86,10 +86,14 @@ export async function resolveTenantContext(user: AuthenticatedUser): Promise<Ten
 
   const membership = (user.activeOrganizationId ? usable.find((m) => m.organizationId === user.activeOrganizationId) : undefined) ?? usable[0];
   if (membership && isOrgRole(membership.role)) {
-    return { userId: user.userId, organizationId: membership.organizationId, role: membership.role, isSuperAdmin: false, modules: await organizationModules(membership.organizationId) };
+    return { userId: user.userId, organizationId: membership.organizationId, role: membership.role, isSuperAdmin: false, ...planContext(await organizationPlanAccess(membership.organizationId)) };
   }
   if (rows.length > 0) throw new OrganizationUnavailableError(rows.some((r) => r.status === "suspended") ? "suspended" : "archived");
   throw new ForbiddenError("Your account is not a member of any organization");
+}
+
+function planContext(access: Awaited<ReturnType<typeof organizationPlanAccess>>): Pick<TenantContext, "modules" | "lockedFeatures"> {
+  return access ? { modules: access.modules, lockedFeatures: access.lockedFeatures } : { modules: undefined };
 }
 
 export async function requireTenantContext(request: Request): Promise<TenantContext> {

@@ -27,7 +27,8 @@ import {
   IdCard,
   Target,
   Layers,
-  Smartphone
+  Smartphone,
+  Lock
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -299,6 +300,7 @@ function SidebarContent({ nav, pathname, orgName, user, home, hideBrand, theme }
                         <Icon className="size-[17px] transition-transform duration-200 group-hover:scale-110" aria-hidden="true" />
                       </span>
                       <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      {item.locked && <Lock className="size-3.5 shrink-0 opacity-60" aria-label="Not in your plan" />}
                     </Link>
                   </li>
                 );

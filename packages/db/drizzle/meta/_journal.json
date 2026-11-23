@@ -225,6 +225,13 @@
       "when": 1795208047253,
       "tag": "0031_vehicle_details_driver_history",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1795428179034,
+      "tag": "0032_plans_signup",
+      "breakpoints": true
     }
   ]
 }

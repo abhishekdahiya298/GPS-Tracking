@@ -30,6 +30,7 @@ import { MapIconsCard } from "./map-icons-card";
 import { MenuStyleCard } from "./menu-style-card";
 import type { ThemeChoice } from "@/lib/theme";
 import { TwoStepCard } from "./two-step-card";
+import { DeleteAccountCard } from "./delete-account-card";
 
 type Prefs = {
   timeZone: string | null;
@@ -179,6 +180,7 @@ export function AccountForm({
             </form>
           </Card>
           <TwoStepCard enabled={twoStep} />
+          <DeleteAccountCard />
         </div>
       </div>
     </>

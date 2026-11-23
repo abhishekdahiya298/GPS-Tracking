@@ -84,7 +84,7 @@ export async function createCustomer(actorUserId: string, input: z.infer<typeof 
       // Every customer starts on a plan (its terms copied from the catalog).
       const [plan] = input.planId
         ? await tx.select().from(schema.plans).where(eq(schema.plans.id, input.planId))
-        : await tx.select().from(schema.plans).where(eq(schema.plans.active, true)).orderBy(sql`cardinality(${schema.plans.modules}) desc`, schema.plans.sortOrder).limit(1);
+        : await tx.select().from(schema.plans).where(eq(schema.plans.active, true)).orderBy(sql`cardinality(${schema.plans.modules}) desc`, sql`cardinality(${schema.plans.lockedFeatures})`, schema.plans.sortOrder).limit(1);
       if (!plan) throw new ValidationError("Choose a plan for this customer");
       await tx.insert(schema.subscriptions).values({
         organizationId: org!.id,
@@ -95,6 +95,8 @@ export async function createCustomer(actorUserId: string, input: z.infer<typeof 
         extraLoadCents: plan.extraLoadCents,
         monthlyFeeCents: plan.monthlyFeeCents,
         perTrackerCents: plan.perTrackerCents,
+        lockedFeatures: plan.lockedFeatures,
+        limits: plan.limits,
         changedBy: actorUserId
       });
       return org!.id;

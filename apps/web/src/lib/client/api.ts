@@ -1,3 +1,5 @@
+import { announcePlanRefusal } from "./plan-events";
+
 /**
  * The one client-side fetch helper. Same-origin JSON only; the server remains
  * the authority for authentication, tenancy and permissions.
@@ -6,7 +8,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
-    public readonly code?: string
+    public readonly code?: string,
+    public readonly details?: Record<string, unknown>
   ) {
     super(message);
   }
@@ -25,10 +28,14 @@ export async function api<T = unknown>(path: string, init: RequestInit & { json?
     throw new ApiError("Your session has ended. Please sign in again.", 401);
   }
   if (res.status === 204) return undefined as T;
-  const body = (await res.json().catch(() => null)) as { error?: { message?: string; code?: string } } | null;
+  const body = (await res.json().catch(() => null)) as { error?: { message?: string; code?: string; details?: Record<string, unknown> } } | null;
   if (!res.ok) {
     const fallback = res.status >= 500 ? "The server couldn't complete this request. Please try again." : `Request failed (${res.status})`;
-    throw new ApiError(body?.error?.message ?? fallback, res.status, body?.error?.code);
+    const err = new ApiError(body?.error?.message ?? fallback, res.status, body?.error?.code, body?.error?.details);
+    const d = err.details ?? {};
+    if (err.code === "LIMIT_REACHED") announcePlanRefusal({ code: "LIMIT_REACHED", message: err.message, limit: String(d.limit ?? ""), used: Number(d.used ?? 0), max: Number(d.max ?? 0) });
+    if (err.code === "FEATURE_LOCKED") announcePlanRefusal({ code: "FEATURE_LOCKED", message: err.message, feature: String(d.feature ?? "") });
+    throw err;
   }
   return body as T;
 }

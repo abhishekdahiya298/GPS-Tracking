@@ -131,7 +131,7 @@ describe("plans: counting loads fairly", () => {
   });
 
   it("editing a catalog plan never changes an existing customer's price", async () => {
-    await updatePlan(platformId, planIds["Loads Starter"]!, { name: "Loads Starter", modules: ["loads"], includedLoads: 50, extraLoad: 999, monthlyFee: 99_900, perTracker: 0, active: true }, meta);
+    await updatePlan(platformId, planIds["Loads Starter"]!, { name: "Loads Starter", modules: ["loads"], includedLoads: 50, extraLoad: 999, monthlyFee: 99_900, perTracker: 0, active: true, lockedFeatures: [], limits: {}, visibility: "offered" as const }, meta);
     const [line] = await usageStatement(periodOf(new Date(), "America/Toronto"), brokerId);
     expect(line!.plan).toMatchObject({ includedLoads: 2, extraLoadCents: 200, monthlyFeeCents: 4900 });
   });

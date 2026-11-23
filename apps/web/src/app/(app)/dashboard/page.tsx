@@ -1,3 +1,4 @@
+import { PlanStrip } from "@/components/app/plan/plan-strip";
 import { contextHasPermission, units, type TenantContext, type Units } from "@rio-gps/core";
 import { AlertTriangle, PieChart, Zap, CheckCircle2, CalendarClock, ArrowRight, Bell,  Hexagon, Map as MapIcon, Navigation, Package, Plus, Route, Truck, Users, Wrench } from "lucide-react";
 import Link from "next/link";
@@ -66,6 +67,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     return (
       <>
         <Hero greeting={hello} orgName={rc.orgName} dateLabel={dateLabel} summary={`${loadsSummary}${unack > 0 ? ` · ${unack} unread alert${unack === 1 ? "" : "s"}` : ""}`} action={{ href: "/loads/map", label: "Open loads map", icon: MapIcon }} />
+        <PlanStrip />
         <div className="mb-5">
           <LoadTiles d={loadsDash} />
         </div>
@@ -124,11 +126,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     return (
       <>
         <PageHeader title={firstName ? `Welcome, ${firstName}` : "Welcome"} description="Here's how to start tracking your fleet." />
+        <PlanStrip />
         <Card>
           <EmptyState
             icon={Truck}
-            title="No vehicles are reporting yet"
-            description="Add a vehicle, then assign a GPS device to it. Positions appear on the live map as soon as the device reports."
+            title={ctx.lockedFeatures?.includes("gps_trackers") ? "Get started" : "No vehicles are reporting yet"}
+            description={
+              ctx.lockedFeatures?.includes("gps_trackers")
+                ? "Add your trucks and drivers, then create a load: the driver gets a link and shares their location from their phone while on duty."
+                : "Add a vehicle, then assign a GPS device to it. Positions appear on the live map as soon as the device reports."
+            }
             action={
               <>
                 {can("vehicles.create") && (
@@ -138,7 +145,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                     </Link>
                   </Button>
                 )}
-                {ctx.isSuperAdmin && (
+                {ctx.lockedFeatures?.includes("gps_trackers") && can("loads.write") && (
+                  <Button asChild variant="secondary">
+                    <Link href="/loads/new">Create a load</Link>
+                  </Button>
+                )}
+                {ctx.isSuperAdmin && !ctx.lockedFeatures?.includes("gps_trackers") && (
                   <Button asChild variant="secondary">
                     <Link href="/admin/customers">Register device</Link>
                   </Button>
@@ -162,6 +174,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         action={can("locations.read") ? { href: "/map", label: "Open live map" } : undefined}
       />
 
+      <PlanStrip />
       <section aria-label="Fleet summary" className="stagger-in mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Tile label="Total vehicles" value={devices.length} icon={Truck} look="total" hint={unack > 0 ? `${unack} unread alert${unack === 1 ? "" : "s"}` : "All tracked"} href="/vehicles" className="col-span-2 md:col-span-1" />
         <Tile label="Moving" value={count("moving")} total={devices.length} icon={Navigation} look="moving" href="/vehicles?state=moving" />

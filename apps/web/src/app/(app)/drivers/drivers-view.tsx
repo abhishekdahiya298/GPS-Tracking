@@ -1,6 +1,6 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { BadgeAlert, Car, History, IdCard, Layers, Map as MapIcon, Navigation, Pencil, Phone, Plus, Trash2, UserCheck, UserMinus, UserX, Users } from "lucide-react";
+import { BadgeAlert, Car, History, IdCard, Layers, Map as MapIcon, Navigation, Pencil, Phone, Plus, Share2, Trash2, UserCheck, UserMinus, UserX, Users } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
@@ -13,7 +13,8 @@ import { EmptyState } from "@/components/app/states";
 import { useListParams } from "@/components/app/use-list-params";
 import { useUnits } from "@/components/app/units-context";
 import { VehiclePicture } from "@/components/app/vehicle-picture";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
@@ -25,7 +26,7 @@ import { StatusChip } from "@/components/app/status-chip";
 import { DensityToggle, PlateTag, useDensity } from "@/components/app/vehicle-tags";
 import { useTime } from "@/components/app/time-context";
 import { cn } from "@/lib/cn";
-import { Select } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 
 type Data = { items: DriverRow[]; total: number; page: number; pageSize: number; counts: Record<DriverListQuery["state"], number> };
 type Can = { create: boolean; update: boolean; remove: boolean; map: boolean };
@@ -57,7 +58,8 @@ export function DriverAvatar({ name, className = "size-9 text-sm" }: { name: str
 }
 
 /** Drivers and the vehicle each one drives now, with quick assign / reassign. */
-export function DriversView({ data, query, can, vehicles }: { data: Data; query: DriverListQuery; can: Can; vehicles: VehicleOption[] }) {
+export function DriversView({ data, query, can, vehicles, joinCode = null }: { data: Data; query: DriverListQuery; can: Can; vehicles: VehicleOption[]; joinCode?: string | null }) {
+  const [invite, setInvite] = useState(false);
   const u = useUnits();
   const { set, refresh, pending } = useListParams();
   const [form, setForm] = useState<{ driver: DriverRow | null } | null>(null);
@@ -209,12 +211,20 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
         description="Who drives which vehicle, and whether they are on the road now."
         actions={
           can.create && (
-            <Button onClick={() => setForm({ driver: null })}>
-              <Plus /> Add driver
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {joinCode && (
+                <Button variant="secondary" onClick={() => setInvite(true)}>
+                  <Share2 /> Invite drivers
+                </Button>
+              )}
+              <Button onClick={() => setForm({ driver: null })}>
+                <Plus /> Add driver
+              </Button>
+            </div>
           )
         }
       />
+      {invite && joinCode && <InviteDriversDialog code={joinCode} onClose={() => setInvite(false)} />}
       <FilterTiles
         label="Filter drivers"
         value={query.state}
@@ -328,5 +338,45 @@ export function DriversView({ data, query, can, vehicles }: { data: Data; query:
         }}
       />
     </>
+  );
+}
+
+/** Drivers join with the company code (or the link that carries it). */
+function InviteDriversDialog({ code, onClose }: { code: string; onClose: () => void }) {
+  const link = typeof window === "undefined" ? `/signup?code=${encodeURIComponent(code)}` : `${window.location.origin}/signup?code=${encodeURIComponent(code)}`;
+  const text = `Join our company on RIO GPS: ${link} (company code ${code})`;
+  const copy = async (v: string) => {
+    try {
+      await navigator.clipboard.writeText(v);
+      toast.success("Copied");
+    } catch {
+      toast.error("Couldn't copy. Select the text and copy it.");
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent title="Invite drivers" description="Drivers open the link (or type the code at Create account → I'm a driver). They're added to your Drivers list after confirming their phone." className="max-w-md">
+        <div className="grid gap-3 px-5 py-4">
+          <div className="grid justify-items-center gap-1 rounded-xl bg-muted/60 p-4 text-center">
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Company code</span>
+            <b className="text-2xl tracking-wider">{code}</b>
+          </div>
+          <div className="flex gap-2">
+            <Input readOnly value={link} aria-label="Invite link" onFocus={(e) => e.currentTarget.select()} />
+            <Button variant="secondary" onClick={() => void copy(link)}>
+              Copy link
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <a className={buttonVariants({ variant: "secondary", size: "sm" })} href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">
+              WhatsApp
+            </a>
+            <a className={buttonVariants({ variant: "secondary", size: "sm" })} href={`sms:?&body=${encodeURIComponent(text)}`}>
+              Text message
+            </a>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

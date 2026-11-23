@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { DriverListQuery, listDriversPage } from "@/lib/drivers";
 import { parseListQuery } from "@/lib/fleet-list";
 import { requireTenantPage } from "@/lib/request-context";
+import { companyJoinCode } from "@/lib/signup";
 import { DriversView } from "./drivers-view";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +30,10 @@ export default async function DriversPage({ searchParams }: { searchParams: Prom
     remove: contextHasPermission(ctx, "vehicles.delete"),
     map: contextHasPermission(ctx, "locations.read")
   };
+  const joinCode = can.create ? await companyJoinCode(ctx.organizationId).catch(() => null) : null;
   return (
     <DriversView
+      joinCode={joinCode}
       data={data}
       query={q}
       can={can}

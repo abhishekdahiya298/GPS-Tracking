@@ -7,7 +7,8 @@
  */
 import type { GeoJSONSource, Map as MlMap } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
-import { CalendarDays, ChevronLeft, ChevronRight, CircleStop, Clock, Gauge, History, Pause, Pencil, Play, Route, Timer, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, CircleStop, Clock, Gauge, History, Lock, Pause, Pencil, Play, Route, Timer, X } from "lucide-react";
+import { usePlan } from "@/components/app/plan/plan-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addDays, toWallTime, wallTimeToUtc } from "@rio-gps/core/timezones";
 import { DateRangeCalendar, daySpan, shortDay, type DayRange } from "@/components/app/date-range-calendar";
@@ -197,6 +198,7 @@ export function HistoryPanel({
         if (!r.ok) throw new Error(body?.error?.message ?? `Request failed (${r.status})`);
         pts.push(...body.points);
         next = body.nextCursor;
+        setLimitedFrom(body.limitedFrom ?? null);
       } while (next && pts.length < MAX_HISTORY_POINTS);
       setTrack(pts);
       setWindow({ start: fromUtc.getTime(), end: toUtc.getTime() });
@@ -264,6 +266,8 @@ export function HistoryPanel({
   }, [cursor, track, drawCursor, drawDone, playing]);
 
   const [editing, setEditing] = useState(false);
+  const [limitedFrom, setLimitedFrom] = useState<string | null>(null);
+  const { plan, requestUpgrade } = usePlan();
   const todayKey = toWallTime(new Date(), tz).slice(0, 10);
   const pickRange = (r: Range) => {
     if (r === "custom") {
@@ -402,6 +406,17 @@ export function HistoryPanel({
           ) : (
             <span className="w-8" />
           )}
+        </div>
+      )}
+      {limitedFrom && (
+        <div className="flex items-center gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+          <Lock className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="flex-1">
+            {plan?.planName ?? "Your plan"} shows {plan?.limits.historyDays && plan.limits.historyDays > 1 ? `the last ${plan.limits.historyDays} days` : "today only"}. Earlier trips come with a paid plan.
+          </span>
+          <button type="button" className="cursor-pointer border-0 bg-transparent p-0 font-bold text-primary" onClick={() => requestUpgrade(["trip_history"])}>
+            Upgrade
+          </button>
         </div>
       )}
 

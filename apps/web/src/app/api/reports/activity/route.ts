@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { ActivityQuery, activityReportCsv, buildActivityReport } from "@/lib/activity-reports";
 import { requirePermission, requireTenantContext } from "@/lib/authz";
+import { requireFeature } from "@/lib/entitlements";
 import { getServerEnv } from "@/lib/env";
 import { errorResponse, ValidationError } from "@/lib/errors";
 import { getTimePrefs } from "@/lib/organization";
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
   try {
     const ctx = await requireTenantContext(request);
     requirePermission(ctx, "history.read");
+    requireFeature(ctx, "reports");
     const q = ActivityQuery.safeParse(Object.fromEntries(new URL(request.url).searchParams));
     if (!q.success) throw new ValidationError(friendlyZodMessage(q.error));
     const from = new Date(q.data.from);
@@ -34,6 +36,7 @@ export async function GET(request: Request) {
 
     const report = await buildActivityReport(ctx.organizationId, q.data, tz);
     if (q.data.format === "csv") {
+      requireFeature(ctx, "csv_export");
       const [org] = await getDb().select({ unitSystem: schema.organizations.unitSystem }).from(schema.organizations).where(eq(schema.organizations.id, ctx.organizationId));
       const file = `${q.data.type}-${q.data.from.slice(0, 10)}-to-${q.data.to.slice(0, 10)}.csv`;
       return new NextResponse(activityReportCsv(report, org?.unitSystem ?? "imperial"), {

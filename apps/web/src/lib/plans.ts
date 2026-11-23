@@ -1,4 +1,4 @@
-import { MODULES, type Module } from "@rio-gps/core";
+import { cleanFeatures, cleanLimits, FEATURES, LIMITS, MODULES, type Feature, type Module, type PlanLimits } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -29,23 +29,41 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 const cents = z.coerce.number().min(0).max(100_000).transform((v) => Math.round(v * 100));
 const moduleList = z.array(z.enum(MODULES)).min(1, "Pick at least one module").transform((v) => [...new Set(v)].sort() as Module[]);
 
+/** An empty box (or null) means no limit. */
+const limitValue = z.preprocess((v) => (v === "" || v === null || v === undefined ? undefined : v), z.coerce.number().int("Use a whole number").min(0, "Use 0 or more").max(1_000_000).optional());
+export const LimitsSchema = z.object(Object.fromEntries(LIMITS.map((k) => [k, limitValue])) as Record<(typeof LIMITS)[number], typeof limitValue>).transform((v) => cleanLimits(v));
+const featureList = z.array(z.enum(FEATURES)).transform((v) => cleanFeatures(v));
+
 /** Prices are entered in dollars and stored in cents. */
 export const PlanTermsSchema = z.object({
   modules: moduleList,
   includedLoads: z.coerce.number().int().min(0).max(1_000_000),
   extraLoad: cents,
   monthlyFee: cents,
-  perTracker: cents
+  perTracker: cents,
+  /** Features NOT included. */
+  lockedFeatures: featureList.default([]),
+  limits: LimitsSchema.default({})
 });
+
+export const PLAN_VISIBILITY = ["public", "offered", "hidden"] as const;
+export type PlanVisibility = (typeof PLAN_VISIBILITY)[number];
 
 export const PlanInputSchema = PlanTermsSchema.extend({
   name: z.string().trim().min(2).max(60),
-  active: z.boolean().default(true)
+  active: z.boolean().default(true),
+  visibility: z.enum(PLAN_VISIBILITY).default("offered"),
+  priceNote: z.string().trim().max(40).optional()
 });
 
 export const SetPlanSchema = PlanTermsSchema.extend({
   planId: z.string().uuid(),
-  note: z.string().trim().max(500).optional()
+  note: z.string().trim().max(500).optional(),
+  /** Leave out to copy the plan's features and limits. */
+  lockedFeatures: featureList.optional(),
+  limits: LimitsSchema.optional(),
+  /** A trial: after this many days the customer goes back to their current plan by itself. */
+  trialDays: z.coerce.number().int().min(1, "At least 1 day").max(90, "At most 90 days").optional()
 });
 
 export interface PlanTerms {
@@ -54,11 +72,15 @@ export interface PlanTerms {
   extraLoadCents: number;
   monthlyFeeCents: number;
   perTrackerCents: number;
+  lockedFeatures: Feature[];
+  limits: PlanLimits;
 }
 export interface PlanDto extends PlanTerms {
   id: string;
   name: string;
   active: boolean;
+  visibility: PlanVisibility;
+  priceNote: string | null;
   customers: number;
 }
 export interface SubscriptionDto extends PlanTerms {
@@ -69,15 +91,20 @@ export interface SubscriptionDto extends PlanTerms {
   endedAt: string | null;
   changedByName: string | null;
   note: string | null;
+  trialEndsAt: string | null;
 }
 
-const terms = (r: { modules: string[]; includedLoads: number; extraLoadCents: number; monthlyFeeCents: number; perTrackerCents: number }): PlanTerms => ({
+const terms = (r: { modules: string[]; includedLoads: number; extraLoadCents: number; monthlyFeeCents: number; perTrackerCents: number; lockedFeatures?: string[] | null; limits?: unknown }): PlanTerms => ({
   modules: r.modules as Module[],
   includedLoads: r.includedLoads,
   extraLoadCents: r.extraLoadCents,
   monthlyFeeCents: r.monthlyFeeCents,
-  perTrackerCents: r.perTrackerCents
+  perTrackerCents: r.perTrackerCents,
+  lockedFeatures: cleanFeatures(r.lockedFeatures),
+  limits: cleanLimits(r.limits)
 });
+
+const asVisibility = (v: string): PlanVisibility => ((PLAN_VISIBILITY as readonly string[]).includes(v) ? (v as PlanVisibility) : "offered");
 
 const isUnique = (err: unknown) => {
   const e = err as { code?: string; cause?: { code?: string } };
@@ -98,11 +125,15 @@ export async function listPlans(): Promise<PlanDto[]> {
       extraLoadCents: p.extraLoadCents,
       monthlyFeeCents: p.monthlyFeeCents,
       perTrackerCents: p.perTrackerCents,
+      lockedFeatures: p.lockedFeatures,
+      limits: p.limits,
+      visibility: p.visibility,
+      priceNote: p.priceNote,
       customers: sql<number>`(select count(*)::int from subscriptions s where s.plan_id = "plans"."id" and s.ended_at is null)`
     })
     .from(p)
     .orderBy(desc(p.active), asc(p.sortOrder), asc(p.name));
-  return rows.map((r) => ({ id: r.id, name: r.name, active: r.active, customers: r.customers, ...terms(r) }));
+  return rows.map((r) => ({ id: r.id, name: r.name, active: r.active, visibility: asVisibility(r.visibility), priceNote: r.priceNote, customers: r.customers, ...terms(r) }));
 }
 
 function planValues(input: z.infer<typeof PlanInputSchema>) {
@@ -113,7 +144,11 @@ function planValues(input: z.infer<typeof PlanInputSchema>) {
     includedLoads: input.modules.includes("loads") ? input.includedLoads : 0,
     extraLoadCents: input.modules.includes("loads") ? input.extraLoad : 0,
     monthlyFeeCents: input.monthlyFee,
-    perTrackerCents: input.modules.includes("gps") ? input.perTracker : 0
+    perTrackerCents: input.modules.includes("gps") ? input.perTracker : 0,
+    lockedFeatures: input.lockedFeatures,
+    limits: input.limits,
+    visibility: input.visibility,
+    priceNote: input.priceNote || null
   };
 }
 
@@ -151,18 +186,83 @@ export async function updatePlan(actorUserId: string, id: string, input: z.infer
 
 // ---------- customer terms ----------
 
+export interface PlanAccess {
+  planName: string;
+  modules: Module[];
+  lockedFeatures: Feature[];
+  limits: PlanLimits;
+  includedLoads: number;
+  trialEndsAt: Date | null;
+}
+
 /**
- * The modules a customer's plan includes. `undefined` only for an organization with no plan
- * recorded at all (never the case for customers created in the console; listed on the
- * platform overview so it can be fixed), which is treated as unrestricted.
+ * What a customer's plan allows right now. `undefined` only for an organization with no plan
+ * recorded at all (never the case for customers created in the console; listed on the platform
+ * overview so it can be fixed), which is treated as unrestricted.
+ *
+ * A trial that has ended is closed here, on the first request after it ends: the customer goes
+ * back to the plan they were on (its current catalog terms). Nothing they added is removed.
  */
-export async function organizationModules(organizationId: string): Promise<Module[] | undefined> {
+export async function organizationPlanAccess(organizationId: string, now = new Date()): Promise<PlanAccess | undefined> {
+  const s = schema.subscriptions;
   const [row] = await getDb()
-    .select({ modules: schema.subscriptions.modules })
-    .from(schema.subscriptions)
-    .where(and(eq(schema.subscriptions.organizationId, organizationId), isNull(schema.subscriptions.endedAt)))
+    .select({ planName: s.planName, modules: s.modules, lockedFeatures: s.lockedFeatures, limits: s.limits, includedLoads: s.includedLoads, trialEndsAt: s.trialEndsAt })
+    .from(s)
+    .where(and(eq(s.organizationId, organizationId), isNull(s.endedAt)))
     .limit(1);
-  return row ? (row.modules as Module[]) : undefined;
+  if (!row) return undefined;
+  if (row.trialEndsAt && row.trialEndsAt <= now) {
+    await endTrial(organizationId, now);
+    return organizationPlanAccess(organizationId, new Date(0));
+  }
+  return { planName: row.planName, modules: row.modules as Module[], lockedFeatures: cleanFeatures(row.lockedFeatures), limits: cleanLimits(row.limits), includedLoads: row.includedLoads, trialEndsAt: row.trialEndsAt };
+}
+
+/** Kept for callers that only need modules. */
+export async function organizationModules(organizationId: string): Promise<Module[] | undefined> {
+  return (await organizationPlanAccess(organizationId))?.modules;
+}
+
+/** Closes an ended trial (safe to call twice: only an open, ended trial is changed). */
+export async function endTrial(organizationId: string, now = new Date()): Promise<boolean> {
+  const ended = await getDb().transaction(async (tx) => {
+    const s = schema.subscriptions;
+    const [open] = await tx
+      .select({ id: s.id, trialEndsAt: s.trialEndsAt, returnPlanId: s.trialReturnPlanId, planName: s.planName })
+      .from(s)
+      .where(and(eq(s.organizationId, organizationId), isNull(s.endedAt)))
+      .for("update");
+    if (!open?.trialEndsAt || open.trialEndsAt > now) return null;
+    const [plan] = open.returnPlanId
+      ? await tx.select().from(schema.plans).where(eq(schema.plans.id, open.returnPlanId))
+      : await tx.select().from(schema.plans).where(eq(schema.plans.visibility, "public")).orderBy(asc(schema.plans.sortOrder)).limit(1);
+    await tx.update(s).set({ endedAt: open.trialEndsAt }).where(eq(s.id, open.id));
+    if (!plan) {
+      // Nothing to go back to: keep the trial terms, just without an end date.
+      const [cur] = await tx.select().from(s).where(eq(s.id, open.id));
+      await tx.insert(s).values({ ...cur!, id: undefined, startedAt: open.trialEndsAt, endedAt: null, trialEndsAt: null, trialReturnPlanId: null, changedBy: null, note: "Trial ended" });
+      return { from: open.planName, to: cur!.planName };
+    }
+    await tx.insert(s).values({
+      organizationId,
+      planId: plan.id,
+      planName: plan.name,
+      modules: plan.modules,
+      includedLoads: plan.includedLoads,
+      extraLoadCents: plan.extraLoadCents,
+      monthlyFeeCents: plan.monthlyFeeCents,
+      perTrackerCents: plan.perTrackerCents,
+      lockedFeatures: plan.lockedFeatures,
+      limits: plan.limits,
+      startedAt: open.trialEndsAt,
+      changedBy: null,
+      note: "Trial ended"
+    });
+    return { from: open.planName, to: plan.name };
+  });
+  if (!ended) return false;
+  await writeAudit({ action: "customer.trial_ended", actorUserId: null, organizationId, targetType: "organization", targetId: organizationId, metadata: ended, ipAddress: null, userAgent: null });
+  return true;
 }
 
 export async function customerPlanHistory(organizationId: string): Promise<SubscriptionDto[]> {
@@ -177,6 +277,9 @@ export async function customerPlanHistory(organizationId: string): Promise<Subsc
       extraLoadCents: s.extraLoadCents,
       monthlyFeeCents: s.monthlyFeeCents,
       perTrackerCents: s.perTrackerCents,
+      lockedFeatures: s.lockedFeatures,
+      limits: s.limits,
+      trialEndsAt: s.trialEndsAt,
       startedAt: s.startedAt,
       endedAt: s.endedAt,
       note: s.note,
@@ -193,6 +296,7 @@ export async function customerPlanHistory(organizationId: string): Promise<Subsc
     startedAt: r.startedAt.toISOString(),
     endedAt: r.endedAt?.toISOString() ?? null,
     note: r.note,
+    trialEndsAt: r.trialEndsAt?.toISOString() ?? null,
     changedByName: r.changedByName ?? null,
     ...terms(r)
   }));
@@ -210,8 +314,15 @@ export async function setCustomerPlan(
   const run = async (tx: Tx) => {
     const [org] = await tx.select({ id: schema.organizations.id }).from(schema.organizations).where(eq(schema.organizations.id, organizationId)).for("update");
     if (!org) throw new NotFoundError("Customer not found");
-    const [plan] = await tx.select({ id: schema.plans.id, name: schema.plans.name }).from(schema.plans).where(eq(schema.plans.id, input.planId));
+    const [plan] = await tx
+      .select({ id: schema.plans.id, name: schema.plans.name, lockedFeatures: schema.plans.lockedFeatures, limits: schema.plans.limits })
+      .from(schema.plans)
+      .where(eq(schema.plans.id, input.planId));
     if (!plan) throw new ValidationError("Choose a plan");
+    const [current] = await tx
+      .select({ planId: schema.subscriptions.planId, trialReturnPlanId: schema.subscriptions.trialReturnPlanId })
+      .from(schema.subscriptions)
+      .where(and(eq(schema.subscriptions.organizationId, organizationId), isNull(schema.subscriptions.endedAt)));
     await tx
       .update(schema.subscriptions)
       .set({ endedAt: now })
@@ -225,9 +336,14 @@ export async function setCustomerPlan(
       extraLoadCents: input.modules.includes("loads") ? input.extraLoad : 0,
       monthlyFeeCents: input.monthlyFee,
       perTrackerCents: input.modules.includes("gps") ? input.perTracker : 0,
+      lockedFeatures: input.lockedFeatures ?? cleanFeatures(plan.lockedFeatures),
+      limits: input.limits ?? cleanLimits(plan.limits),
+      // A trial returns to the plan before it (a trial started during a trial keeps the first plan).
+      trialEndsAt: input.trialDays ? new Date(now.getTime() + input.trialDays * 86_400_000) : null,
+      trialReturnPlanId: input.trialDays ? (current?.trialReturnPlanId ?? current?.planId ?? null) : null,
       startedAt: now,
       changedBy: actorUserId,
-      note: input.note || null
+      note: input.note || (input.trialDays ? `${input.trialDays}-day trial` : null)
     });
     return plan.name;
   };
@@ -238,7 +354,7 @@ export async function setCustomerPlan(
     organizationId,
     targetType: "organization",
     targetId: organizationId,
-    metadata: { plan: planName, modules: input.modules, includedLoads: input.includedLoads },
+    metadata: { plan: planName, modules: input.modules, includedLoads: input.includedLoads, trialDays: input.trialDays ?? null },
     ...meta
   });
 }
@@ -295,7 +411,7 @@ export interface UsageLine {
   customerStatus: string;
   period: string;
   /** Terms in effect at the end of the month (or now, for the current month). */
-  plan: (PlanTerms & { planName: string }) | null;
+  plan: (Omit<PlanTerms, "lockedFeatures" | "limits"> & { planName: string }) | null;
   loadsUsed: number;
   extraLoads: number;
   trackers: number;
@@ -421,11 +537,18 @@ const g = globalThis as unknown as { __rioUsageScheduler?: NodeJS.Timeout };
 /** Hourly: marks trackers used this month (cheap, idempotent insert). */
 export function startUsageScheduler(intervalMs = 3_600_000) {
   if (g.__rioUsageScheduler) return;
-  const tick = () =>
-    recordTrackerMonths().then(
+  let lastArchive = 0;
+  const tick = () => {
+    void recordTrackerMonths().then(
       (n) => n && logger.info("usage.trackers_recorded", { added: n }),
       (err) => logger.error("usage.trackers_failed", {}, err)
     );
+    // Once a day: free companies nobody uses any more (Sign-up & upgrades setting).
+    if (Date.now() - lastArchive > 86_400_000) {
+      lastArchive = Date.now();
+      void import("./signup").then((m) => m.archiveInactiveFreeCompanies()).catch((err) => logger.error("signup.archive_failed", {}, err));
+    }
+  };
   setTimeout(tick, 30_000).unref?.();
   logger.info("usage.scheduler_started", { intervalMinutes: intervalMs / 60_000 });
   g.__rioUsageScheduler = setInterval(tick, intervalMs);

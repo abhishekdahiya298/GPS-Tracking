@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission, requireTenantContext } from "@/lib/authz";
 import { assertSameOrigin } from "@/lib/csrf";
+import { requireFeature } from "@/lib/entitlements";
 import { errorResponse } from "@/lib/errors";
 import { readJson, requestMeta } from "@/lib/request-meta";
 import { createShareLink, listShareLinks, ShareInputSchema } from "@/lib/share-links";
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 function requireSharePermission(ctx: Parameters<typeof requirePermission>[0]) {
   requirePermission(ctx, "vehicles.update");
   requirePermission(ctx, "locations.read");
+  requireFeature(ctx, "shipper_links");
 }
 
 /** The organization's share links (never the tokens). Optional ?vehicleId=. */

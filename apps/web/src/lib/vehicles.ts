@@ -1,3 +1,4 @@
+import { assertCanAdd } from "./entitlements";
 import type { TenantContext } from "@rio-gps/core";
 import { friendlyZodMessage } from "./validation-message";
 import { getDb, schema } from "@rio-gps/db";
@@ -125,6 +126,7 @@ type Meta = { ipAddress: string | null; userAgent: string | null };
 
 export async function createVehicle(ctx: TenantContext, input: z.infer<typeof VehicleInputSchema>, meta: Meta) {
   let v: typeof schema.vehicles.$inferSelect | undefined;
+  await assertCanAdd(ctx.organizationId, "vehicles");
   try {
     [v] = await getDb()
       .insert(schema.vehicles)

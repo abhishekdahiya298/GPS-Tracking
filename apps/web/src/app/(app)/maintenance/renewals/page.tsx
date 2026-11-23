@@ -1,3 +1,4 @@
+import { lockedPageFor } from "@/lib/plan-gate";
 import { contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
 import { listRenewals } from "@/lib/renewals";
@@ -12,6 +13,8 @@ export const metadata = { title: "Renewals · RIO GPS" };
 export default async function RenewalsPage() {
   const rc = await requireTenantPage("/maintenance/renewals");
   const { ctx } = rc;
+  const locked = await lockedPageFor(ctx, "maintenance", "Renewals", "Registration, insurance and permits");
+  if (locked) return locked;
   if (!contextHasPermission(ctx, "maintenance.read")) redirect("/dashboard");
   const canWrite = contextHasPermission(ctx, "maintenance.write");
   const [renewals, vehicles, members] = await Promise.all([
