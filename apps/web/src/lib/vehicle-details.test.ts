@@ -38,3 +38,17 @@ describe("vehicle details", () => {
     expect(await decodeVin("3AKJHHDR7NSMN1234", down as unknown as typeof fetch)).toMatchObject({ found: false, make: null });
   });
 });
+
+describe("vinProblem", () => {
+  it("explains what is wrong in plain words", async () => {
+    const { vinProblem } = await import("./schemas/vehicle");
+    expect(vinProblem("")).toBeNull();
+    expect(vinProblem("1XKYD49X1KJ264499")).toBeNull();
+    expect(vinProblem("1D1A5325AS201713")).toBe("16 characters: a VIN has 17. One character is missing.");
+    expect(vinProblem("1XKYD49X1KJ2644")).toMatch(/^15 characters: a VIN has 17. 2 characters are missing/);
+    expect(vinProblem("1XKYD49X1KJ2644990")).toMatch(/Remove the extra character/);
+    expect(vinProblem("1XKYD49X1KJ26449O")).toMatch(/never use the letters I, O or Q/);
+    expect(vinProblem("1XKYD49X1KJ2644*9")).toBe("Use only letters and numbers.");
+    expect(vinProblem("1xkyd-49x1 kj264499")).toBeNull(); // spaces, dashes and lower case are fine
+  });
+});

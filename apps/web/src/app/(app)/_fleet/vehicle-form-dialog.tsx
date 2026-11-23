@@ -16,7 +16,7 @@ import { cn } from "@/lib/cn";
 import { deviceDisplayName } from "@/lib/device-name";
 import type { VehicleDetail } from "@/lib/fleet-list";
 import type { VinInfo } from "@/lib/vin-decode";
-import { asVehicleType, DEFAULT_VEHICLE_TYPE, FUEL_LABEL, FUEL_TYPES, normalizeVin, VEHICLE_TYPE_LABEL, VEHICLE_TYPES, VehicleInputSchema, VIN_RE } from "@/lib/schemas/vehicle";
+import { asVehicleType, DEFAULT_VEHICLE_TYPE, FUEL_LABEL, FUEL_TYPES, normalizeVin, VEHICLE_TYPE_LABEL, VEHICLE_TYPES, VehicleInputSchema, VIN_RE, vinProblem } from "@/lib/schemas/vehicle";
 
 type Values = z.input<typeof VehicleInputSchema>;
 export interface EditableVehicle {
@@ -94,9 +94,13 @@ export function VehicleFormDialog({ open, onOpenChange, vehicle, onSaved }: { op
   }, [open, editing]);
 
   const [vinState, setVinState] = useState<{ busy: boolean; info: VinInfo | null; error: string | null }>({ busy: false, info: null, error: null });
+  // A new VIN clears the previous look-up result or error.
+  useEffect(() => {
+    setVinState((s) => (s.info || s.error ? { busy: false, info: null, error: null } : s));
+  }, [vinValue]);
   async function lookUpVin() {
     if (!VIN_RE.test(vinValue)) {
-      setVinState({ busy: false, info: null, error: "A VIN has 17 letters and numbers (no I, O or Q)." });
+      setVinState({ busy: false, info: null, error: vinProblem(vinValue) ?? "Check the VIN." });
       return;
     }
     setVinState({ busy: true, info: null, error: null });
@@ -224,6 +228,10 @@ export function VehicleFormDialog({ open, onOpenChange, vehicle, onSaved }: { op
                       {vinInfo.found ? <CircleCheck className="size-3.5" aria-hidden="true" /> : <Info className="size-3.5" aria-hidden="true" />}
                       {vinInfo.found ? "Found: filled in year, make and model below." : "Not found in the look-up. Type the details yourself."}
                       {!vinInfo.checkDigitOk && " Check the VIN for a typo."}
+                    </span>
+                  ) : vinValue ? (
+                    <span className={cn("tabular-nums", vinValue.length === 17 ? "text-success" : "")}>
+                      {vinValue.length}/17 characters{vinValue.length === 17 ? ". Press Look up to fill year, make and model." : ""}
                     </span>
                   ) : (
                     "17 characters, on the dashboard or driver's door."

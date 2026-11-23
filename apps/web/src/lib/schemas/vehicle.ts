@@ -75,6 +75,16 @@ export const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
 export function normalizeVin(v: string) {
   return v.replace(/[\s-]/g, "").toUpperCase();
 }
+/** Plain-language reason a VIN is not valid, or null when it is (or empty). */
+export function vinProblem(raw: string): string | null {
+  const v = normalizeVin(raw);
+  if (!v) return null;
+  if (/[^A-Z0-9]/.test(v)) return "Use only letters and numbers.";
+  if (/[IOQ]/.test(v)) return "VINs never use the letters I, O or Q. Did you mean 1 or 0?";
+  if (v.length < 17) return `${v.length} characters: a VIN has 17. ${17 - v.length === 1 ? "One character is" : `${17 - v.length} characters are`} missing.`;
+  if (v.length > 17) return `${v.length} characters: a VIN has 17. Remove ${v.length - 17 === 1 ? "the extra character" : `${v.length - 17} extra characters`}.`;
+  return null;
+}
 const VIN_WEIGHTS = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
 const VIN_VALUES: Record<string, number> = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8, J: 1, K: 2, L: 3, M: 4, N: 5, P: 7, R: 9, S: 2, T: 3, U: 4, V: 5, W: 6, X: 7, Y: 8, Z: 9 };
 /**
@@ -110,7 +120,10 @@ export const VehicleInputSchema = z.object({
     .optional()
     .nullable()
     .transform((v) => (v ? normalizeVin(v) : null))
-    .refine((v) => v === null || VIN_RE.test(v), "A VIN has 17 letters and numbers (no I, O or Q)"),
+    .superRefine((v, ctx) => {
+      const problem = v === null ? null : vinProblem(v);
+      if (problem) ctx.addIssue({ code: "custom", message: problem });
+    }),
   modelYear: optInt(1950, currentYear + 2, `Enter a year between 1950 and ${currentYear + 2}`),
   make: optText(60),
   model: optText(60),
