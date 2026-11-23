@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission, requireTenantContext } from "@/lib/authz";
+import { requireFeature } from "@/lib/entitlements";
 import { assertSameOrigin } from "@/lib/csrf";
 import { errorResponse } from "@/lib/errors";
 import { createShipperLink, revokeShipperLink } from "@/lib/loads";
@@ -14,6 +15,7 @@ export async function POST(request: Request, { params }: Params) {
     assertSameOrigin(request);
     const ctx = await requireTenantContext(request);
     requirePermission(ctx, "loads.write");
+    requireFeature(ctx, "shipper_links");
     return NextResponse.json(await createShipperLink(ctx, (await params).id, requestMeta(request)), { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     return errorResponse(err, { route: "loads.shipper_link.create" });

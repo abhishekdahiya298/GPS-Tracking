@@ -1,3 +1,4 @@
+import { lockedPageFor } from "@/lib/plan-gate";
 import { contextHasModule, contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
 import { LoadAllowanceNotice } from "@/components/app/load-allowance-notice";
@@ -12,6 +13,8 @@ export const metadata = { title: "Loads · RIO GPS" };
 export default async function LoadsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const rc = await requireTenantPage("/loads");
   const { ctx } = rc;
+  const locked = await lockedPageFor(ctx, "loads", "Loads", "The driver gets a link and shares their location");
+  if (locked) return locked;
   if (!contextHasPermission(ctx, "loads.read")) redirect("/dashboard");
   const sp = await searchParams;
   const f = typeof sp.filter === "string" ? sp.filter : "active";

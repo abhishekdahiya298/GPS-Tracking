@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { getAuth } from "@/lib/auth";
 import { isEmailEnabled } from "@/lib/email";
 import Link from "next/link";
+import { signupOptions } from "@/lib/signup";
 import { AuthHeading } from "../auth-heading";
 import { LoginForm } from "./login-form";
 
@@ -14,10 +15,19 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { next } = await searchParams;
   const target = safeNext(next);
   if (session) redirect(target);
+  const signup = await signupOptions();
   return (
     <>
       <AuthHeading title="Sign in" description="Welcome back. Sign in to your fleet account." />
       <LoginForm next={target} />
+      {signup.open.fleet || signup.open.operator || signup.open.broker ? (
+        <p className="m-0 mt-4 text-center text-sm">
+          New to RIO GPS?{" "}
+          <Link href="/signup" className="font-semibold text-primary no-underline hover:underline">
+            Create a free account
+          </Link>
+        </p>
+      ) : null}
       {isEmailEnabled() && (
         <p className="m-0 mt-4 text-center text-sm">
           <Link href="/forgot-password" className="text-primary no-underline hover:underline">

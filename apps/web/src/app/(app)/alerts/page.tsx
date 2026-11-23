@@ -1,3 +1,4 @@
+import { lockedPageFor } from "@/lib/plan-gate";
 import { contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
 import { listGeofences, listRules } from "@/lib/alerts";
@@ -13,6 +14,8 @@ export const metadata = { title: "Alerts · RIO GPS" };
 export default async function AlertsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const rc = await requireTenantPage("/alerts");
   const { ctx } = rc;
+  const locked = await lockedPageFor(ctx, "alerts", "Alerts", "Speeding, idling, arrivals and no signal");
+  if (locked) return locked;
   if (!contextHasPermission(ctx, "alerts.read")) redirect("/dashboard");
   const org = ctx.organizationId;
   const q = parseListQuery(AlertListQuery, await searchParams);

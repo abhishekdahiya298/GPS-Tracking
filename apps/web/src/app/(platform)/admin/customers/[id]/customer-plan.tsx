@@ -1,5 +1,6 @@
 "use client";
 import type { Module } from "@rio-gps/core";
+import { FEATURE_LABEL, FEATURES, LIMIT_LABEL, LIMITS, type Feature, type LimitKey, type PlanLimits } from "@rio-gps/core/plan-features";
 import { ArrowRightLeft, ChevronDown, History } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
@@ -65,6 +66,19 @@ export function CustomerPlanCard({ customerId, customerName, billing, archived =
                 ))}
               </div>
             </div>
+            {plan.trialEndsAt && (
+              <Alert tone="info" title={`Trial until ${time.date(plan.trialEndsAt)}`}>
+                Goes back to the plan before the trial by itself. Change plan to keep it.
+              </Alert>
+            )}
+            {(plan.lockedFeatures.length > 0 || Object.keys(plan.limits).length > 0) && (
+              <p className="m-0 text-xs text-muted-foreground">
+                {Object.entries(plan.limits)
+                  .map(([k, v]) => `${LIMIT_LABEL[k as LimitKey]}: ${v}`)
+                  .join(" · ")}
+                {plan.lockedFeatures.length > 0 ? `${Object.keys(plan.limits).length ? " · " : ""}${plan.lockedFeatures.length} features locked` : ""}
+              </p>
+            )}
             {plan.note && <p className="m-0 rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">{plan.note}</p>}
             {free ? (
               <p className="m-0 rounded-lg border border-dashed border-border px-3 py-2.5 text-center text-sm font-medium text-muted-foreground">Free: nothing is charged</p>
@@ -131,9 +145,11 @@ export function CustomerPlanCard({ customerId, customerName, billing, archived =
   );
 }
 
-type Draft = { planId: string; gps: boolean; loads: boolean; monthlyFee: string; perTracker: string; includedLoads: string; extraLoad: string; note: string };
+type Draft = { planId: string; gps: boolean; loads: boolean; monthlyFee: string; perTracker: string; includedLoads: string; extraLoad: string; note: string; locked: Feature[]; limits: Record<LimitKey, string> };
 
-const fromTerms = (planId: string, t: { modules: Module[]; monthlyFeeCents: number; perTrackerCents: number; includedLoads: number; extraLoadCents: number }): Draft => ({
+const fromTerms = (planId: string, t: { modules: Module[]; monthlyFeeCents: number; perTrackerCents: number; includedLoads: number; extraLoadCents: number; lockedFeatures?: Feature[]; limits?: PlanLimits }): Draft => ({
+  locked: [...(t.lockedFeatures ?? [])],
+  limits: Object.fromEntries(LIMITS.map((k) => [k, t.limits?.[k] === undefined ? "" : String(t.limits[k])])) as Record<LimitKey, string>,
   planId,
   gps: t.modules.includes("gps"),
   loads: t.modules.includes("loads"),
@@ -148,7 +164,7 @@ const fromTerms = (planId: string, t: { modules: Module[]; monthlyFeeCents: numb
  * Pick a plan (its standard terms fill in) and adjust anything agreed with this customer,
  * e.g. more included loads. The new terms apply from now; earlier months keep their terms.
  */
-function ChangePlanDialog({ customerId, customerName, current, plans, onClose }: { customerId: string; customerName: string; current: SubscriptionDto | null; plans: PlanDto[]; onClose: () => void }) {
+function ChangePlanDialog({ customerId, customerName, current, plans, onClose, defaultTrialDays = 14 }: { customerId: string; customerName: string; current: SubscriptionDto | null; plans: PlanDto[]; onClose: () => void; defaultTrialDays?: number }) {
   const router = useRouter();
   const offered = plans.filter((p) => p.active || p.id === current?.planId);
   const [d, setD] = useState<Draft>(() => (current?.planId && offered.some((p) => p.id === current.planId) ? fromTerms(current.planId, current) : fromTerms(offered[0]?.id ?? "", offered[0] ?? { modules: [], monthlyFeeCents: 0, perTrackerCents: 0, includedLoads: 0, extraLoadCents: 0 })));
@@ -160,6 +176,10 @@ function ChangePlanDialog({ customerId, customerName, current, plans, onClose }:
     if (p) setD((s) => ({ ...fromTerms(p.id, p), note: s.note }));
   };
   const losing = current ? current.modules.filter((m) => !(m === "gps" ? d.gps : d.loads)) : [];
+  const [trial, setTrial] = useState(false);
+  const [trialDays, setTrialDays] = useState(String(defaultTrialDays));
+  const picked = offered.find((p) => p.id === d.planId);
+  const returnTo = current?.trialEndsAt ? null : current?.planName;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -175,10 +195,13 @@ function ChangePlanDialog({ customerId, customerName, current, plans, onClose }:
           perTracker: d.perTracker || 0,
           includedLoads: d.includedLoads || 0,
           extraLoad: d.extraLoad || 0,
-          note: d.note || undefined
+          note: d.note || undefined,
+          lockedFeatures: d.locked,
+          limits: d.limits,
+          ...(trial ? { trialDays: trialDays || 14 } : {})
         }
       });
-      toast.success(`${customerName}: plan updated`);
+      toast.success(trial ? `${customerName}: ${picked?.name ?? "plan"} trial started` : `${customerName}: plan updated`);
       onClose();
       router.refresh();
     } catch (err) {
@@ -229,6 +252,43 @@ function ChangePlanDialog({ customerId, customerName, current, plans, onClose }:
               </>
             )}
           </div>
+          <details className="group rounded-lg border border-border">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-sm font-medium [&::-webkit-details-marker]:hidden">
+              Only for this customer: features and limits
+              <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <div className="grid gap-3 border-t border-border p-3">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {LIMITS.map((k) => (
+                  <Field key={k} id={`lim-${k}`} label={LIMIT_LABEL[k]}>
+                    <Input id={`lim-${k}`} inputMode="numeric" placeholder="Unlimited" value={d.limits[k]} onChange={(e) => set({ limits: { ...d.limits, [k]: e.target.value.replace(/\D/g, "") } })} />
+                  </Field>
+                ))}
+              </div>
+              <fieldset className="m-0 grid grid-cols-1 gap-1 border-0 p-0 sm:grid-cols-2">
+                <legend className="mb-1 p-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Features</legend>
+                {FEATURES.map((f) => (
+                  <label key={f} className="flex items-center gap-2 text-sm">
+                    <Checkbox checked={!d.locked.includes(f)} onChange={(e) => set({ locked: e.target.checked ? d.locked.filter((x) => x !== f) : [...d.locked, f] })} /> {FEATURE_LABEL[f]}
+                  </label>
+                ))}
+              </fieldset>
+            </div>
+          </details>
+          <label className="flex items-start gap-2 rounded-lg border border-border p-3 text-sm">
+            <Checkbox checked={trial} onChange={(e) => setTrial(e.target.checked)} className="mt-0.5" />
+            <span className="grid gap-1.5">
+              <span className="font-medium">Give a trial</span>
+              <span className="text-xs text-muted-foreground">
+                {customerName} gets {picked?.name ?? "this plan"} for the days below, then goes back to {returnTo ?? "their plan before the trial"} by itself. Nothing they add is deleted.
+              </span>
+              {trial && (
+                <span className="flex items-center gap-2">
+                  <Input aria-label="Trial length in days" inputMode="numeric" className="h-8 w-20" value={trialDays} onChange={(e) => setTrialDays(e.target.value.replace(/\D/g, ""))} /> days
+                </span>
+              )}
+            </span>
+          </label>
           <Field id="note" label="Note (optional)" description="For example: agreed by phone, 3 months at this price.">
             <Textarea id="note" rows={2} maxLength={500} value={d.note} onChange={(e) => set({ note: e.target.value })} />
           </Field>
@@ -243,7 +303,7 @@ function ChangePlanDialog({ customerId, customerName, current, plans, onClose }:
               Cancel
             </Button>
             <Button type="submit" loading={busy} disabled={!d.planId || (!d.gps && !d.loads)}>
-              Save plan
+              {trial ? "Start trial" : "Save plan"}
             </Button>
           </DialogFooter>
         </form>

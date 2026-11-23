@@ -1,3 +1,4 @@
+import { assertCanAdd } from "./entitlements";
 import { ORG_ROLES, type OrgRole, type TenantContext } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
 import { hashPassword } from "better-auth/crypto";
@@ -129,6 +130,7 @@ export async function addMember(ctx: TenantContext, input: z.infer<typeof AddMem
   const passwordHash = await hashPassword(temporaryPassword);
 
   const result = await db.transaction(async (tx) => {
+    await assertCanAdd(ctx.organizationId, "members", tx);
     const [existing] = await tx.select().from(schema.users).where(eq(schema.users.email, input.email)).limit(1);
     if (existing) {
       // Platform admins reach every customer through "View as customer"; a membership would

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, integer, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { organizations } from "./organizations";
 import { users } from "./users";
 
@@ -30,6 +30,14 @@ export const plans = pgTable(
     monthlyFeeCents: integer("monthly_fee_cents").notNull().default(0),
     /** Per tracker per month (GPS plans). */
     perTrackerCents: integer("per_tracker_cents").notNull().default(0),
+    /** Features (core FEATURES) this plan does NOT include. Empty = everything. */
+    lockedFeatures: text("locked_features").array().notNull().default(sql`'{}'::text[]`),
+    /** Limits (core LIMITS); a missing key = no limit. */
+    limits: jsonb("limits").$type<Record<string, number>>().notNull().default({}),
+    /** public = new sign-ups can start on it · offered = shown to customers · hidden = console only. */
+    visibility: text("visibility").notNull().default("offered"),
+    /** Shown instead of the computed price, e.g. "per truck" or "Custom". */
+    priceNote: text("price_note"),
     /** Offered for new assignments; customers already on it keep it either way. */
     active: boolean("active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -55,6 +63,11 @@ export const subscriptions = pgTable(
     extraLoadCents: integer("extra_load_cents").notNull().default(0),
     monthlyFeeCents: integer("monthly_fee_cents").notNull().default(0),
     perTrackerCents: integer("per_tracker_cents").notNull().default(0),
+    lockedFeatures: text("locked_features").array().notNull().default(sql`'{}'::text[]`),
+    limits: jsonb("limits").$type<Record<string, number>>().notNull().default({}),
+    /** A trial: on this time the customer goes back to trial_return_plan_id by itself. */
+    trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    trialReturnPlanId: uuid("trial_return_plan_id").references((): AnyPgColumn => plans.id, { onDelete: "set null" }),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
     changedBy: uuid("changed_by").references(() => users.id, { onDelete: "set null" }),

@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requirePermission, requireTenantContext } from "@/lib/authz";
+import { requireFeature } from "@/lib/entitlements";
 import { getServerEnv } from "@/lib/env";
 import { errorResponse, NotFoundError, ValidationError } from "@/lib/errors";
 import { deviceBelongsToOrg } from "@/lib/locations";
@@ -27,6 +28,7 @@ export async function GET(request: Request) {
   try {
     const ctx = await requireTenantContext(request);
     requirePermission(ctx, "history.read");
+    requireFeature(ctx, "reports");
     const q = Query.safeParse(Object.fromEntries(new URL(request.url).searchParams));
     if (!q.success) throw new ValidationError(friendlyZodMessage(q.error));
     const from = new Date(q.data.from);
@@ -40,6 +42,7 @@ export async function GET(request: Request) {
 
     const report = await buildTripReport(ctx.organizationId, q.data.deviceId, from, to, tz);
     if (q.data.format === "csv") {
+      requireFeature(ctx, "csv_export");
       const [label] = await getDb()
         .select({ vehicle: schema.vehicles.name, name: schema.gpsDevices.name, model: schema.gpsDevices.model })
         .from(schema.gpsDevices)

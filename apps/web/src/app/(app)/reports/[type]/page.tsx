@@ -1,3 +1,4 @@
+import { lockedPageFor } from "@/lib/plan-gate";
 import { contextHasPermission } from "@rio-gps/core";
 import { notFound, redirect } from "next/navigation";
 import { ACTIVITY_REPORT_TYPES, type ActivityReportType } from "@/lib/activity-reports";
@@ -21,6 +22,8 @@ export default async function ActivityReportPage({ params }: { params: Promise<{
   const { type } = await params;
   if (!isType(type)) notFound();
   const rc = await requireTenantPage(`/reports/${type}`);
+  const locked = await lockedPageFor(rc.ctx, "reports", "Reports", "Mileage, stops, idling and trips");
+  if (locked) return locked;
   if (!contextHasPermission(rc.ctx, "history.read")) redirect("/dashboard");
   const devices = (await listDevices(rc.ctx.organizationId)).map((d) => ({ id: d.id, label: d.vehicle ? d.vehicle.name : deviceDisplayName(d.name, d.model) + (d.status === "active" ? "" : " (inactive)") }));
   const groups = contextHasPermission(rc.ctx, "vehicles.read") ? (await listGroups(rc.ctx.organizationId)).map((g) => ({ id: g.id, name: g.name })) : [];

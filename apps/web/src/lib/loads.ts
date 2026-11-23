@@ -1,3 +1,4 @@
+import { assertCanAdd } from "./entitlements";
 import { createHash, randomBytes } from "node:crypto";
 import { normalizePhone } from "./phone";
 import { contextHasModule, type TenantContext } from "@rio-gps/core";
@@ -367,6 +368,7 @@ async function vehicleForLoad(organizationId: string, vehicleId: string) {
 }
 
 export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Meta, now = new Date()): Promise<CreatedLoad> {
+  await assertCanAdd(ctx.organizationId, "loadsPerMonth");
   const token = newToken();
   const byVehicle = input.trackingMode === "vehicle";
   if (byVehicle && !contextHasModule(ctx, "gps")) throw new ValidationError("Tracking a load with your own vehicle needs a GPS plan. Use the driver's phone instead.");

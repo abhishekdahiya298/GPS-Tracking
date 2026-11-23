@@ -1,3 +1,5 @@
+import { featureOf, type Feature } from "./plan-features.js";
+
 /**
  * RIO GPS authorization model — the single source of truth for who may do what.
  * Route handlers must never check roles directly; they call requirePermission()
@@ -124,6 +126,12 @@ export interface TenantContext {
    * which means "not limited by plan".
    */
   modules?: readonly Module[];
+  /** Features the customer's plan doesn't include (see plan-features). Left out = none locked. */
+  lockedFeatures?: readonly Feature[];
+}
+
+export function contextHasFeature(ctx: TenantContext, feature: Feature): boolean {
+  return !ctx.lockedFeatures?.includes(feature);
 }
 
 export function contextHasModule(ctx: TenantContext, module: Module): boolean {
@@ -133,6 +141,8 @@ export function contextHasModule(ctx: TenantContext, module: Module): boolean {
 export function contextHasPermission(ctx: TenantContext, permission: Permission): boolean {
   const m = moduleOf(permission);
   if (m && !contextHasModule(ctx, m)) return false;
+  const f = featureOf(permission);
+  if (f && !contextHasFeature(ctx, f)) return false;
   if (ctx.isSuperAdmin) return true;
   return ctx.role !== null && roleHasPermission(ctx.role, permission);
 }

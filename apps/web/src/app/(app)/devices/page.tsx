@@ -1,3 +1,4 @@
+import { lockedPageFor } from "@/lib/plan-gate";
 import { contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
 import { getServerEnv } from "@/lib/env";
@@ -11,6 +12,8 @@ export const metadata = { title: "Devices · RIO GPS" };
 export default async function DevicesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const rc = await requireTenantPage("/devices");
   const { ctx } = rc;
+  const locked = await lockedPageFor(ctx, "gps_trackers", "GPS devices", "Hardware trackers for trucks and trailers");
+  if (locked) return locked;
   if (!contextHasPermission(ctx, "devices.read")) redirect("/dashboard");
   const q = parseListQuery(DeviceListQuery, await searchParams);
   const manage = contextHasPermission(ctx, "devices.manage");

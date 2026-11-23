@@ -1,3 +1,4 @@
+import { assertCanAdd } from "./entitlements";
 import type { TenantContext } from "@rio-gps/core";
 import { normalizePhone, PHONE_HINT } from "./phone";
 import { getDb, schema } from "@rio-gps/db";
@@ -284,6 +285,7 @@ export async function assignmentHistory(organizationId: string, by: { driverId: 
 
 export async function createDriver(ctx: TenantContext, input: DriverInput, meta: Meta) {
   const d = await getDb().transaction(async (tx) => {
+    if ((input.status ?? "active") === "active") await assertCanAdd(ctx.organizationId, "drivers", tx);
     if (input.vehicleId) await takeVehicle(tx, ctx.organizationId, input.vehicleId, null);
     const [row] = await tx
       .insert(schema.drivers)

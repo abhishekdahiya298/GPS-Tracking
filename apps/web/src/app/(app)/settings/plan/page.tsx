@@ -6,7 +6,10 @@ import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { countingRules, MODULE_LABEL, money, monthLabel, previousPeriod, termsSummary } from "@/lib/plan-format";
-import { customerPlanHistory, periodOf, usageStatement } from "@/lib/plans";
+import { customerPlanHistory, listPlans, periodOf, usageStatement } from "@/lib/plans";
+import { planAccessFor } from "@/lib/entitlements";
+import { RequestUpgradeButton } from "@/components/app/plan/plan-ui";
+import { PlanFeaturesSection, type OfferedPlan } from "./plan-features-section";
 import { requireTenantPage } from "@/lib/request-context";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +22,7 @@ export default async function PlanPage() {
   const now = new Date();
   const period = periodOf(now, rc.timeZone);
   const periods = [period, previousPeriod(period, 1), previousPeriod(period, 2), previousPeriod(period, 3)];
-  const [history, ...months] = await Promise.all([customerPlanHistory(orgId), ...periods.map((p) => usageStatement(p, orgId, now).then((r) => r[0]!))]);
+  const [history, access, catalog, ...months] = await Promise.all([customerPlanHistory(orgId), planAccessFor(orgId), listPlans(), ...periods.map((p) => usageStatement(p, orgId, now).then((r) => r[0]!))]);
   const plan = history.find((h) => !h.endedAt) ?? null;
   const cur = months[0]!;
   const past = months.slice(1).filter((m) => m.loadsUsed > 0 || m.trackers > 0 || m.plan);
@@ -41,12 +44,31 @@ export default async function PlanPage() {
       ].filter((x): x is NonNullable<typeof x> => x !== null)
     : [];
 
+  const limited = !!access && (access.lockedFeatures.length > 0 || Object.keys(access.limits).length > 0);
+  // A free plan with limits: the page above says it all (no prices, no bill).
+  const freeOnly = limited && !!plan && plan.monthlyFeeCents === 0 && plan.perTrackerCents === 0 && plan.extraLoadCents === 0;
+  const trialDaysLeft = access?.trialEndsAt ? Math.max(0, Math.ceil((Date.parse(access.trialEndsAt) - now.getTime()) / 86_400_000)) : null;
+  const offered: OfferedPlan[] = catalog
+    .filter((p) => p.active && (p.visibility !== "hidden" || p.id === plan?.planId))
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      priceText: p.priceNote || (p.monthlyFeeCents === 0 && p.perTrackerCents === 0 && p.extraLoadCents === 0 ? "$0" : [p.monthlyFeeCents > 0 ? `${money(p.monthlyFeeCents)}/mo` : null, p.perTrackerCents > 0 ? `${money(p.perTrackerCents)}/tracker` : null].filter(Boolean).join(" + ") || "Ask us"),
+      lockedFeatures: p.lockedFeatures,
+      limits: p.limits,
+      includedLoads: p.includedLoads,
+      current: p.id === plan?.planId
+    }));
+
   return (
     <>
       <PageHeader
         title="Plan & billing"
-        description="Your subscription, this month's usage and estimated bill."
+        description={limited && plan ? `${plan.planName} · since ${new Date(plan.startedAt).toLocaleDateString("en-US", { timeZone: rc.timeZone, dateStyle: "medium" })}${cur.amounts.totalCents === 0 ? " · nothing is charged" : ""}` : "Your subscription, this month's usage and estimated bill."}
         actions={
+          limited ? (
+            <RequestUpgradeButton className="bg-white text-[#0a2463] hover:bg-white/90">Request upgrade</RequestUpgradeButton>
+          ) : (
           <span className="inline-flex items-center gap-2 rounded-lg border border-white/25 bg-white/10 px-3 py-1.5 text-white">
             <CalendarDays className="size-5" aria-hidden="true" />
             <span className="leading-tight">
@@ -56,8 +78,13 @@ export default async function PlanPage() {
               </span>
             </span>
           </span>
+          )
         }
       />
+      {limited && access && <PlanFeaturesSection access={access} plans={offered} trialDaysLeft={trialDaysLeft} />}
+      {limited && <div className="h-4" />}
+      {!freeOnly && (
+      <>
       <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
         <Card className="relative overflow-hidden">
           <CardContent className="grid gap-4 p-5">
@@ -227,6 +254,8 @@ export default async function PlanPage() {
           )}
         </Card>
       </div>
+      </>
+      )}
     </>
   );
 }

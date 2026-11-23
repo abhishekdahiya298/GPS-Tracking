@@ -1,5 +1,6 @@
 "use client";
 import { Inbox, Mail, Phone } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { LocalTime } from "@/components/app/local-time";
@@ -34,7 +35,7 @@ export function LeadsView({ leads }: { leads: LeadDto[] }) {
   if (leads.length === 0) {
     return (
       <Card>
-        <EmptyState icon={Inbox} title="No pricing requests yet" description="Requests sent from the Get pricing form on the public site appear here, and are emailed to platform admins." />
+        <EmptyState icon={Inbox} title="No requests yet" description="Get pricing requests from the public site, customers\u2019 upgrade requests and new sign-ups appear here, and are emailed to platform admins." />
       </Card>
     );
   }
@@ -47,9 +48,16 @@ export function LeadsView({ leads }: { leads: LeadDto[] }) {
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="m-0 truncate text-[15px] font-semibold">{l.company}</h2>
                 <StatusBadge tone={TONE[l.status]} label={LABEL[l.status]} />
+                {l.source === "upgrade" && <StatusBadge tone="warning" label={`Upgrade · ${l.planName ?? "no plan"}`} />}
+                {l.source === "signup" && <StatusBadge tone="info" label={`Sign-up · ${l.planName ?? ""}`} />}
+                {l.organizationId && (
+                  <Link href={`/admin/customers/${l.organizationId}`} className="text-xs font-semibold">
+                    Open customer
+                  </Link>
+                )}
               </div>
               <p className="m-0 mt-0.5 text-sm text-muted-foreground">
-                {l.name} · {l.fleetSize} vehicles · {l.country === "CA" ? "Canada" : "United States"} · <LocalTime iso={l.createdAt} />
+                {[l.name, l.fleetSize ? `${l.fleetSize} vehicles` : null, l.country === "CA" ? "Canada" : l.country === "US" ? "United States" : null, l.contactWay ? `reach by ${l.contactWay}` : null].filter(Boolean).join(" · ")} · <LocalTime iso={l.createdAt} />
               </p>
               <p className="m-0 mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                 <a href={`mailto:${l.email}`} className="inline-flex items-center gap-1.5">

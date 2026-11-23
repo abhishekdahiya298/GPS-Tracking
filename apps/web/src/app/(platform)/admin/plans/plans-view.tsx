@@ -12,6 +12,8 @@ import { toast } from "@/components/ui/toaster";
 import { api } from "@/lib/client/api";
 import { MODULE_LABEL, termsSummary } from "@/lib/plan-format";
 import type { PlanDto } from "@/lib/plans";
+import type { Feature, FeatureRule } from "@rio-gps/core/plan-features";
+import { PlansMatrix } from "./plans-matrix";
 import { FormDialog, type FieldSpec, type FormValues } from "../_shared/form-dialog";
 
 const dollars = (cents: number) => (cents / 100).toFixed(2);
@@ -29,7 +31,12 @@ function planFields(p: PlanDto | null): FieldSpec[] {
   ];
 }
 
-const body = (v: FormValues) => ({
+const body = (v: FormValues, p: PlanDto | null) => ({
+  // Features, limits and visibility are edited in the matrix; the card dialog keeps them.
+  lockedFeatures: p?.lockedFeatures ?? [],
+  limits: p?.limits ?? {},
+  visibility: p?.visibility ?? "offered",
+  priceNote: p?.priceNote ?? "",
   name: v.name,
   modules: [v.gps && "gps", v.loads && "loads"].filter(Boolean),
   monthlyFee: v.monthlyFee || 0,
@@ -39,22 +46,42 @@ const body = (v: FormValues) => ({
   active: Boolean(v.active)
 });
 
-export function PlansView({ plans }: { plans: PlanDto[] }) {
+export function PlansView({ plans, rules }: { plans: PlanDto[]; rules: Record<Feature, FeatureRule> }) {
   const router = useRouter();
   const [editing, setEditing] = useState<PlanDto | "new" | null>(null);
+  const [view, setView] = useState<"matrix" | "cards">("matrix");
   const current = editing === "new" ? null : editing;
 
   return (
     <>
       <PageHeader
         title="Plans"
-        description="What RIO GPS sells. A customer's price is copied from the plan when you assign it, so editing a plan here never changes what existing customers pay."
+        description="Tick what each plan includes and set its limits. New customers get these terms; existing customers keep theirs until you change their plan."
         actions={
-          <Button onClick={() => setEditing("new")}>
-            <Plus className="size-4" aria-hidden="true" /> New plan
-          </Button>
+          <div className="flex items-center gap-2">
+            <div role="tablist" aria-label="View" className="inline-flex rounded-lg bg-white/15 p-0.5">
+              {(["cards", "matrix"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === v}
+                  onClick={() => setView(v)}
+                  className={`h-8 cursor-pointer rounded-md border-0 px-3 text-sm font-semibold capitalize ${view === v ? "bg-white text-[#0a2463]" : "bg-transparent text-white"}`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+            <Button onClick={() => setEditing("new")}>
+              <Plus className="size-4" aria-hidden="true" /> New plan
+            </Button>
+          </div>
         }
       />
+      {view === "matrix" ? (
+        <PlansMatrix plans={plans} rules={rules} />
+      ) : (
       <Card>
         <Table>
           <THead>
@@ -74,12 +101,16 @@ export function PlansView({ plans }: { plans: PlanDto[] }) {
                 <TD>
                   <div className="font-medium">{p.name}</div>
                   {!p.active && <StatusBadge tone="neutral" label="Not offered" className="mt-1" />}
+                  {p.active && p.visibility === "public" && <StatusBadge tone="success" label="Public sign-up" className="mt-1" />}
+                  {p.active && p.visibility === "hidden" && <StatusBadge tone="neutral" label="Console only" className="mt-1" />}
                 </TD>
                 <TD>
                   <div className="flex flex-wrap gap-1">
                     {p.modules.map((m) => (
                       <StatusBadge key={m} tone={m === "gps" ? "info" : "success"} label={MODULE_LABEL[m]} />
                     ))}
+                    {p.lockedFeatures.length > 0 && <StatusBadge tone="warning" label={`${p.lockedFeatures.length} locked`} />}
+                    {Object.keys(p.limits).length > 0 && <StatusBadge tone="neutral" label="Limits" />}
                   </div>
                 </TD>
                 <TD className="text-sm">
@@ -98,6 +129,7 @@ export function PlansView({ plans }: { plans: PlanDto[] }) {
           </TBody>
         </Table>
       </Card>
+      )}
       {editing && (
         <FormDialog
           title={current ? `Edit ${current.name}` : "New plan"}
@@ -112,8 +144,8 @@ export function PlansView({ plans }: { plans: PlanDto[] }) {
           confirmLabel={current ? "Save plan" : "Create plan"}
           onOpenChange={(o) => !o && setEditing(null)}
           onSubmit={async (v) => {
-            if (current) await api(`/api/admin/plans/${current.id}`, { method: "PATCH", json: body(v) });
-            else await api("/api/admin/plans", { method: "POST", json: body(v) });
+            if (current) await api(`/api/admin/plans/${current.id}`, { method: "PATCH", json: body(v, current) });
+            else await api("/api/admin/plans", { method: "POST", json: body(v, null) });
             toast.success(current ? "Plan saved" : "Plan created");
             setEditing(null);
             router.refresh();

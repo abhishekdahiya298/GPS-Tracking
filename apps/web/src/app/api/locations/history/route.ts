@@ -3,6 +3,7 @@ import { friendlyZodMessage } from "@/lib/validation-message";
 import { z } from "zod";
 import { requirePermission, requireTenantContext } from "@/lib/authz";
 import { getServerEnv } from "@/lib/env";
+import { historyStartLimit } from "@/lib/entitlements";
 import { errorResponse, NotFoundError, ValidationError } from "@/lib/errors";
 import { decodeCursor, deviceBelongsToOrg, queryHistory } from "@/lib/locations";
 
@@ -34,11 +35,18 @@ export async function GET(request: Request) {
     }
     const q = parsed.data;
     const to = q.to ? new Date(q.to) : new Date();
-    const from = q.from ? new Date(q.from) : new Date(to.getTime() - DAY_MS);
+    let from = q.from ? new Date(q.from) : new Date(to.getTime() - DAY_MS);
     const maxDays = getServerEnv().MAX_HISTORY_RANGE_DAYS;
     if (from >= to) throw new ValidationError("from must be earlier than to");
     if (to.getTime() - from.getTime() > maxDays * DAY_MS) {
       throw new ValidationError(`Range exceeds ${maxDays} days`);
+    }
+    // A plan with a history limit (Free Basic: today only) reads from the start of the allowed days.
+    const earliest = await historyStartLimit(ctx.organizationId);
+    const limitedFrom = earliest && from < earliest ? earliest : null;
+    if (limitedFrom) from = limitedFrom;
+    if (from >= to) {
+      return NextResponse.json({ deviceId: q.deviceId, from: from.toISOString(), to: to.toISOString(), count: 0, points: [], nextCursor: null, limitedFrom: limitedFrom?.toISOString() ?? null }, { headers: { "Cache-Control": "no-store" } });
     }
     const cursor = q.cursor ? decodeCursor(q.cursor) : null;
     if (q.cursor && !cursor) throw new ValidationError("Invalid cursor");
@@ -48,7 +56,7 @@ export async function GET(request: Request) {
 
     const result = await queryHistory({ organizationId: ctx.organizationId, deviceId: q.deviceId, from, to, limit: q.limit, cursor });
     return NextResponse.json(
-      { deviceId: q.deviceId, from: from.toISOString(), to: to.toISOString(), count: result.points.length, ...result },
+      { deviceId: q.deviceId, from: from.toISOString(), to: to.toISOString(), count: result.points.length, ...result, limitedFrom: limitedFrom?.toISOString() ?? null },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {

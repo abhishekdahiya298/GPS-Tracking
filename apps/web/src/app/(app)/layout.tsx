@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { AppShell } from "@/components/app/app-shell";
 import { buildNav } from "@/components/app/nav-config";
 import { PlatformFrame } from "@/components/app/platform-frame";
+import { PlanProvider } from "@/components/app/plan/plan-ui";
+import { getFeatureRules, planAccessFor } from "@/lib/entitlements";
 import { listMyOrganizations } from "@/lib/my-organizations";
 import { getOrgSettings } from "@/lib/organization";
 import { getRequestContext, getUnacknowledgedAlertCount } from "@/lib/request-context";
@@ -29,16 +31,18 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const { user, ctx, orgName, orgStatus, unitSystem, timeZone, timeFormat, navTheme } = rc;
   const canSeeAlerts = contextHasPermission(ctx, "alerts.read");
   // A platform admin has no companies of their own: the switcher stays empty for them.
-  const [unack, mine, org] = await Promise.all([
+  const [unack, mine, org, plan, rules] = await Promise.all([
     canSeeAlerts ? getUnacknowledgedAlertCount(ctx.organizationId) : 0,
     user.isSuperAdmin ? [] : listMyOrganizations(user.userId),
-    getOrgSettings(ctx.organizationId)
+    getOrgSettings(ctx.organizationId),
+    planAccessFor(ctx.organizationId),
+    getFeatureRules()
   ]);
   const viewingAs = ctx.isSuperAdmin && ctx.role === null;
   return (
     <AppShell
       mode={{ kind: "tenant", orgStatus }}
-      nav={buildNav(ctx)}
+      nav={buildNav(ctx, rules)}
       user={{ name: user.name || user.email, email: user.email, roleLabel: ctx.role ? ROLE_LABEL[ctx.role] ?? ctx.role : "Platform admin", isSuperAdmin: user.isSuperAdmin }}
       orgName={orgName}
       organizations={mine.map((o) => ({ id: o.id, name: o.name, roleLabel: ROLE_LABEL[o.role] ?? o.role, current: o.id === ctx.organizationId }))}
@@ -52,7 +56,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     >
       {/* The company's map icon choice (Settings → Map display), read by every map on the page. */}
       <span hidden data-org-map-icons={`${org.mapPrefs.iconStyle}-${org.mapPrefs.iconColor}`} />
-      {children}
+      <PlanProvider plan={plan}>{children}</PlanProvider>
     </AppShell>
   );
 }

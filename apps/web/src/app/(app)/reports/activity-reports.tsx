@@ -5,7 +5,7 @@
  * this component only picks the parameters and presents the result.
  */
 import { addDays, dateFormatter, startOfLocalDay, zoneLabel } from "@rio-gps/core/timezones";
-import { CalendarRange, Download, Gauge, MapPinned, Search, Truck } from "lucide-react";
+import { CalendarRange, Download, Gauge, MapPinned, Search, Truck, Lock } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SegmentedFilter } from "@/components/app/filter-bar";
@@ -24,6 +24,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { ActivityReport, ActivityReportType, IdleRow, MileageRow, SpeedRow, StopRow } from "@/lib/activity-reports";
 import { placeText, useAddressState } from "@/lib/use-address";
 import { DateRangeButton } from "@/components/app/date-range-calendar";
+import { usePlan } from "@/components/app/plan/plan-ui";
 import { ReportTabs } from "./report-tabs";
 
 type Dev = { id: string; label: string };
@@ -94,6 +95,8 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
   const [minMinutes, setMinMinutes] = useState(type === "idling" ? 5 : 10);
   // The limit is typed in the organization's units and sent in km/h.
   const [limit, setLimit] = useState(u.system === "imperial" ? 70 : 110);
+  const { plan, requestUpgrade } = usePlan();
+  const csvLocked = !!plan?.lockedFeatures.includes("csv_export");
   const [report, setReport] = useState<ActivityReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -306,13 +309,18 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
             <Button type="submit" loading={busy} disabled={type === "speeding" && !limitOk}>
               <Search /> Show report
             </Button>
-            {report && rows.length > 0 && (
-              <Button asChild variant="secondary">
-                <a href={`/api/reports/activity?${qs}&format=csv`} download>
-                  <Download /> CSV
-                </a>
-              </Button>
-            )}
+            {report && rows.length > 0 &&
+              (csvLocked ? (
+                <Button type="button" variant="secondary" onClick={() => requestUpgrade([])}>
+                  <Lock /> CSV
+                </Button>
+              ) : (
+                <Button asChild variant="secondary">
+                  <a href={`/api/reports/activity?${qs}&format=csv`} download>
+                    <Download /> CSV
+                  </a>
+                </Button>
+              ))}
           </div>
           <div className="flex min-w-0 flex-wrap items-center gap-3 md:col-span-2">
             <SegmentedFilter<Preset>
