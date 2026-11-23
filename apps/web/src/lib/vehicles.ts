@@ -1,4 +1,5 @@
 import type { TenantContext } from "@rio-gps/core";
+import { friendlyZodMessage } from "./validation-message";
 import { getDb, schema } from "@rio-gps/db";
 import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -16,7 +17,7 @@ export { DevicePatchSchema, VehicleInputSchema, VehiclePatchSchema };
 
 export function parseOrThrow<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, body: unknown): T {
   const r = schema.safeParse(body);
-  if (!r.success) throw new ValidationError(r.error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`).join("; "));
+  if (!r.success) throw new ValidationError(friendlyZodMessage(r.error));
   return r.data;
 }
 

@@ -105,26 +105,70 @@ async function lookup(provider: Exclude<AddressProvider, "off">, lat: number, lo
   return body.results?.[0] ? fromGoogle(body.results[0]) : null;
 }
 
-/** The address for a position, or null when addresses are off or none is known. */
-export async function reverseGeocode(lat: number, lon: number, fetchImpl: typeof fetch = fetch): Promise<{ address: ReverseAddress | null; provider: AddressProvider }> {
+export interface ReverseResult {
+  address: ReverseAddress | null;
+  provider: AddressProvider;
+  /** The address of a spot within about 110 m (cached), not this exact spot. */
+  approximate?: boolean;
+  /** No answer yet (service busy or failing): ask again in this many seconds. */
+  retryAfter?: number;
+}
+
+/** ~110 m cell: an address cached for any spot in it is good enough to show while moving or busy. */
+export const nearKey = (lat: number, lon: number) => `${lat.toFixed(3)},${lon.toFixed(3)}`;
+const COOLDOWN_KEY = "revgeo:cooldown";
+
+async function redisOrNull() {
+  try {
+    return await getReadyRedisPublisher();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The address for a position.
+ * Order: this spot (~11 m) → any spot within ~110 m → the address service. The service is called only
+ * inside its rate limit (OpenStreetMap: one request a second for the whole server); when it is busy or
+ * failing we answer `retryAfter` instead of breaking its rules, and the screen asks again shortly.
+ */
+export async function reverseGeocode(lat: number, lon: number, fetchImpl: typeof fetch = fetch): Promise<ReverseResult> {
   const { addressProvider: provider } = await getMapsSettings();
   if (provider === "off" || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return { address: null, provider };
   const key = `revgeo:v1:${provider}:${spotKey(lat, lon)}`;
-  try {
-    const hit = await (await getReadyRedisPublisher()).get(key);
-    if (hit) return { address: hit === "-" ? null : (JSON.parse(hit) as ReverseAddress), provider };
-  } catch {
-    // The cache is optional.
+  const near = `revgeo:near:v1:${provider}:${nearKey(lat, lon)}`;
+  const redis = await redisOrNull();
+  if (redis) {
+    try {
+      const [hit, nearHit, cooling] = await redis.mget(key, near, COOLDOWN_KEY);
+      if (hit) return { address: hit === "-" ? null : (JSON.parse(hit) as ReverseAddress), provider };
+      if (nearHit) return { address: JSON.parse(nearHit) as ReverseAddress, provider, approximate: true };
+      if (cooling) return { address: null, provider, retryAfter: Math.max(5, Number(cooling) || 15) };
+    } catch {
+      // The cache is optional.
+    }
   }
+  if (provider === "osm" && !(await waitForSlot())) return { address: null, provider, retryAfter: 3 };
   let address: ReverseAddress | null = null;
   try {
     address = await lookup(provider, Number(lat.toFixed(5)), Number(lon.toFixed(5)), fetchImpl);
   } catch (err) {
     logger.warn("reverse_geocode.failed", { provider }, err);
-    return { address: null, provider }; // not cached: try again next time
+    // Throttled or down: pause every lookup for a short while instead of hammering the service.
+    const throttled = /\b(429|403|503|OVER_QUERY_LIMIT)\b/.test(String(err instanceof Error ? err.message : err));
+    try {
+      await redis?.set(COOLDOWN_KEY, throttled ? "60" : "10", "EX", throttled ? 60 : 10, "NX");
+    } catch {
+      // ignore
+    }
+    return { address: null, provider, retryAfter: throttled ? 60 : 10 };
   }
   try {
-    await (await getReadyRedisPublisher()).set(key, address ? JSON.stringify(address) : "-", "EX", address ? KEEP_SECONDS : MISS_SECONDS);
+    if (redis) {
+      const m = redis.multi().set(key, address ? JSON.stringify(address) : "-", "EX", address ? KEEP_SECONDS : MISS_SECONDS);
+      if (address) m.set(near, JSON.stringify(address), "EX", KEEP_SECONDS);
+      await m.exec();
+    }
   } catch {
     // ignore
   }

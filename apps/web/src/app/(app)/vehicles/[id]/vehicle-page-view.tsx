@@ -12,12 +12,12 @@ import { alertMeta } from "@/lib/alert-meta";
 import { cn } from "@/lib/cn";
 import { deviceDisplayName, productName } from "@/lib/device-name";
 import { asVehicleType, FUEL_LABEL, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
-import { useAddress } from "@/lib/use-address";
+import { placeText, useAddressState } from "@/lib/use-address";
 import { LocalTime, RelativeTime } from "@/components/app/local-time";
 import { StatusChip, STATUS_THEME } from "@/components/app/status-chip";
 import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
-import { OrderBadge, PlateTag, VinTag, yearMakeModel } from "@/components/app/vehicle-tags";
+import { PlateTag, VinTag, yearMakeModel } from "@/components/app/vehicle-tags";
 import { pictureState, VehiclePicture } from "@/components/app/vehicle-picture";
 import { Button } from "@/components/ui/button";
 import { DriverAvatar } from "../../drivers/drivers-view";
@@ -103,7 +103,8 @@ export function VehiclePageView({
   const loc = detail.location;
   const ymm = yearMakeModel(v);
   const silent = ["offline", "never_seen", "inactive", "parked"].includes(detail.state);
-  const address = useAddress(loc ? loc.latitude : null, loc ? loc.longitude : null, detail.state === "moving");
+  const addr = useAddressState(loc ? loc.latitude : null, loc ? loc.longitude : null, detail.state === "moving");
+  const address = addr.address;
   const color = STATUS_THEME[detail.state].color;
   const tripsHref = () => (detail.device ? `/map?trips=${detail.device.id}` : "/map");
   const maxDay = Math.max(1, ...(week?.days.map((d) => d.distanceM) ?? [1]));
@@ -121,7 +122,6 @@ export function VehiclePageView({
             </Link>
             <h1 className="m-0 flex flex-wrap items-center gap-2 text-2xl font-extrabold tracking-tight text-primary">
               {v.name}
-              <OrderBadge order={v.sortOrder} />
               {ymm && <span className="text-sm font-semibold text-muted-foreground">{ymm}</span>}
             </h1>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -180,10 +180,11 @@ export function VehiclePageView({
               <div className="flex items-start gap-3 rounded-xl bg-primary-soft px-3.5 py-3">
                 <MapPin className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
-                  <p className="m-0 text-base font-bold [overflow-wrap:anywhere]">{address ? address.line1 : `${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}`}</p>
-                  <p className="m-0 text-sm text-foreground/75">{address?.line2 ?? "Street address loads when the address service is on"}</p>
+                  <p className="m-0 text-base font-bold [overflow-wrap:anywhere]">{placeText(addr, loc.latitude, loc.longitude, "line1")}</p>
+                  {address?.line2 && <p className="m-0 text-sm text-foreground/75">{address.line2}</p>}
+                  {addr.state === "off" && <p className="m-0 text-sm text-foreground/75">Street addresses are turned off for this account</p>}
                   <p className="m-0 mt-0.5 text-xs text-muted-foreground tabular-nums">
-                    {loc.latitude.toFixed(5)}, {loc.longitude.toFixed(5)} · <LocalTime iso={loc.recordedAt} />
+                    <LocalTime iso={loc.recordedAt} />
                   </p>
                 </div>
               </div>

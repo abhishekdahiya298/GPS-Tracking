@@ -22,11 +22,12 @@ import { Input, Select } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import type { ActivityReport, ActivityReportType, IdleRow, MileageRow, SpeedRow, StopRow } from "@/lib/activity-reports";
-import { useAddress } from "@/lib/use-address";
+import { placeText, useAddressState } from "@/lib/use-address";
+import { DateRangeButton } from "@/components/app/date-range-calendar";
 import { ReportTabs } from "./report-tabs";
 
 type Dev = { id: string; label: string };
-type Preset = "7d" | "yesterday" | "today" | "30d" | "custom";
+type Preset = "24h" | "7d" | "yesterday" | "today" | "30d" | "custom";
 const PAGE = 25;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -67,6 +68,8 @@ const META: Record<ActivityReportType, { title: string; description: string; nou
 function presetRange(p: Exclude<Preset, "custom">, tz: string): [string, string] {
   const today = dateFormatter(tz).dayKey(Date.now());
   switch (p) {
+    case "24h":
+      return [dateFormatter(tz).dayKey(Date.now() - 86_400_000), today];
     case "today":
       return [today, today];
     case "yesterday":
@@ -85,6 +88,8 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
   const meta = META[type];
   const [deviceId, setDeviceId] = useState("all");
   const [preset, setPreset] = useState<Preset>("7d");
+  // End of the rolling "Last 24 hours" window: the moment it was picked.
+  const [rollingEnd, setRollingEnd] = useState(() => Date.now());
   const [[fromDay, toDay], setDays] = useState<[string, string]>(() => presetRange("7d", tz));
   const [minMinutes, setMinMinutes] = useState(type === "idling" ? 5 : 10);
   // The limit is typed in the organization's units and sent in km/h.
@@ -122,14 +127,14 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
       deviceId: groupId ? "all" : deviceId,
       ...(groupId ? { groupId } : {}),
       // Midnight to midnight in the report's zone (23 or 25 hours on clock-change days).
-      from: startOfLocalDay(fromDay, tz).toISOString(),
-      to: startOfLocalDay(addDays(toDay, 1), tz).toISOString(),
+      from: preset === "24h" ? new Date(rollingEnd - 86_400_000).toISOString() : startOfLocalDay(fromDay, tz).toISOString(),
+      to: preset === "24h" ? new Date(rollingEnd).toISOString() : startOfLocalDay(addDays(toDay, 1), tz).toISOString(),
       tz
     });
     if (type === "stops" || type === "idling") p.set("minMinutes", String(minMinutes));
     if (type === "speeding") p.set("limitKph", String(Math.round(u.toKph(limit) * 10) / 10));
     return p.toString();
-  }, [type, deviceId, fromDay, toDay, tz, minMinutes, limit, u]);
+  }, [type, deviceId, fromDay, toDay, tz, minMinutes, limit, u, preset, rollingEnd]);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -231,7 +236,7 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
             if (type !== "speeding" || limitOk) void load();
           }}
         >
-          <div className={`grid gap-3 ${type === "mileage" ? "sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]" : "sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]"}`}>
+          <div className={`grid gap-3 ${type === "mileage" ? "sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]" : "sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)]"}`}>
             <label className="grid gap-1.5 text-sm font-medium">
               Vehicle
               <Select value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
@@ -254,30 +259,18 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
                 </optgroup>
               </Select>
             </label>
-            <label className="grid gap-1.5 text-sm font-medium">
-              From
-              <Input
-                type="date"
-                value={fromDay}
-                max={toDay}
-                onChange={(e) => {
+            <div className="grid gap-1.5 text-sm font-medium">
+              Dates
+              <DateRangeButton
+                fromDay={fromDay}
+                toDay={toDay}
+                today={dateFormatter(tz).dayKey(Date.now())}
+                onChange={(f, t) => {
                   setPreset("custom");
-                  setDays([e.target.value, toDay]);
+                  setDays([f, t]);
                 }}
               />
-            </label>
-            <label className="grid gap-1.5 text-sm font-medium">
-              To
-              <Input
-                type="date"
-                value={toDay}
-                min={fromDay}
-                onChange={(e) => {
-                  setPreset("custom");
-                  setDays([fromDay, e.target.value]);
-                }}
-              />
-            </label>
+            </div>
             {(type === "stops" || type === "idling") && (
               <label className="grid gap-1.5 text-sm font-medium">
                 {type === "stops" ? "Stops longer than" : "Idling longer than"}
@@ -327,10 +320,12 @@ export function ActivityReports({ type, devices, groups = [] }: { type: Activity
               value={preset}
               onChange={(p) => {
                 setPreset(p);
+              if (p === "24h") setRollingEnd(Date.now());
                 if (p !== "custom") setDays(presetRange(p, tz));
               }}
               options={[
-                { value: "today", label: "Today" },
+                { value: "24h", label: "Last 24 hours" },
+              { value: "today", label: "Today" },
                 { value: "yesterday", label: "Yesterday" },
                 { value: "7d", label: "Last 7 days" },
                 { value: "30d", label: "Last 30 days" },
@@ -587,10 +582,10 @@ function MapLink({ row }: { row: StopRow | IdleRow | SpeedRow }) {
 
 /** Street address of a stop / idle / speeding point (coordinates while it loads or with addresses off). */
 function Where({ lat, lon }: { lat: number; lon: number }) {
-  const a = useAddress(lat, lon);
-  const text = a ? [a.line1, a.line2].filter(Boolean).join(", ") : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+  const a = useAddressState(lat, lon);
+  const text = placeText(a, lat, lon);
   return (
-    <span className="line-clamp-2 text-xs leading-4 [overflow-wrap:anywhere]" title={a?.label ?? text}>
+    <span className="line-clamp-2 text-xs leading-4 [overflow-wrap:anywhere]" title={a.address?.label ?? text}>
       {text}
     </span>
   );

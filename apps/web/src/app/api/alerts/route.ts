@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { friendlyZodMessage } from "@/lib/validation-message";
 import { z } from "zod";
 import { countUnacknowledged, listEvents } from "@/lib/alerts";
 import { AlertListQuery, listAlertsPage } from "@/lib/alerts-list";
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
       return NextResponse.json(page, { headers: { "Cache-Control": "no-store" } });
     }
     const q = Query.safeParse(Object.fromEntries(new URL(request.url).searchParams));
-    if (!q.success) throw new ValidationError(q.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
+    if (!q.success) throw new ValidationError(friendlyZodMessage(q.error));
     const events = await listEvents(ctx.organizationId, { limit: q.data.limit, unacknowledgedOnly: q.data.unacknowledged === "1", beforeId: q.data.beforeId });
     return NextResponse.json({ events, unacknowledged: await countUnacknowledged(ctx.organizationId) }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {

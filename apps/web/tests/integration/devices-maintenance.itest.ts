@@ -152,6 +152,12 @@ describe("maintenance", () => {
     expect(items.every((i: { vehicleName: string }) => i.vehicleName === "Truck 7")).toBe(true);
   });
 
+  it("refuses a second reminder with the same name on the same vehicle", async () => {
+    const res = await maintPOST(req("POST", "fleet", { vehicleId: vehA, name: "oil CHANGE", intervalKm: 5000, lastServiceAt: new Date(t0 - 60_000).toISOString(), notifyUserIds: [] }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.message).toMatch(/already has a "oil CHANGE" reminder/);
+  });
+
   it("emails once per state change, concurrently safe", async () => {
     const [a, b] = await Promise.all([runMaintenanceCheck(), runMaintenanceCheck()]);
     expect(a + b).toBe(2);

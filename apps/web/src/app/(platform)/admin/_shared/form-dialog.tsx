@@ -56,11 +56,19 @@ export function FormDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (k: string, v: string | boolean) => setValues((s) => ({ ...s, [k]: v }));
-  const missing = fields.some((f) => "required" in f && f.required && !String(values[f.name] ?? "").trim());
+  const isMissing = (f: FieldSpec) => "required" in f && f.required && !String(values[f.name] ?? "").trim();
+  const missing = fields.some(isMissing);
+  // The button stays enabled; trying to submit explains what's missing next to the field.
+  const [tried, setTried] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (missing) return;
+    if (missing) {
+      setTried(true);
+      const first = fields.find(isMissing);
+      if (first) document.getElementById(`fd-${first.name}`)?.focus();
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -74,7 +82,7 @@ export function FormDialog({
 
   return (
     <Dialog open onOpenChange={(o) => !busy && onOpenChange(o)}>
-      <DialogContent title={title} description={description} className="max-w-lg" role={danger ? "alertdialog" : undefined}>
+      <DialogContent title={title} description={description} className="max-w-lg" {...(danger ? { role: "alertdialog" } : {})}>
         <form onSubmit={submit} className="grid gap-4">
           {intro}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -99,7 +107,7 @@ export function FormDialog({
               }
               if (f.kind === "customer") {
                 return wrap(
-                  <Field id={id} label={f.label} required={f.required} description={f.description}>
+                  <Field id={id} label={f.label} required={f.required} description={f.description} error={tried && isMissing(f) ? "Choose a customer." : null}>
                     <CustomerPicker id={id} value={String(values[f.name] ?? "")} onChange={(v) => set(f.name, v)} excludeId={f.excludeId ?? null} />
                   </Field>
                 );
@@ -154,7 +162,7 @@ export function FormDialog({
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)} disabled={busy}>
               Cancel
             </Button>
-            <Button type="submit" variant={danger ? "danger" : "primary"} loading={busy} disabled={missing}>
+            <Button type="submit" variant={danger ? "danger" : "primary"} loading={busy}>
               {confirmLabel}
             </Button>
           </DialogFooter>

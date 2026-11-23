@@ -58,6 +58,20 @@ describe("detectTrips", () => {
     expect(detectTrips(pts)).toHaveLength(1);
   });
 
+  it("driving with ignition reported off (no ignition wire) still counts as a trip", () => {
+    const pts = [pt(0, 0, 0, false), pt(1, 0, 40, false), pt(2, 1, 90, false), pt(3, 3, 100, false), pt(4, 4, 30, false), pt(5, 4, 0, false), pt(15, 4, 0, false)];
+    const trips = detectTrips(pts);
+    expect(trips).toHaveLength(1);
+    expect(trips[0]!.start.t).toBe(min(1));
+    expect(trips[0]!.end.t).toBe(min(4));
+    expect(trips[0]!.idleS).toBe(0);
+  });
+
+  it("a single speed spike while parked is not a trip", () => {
+    const pts = [pt(0, 0, 0, false), pt(5, 0, 12, false), pt(10, 0, 0, false), pt(20, 0, 0, false)];
+    expect(detectTrips(pts)).toHaveLength(0);
+  });
+
   it("falls back to speed when ignition is unknown", () => {
     const pts = [pt(0, 0, 0, null), pt(1, 0, 40, null), pt(2, 1, 40, null), pt(3, 2, 40, null), pt(10, 2, 0, null)];
     expect(detectTrips(pts)).toHaveLength(1);

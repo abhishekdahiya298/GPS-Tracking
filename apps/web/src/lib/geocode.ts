@@ -55,15 +55,22 @@ export function parseCoordinates(q: string): GeocodeResult | null {
   return { label: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`, latitude, longitude };
 }
 
-export async function waitForSlot(): Promise<void> {
+/**
+ * Waits (up to ~3 s) for the server-wide OpenStreetMap slot: one request a second, as its usage
+ * policy requires. Returns false if no slot came free, so the caller can answer "try again"
+ * instead of breaking the limit (which gets the server blocked and shows no addresses at all).
+ */
+export async function waitForSlot(): Promise<boolean> {
   try {
     const redis = await getReadyRedisPublisher();
     for (let i = 0; i < 12; i++) {
-      if ((await redis.set("geocode:slot", "1", "PX", 1_100, "NX")) === "OK") return;
+      if ((await redis.set("geocode:slot", "1", "PX", 1_100, "NX")) === "OK") return true;
       await new Promise((r) => setTimeout(r, 250));
     }
+    return false;
   } catch {
     // Without Redis there is no shared slot; the per-user limit still bounds the rate.
+    return true;
   }
 }
 

@@ -3,8 +3,8 @@ import { haversineMeters } from "./geo.js";
 /**
  * Trip detection over a time-ordered track.
  *
- * A point is "active" when the ignition is on, or (if ignition is unknown)
- * the vehicle moves at >= MOVING_KPH. A trip is a run of active points; it
+ * A point is "active" when the ignition is on or the vehicle moves at >= MOVING_KPH
+ * (trackers without an ignition wire report ignition off while driving). A trip is a run of active points; it
  * ends after STOP_MINUTES of inactivity or a data gap longer than GAP_MINUTES.
  * Very short runs (< MIN_TRIP_METERS and < MIN_TRIP_MINUTES) are GPS noise.
  *
@@ -15,7 +15,7 @@ import { haversineMeters } from "./geo.js";
  */
 
 /** Bump when trip rules change so stored daily summaries are rebuilt with the new rules. */
-export const TRIP_ENGINE_VERSION = 2;
+export const TRIP_ENGINE_VERSION = 3;
 export const TRIP_DEFAULTS = {
   MOVING_KPH: 5,
   STOP_MINUTES: 5,
@@ -48,8 +48,7 @@ export interface Trip {
 }
 
 function active(p: TrackPoint, movingKph: number) {
-  if (p.ignition !== null) return p.ignition;
-  return (p.speedKph ?? 0) >= movingKph;
+  return p.ignition === true || (p.speedKph ?? 0) >= movingKph;
 }
 
 export function detectTrips(points: TrackPoint[], opts: Partial<typeof TRIP_DEFAULTS> = {}): Trip[] {

@@ -6,6 +6,7 @@ import { Input, Select, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
+import { normalizePhone, PHONE_HINT } from "@/lib/phone";
 import type { DriverRow } from "@/lib/drivers";
 import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 
@@ -32,13 +33,27 @@ export function DriverFormDialog({ open, onOpenChange, driver, vehicles, onSaved
     notes: driver?.notes ?? ""
   });
   const [busy, setBusy] = useState(false);
-  const [nameError, setNameError] = useState<string | null>(null);
-  const field = (k: keyof typeof v) => ({ value: v[k], onChange: (e: { target: { value: string } }) => setV((s) => ({ ...s, [k]: e.target.value })) });
+  const [errors, setErrors] = useState<{ name?: string; phone?: string; email?: string }>({});
+  const field = (k: keyof typeof v) => ({
+    value: v[k],
+    onChange: (e: { target: { value: string } }) => {
+      setV((s) => ({ ...s, [k]: e.target.value }));
+      setErrors((x) => (k in x ? { ...x, [k]: undefined } : x));
+    }
+  });
   const taken = vehicles.find((x) => x.id === v.vehicleId && x.driver && x.driver !== driver?.name);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!v.name.trim()) return setNameError("Enter the driver's name");
+    const found: typeof errors = {};
+    if (!v.name.trim()) found.name = "Enter the driver's name";
+    if (v.phone.trim() && !normalizePhone(v.phone)) found.phone = PHONE_HINT;
+    if (v.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email.trim())) found.email = "Enter an email like name@company.com.";
+    setErrors(found);
+    if (Object.keys(found).length) {
+      document.getElementById(found.name ? "d-name" : found.phone ? "d-phone" : "d-email")?.focus();
+      return;
+    }
     setBusy(true);
     try {
       if (editing) await api(`/api/drivers/${driver!.id}`, { method: "PATCH", json: v });
@@ -58,11 +73,11 @@ export function DriverFormDialog({ open, onOpenChange, driver, vehicles, onSaved
       <DialogContent title={editing ? `Edit ${driver!.name}` : "Add driver"} description={editing ? undefined : "Their name shows on the live map, the vehicle and its trips."} className="max-w-2xl">
         <form noValidate onSubmit={submit} className="grid gap-4">
           <div className="grid items-start gap-x-4 gap-y-3 sm:grid-cols-2">
-            <Field id="d-name" label="Full name" required error={nameError}>
-              <Input id="d-name" autoFocus maxLength={120} aria-invalid={Boolean(nameError)} {...field("name")} onInput={() => setNameError(null)} />
+            <Field id="d-name" label="Full name" required error={errors.name}>
+              <Input id="d-name" autoFocus maxLength={120} aria-invalid={Boolean(errors.name)} {...field("name")} />
             </Field>
-            <Field id="d-phone" label="Phone">
-              <Input id="d-phone" type="tel" inputMode="tel" maxLength={40} placeholder="+1 555 010 2030" {...field("phone")} />
+            <Field id="d-phone" label="Phone" error={errors.phone}>
+              <Input id="d-phone" type="tel" inputMode="tel" maxLength={40} placeholder="(416) 555-0123" aria-invalid={Boolean(errors.phone)} {...field("phone")} />
             </Field>
             <Field id="d-vehicle" label="Vehicle they drive" description={taken ? `${taken.driver} drives it now; saving moves it here.` : undefined}>
               <Select id="d-vehicle" {...field("vehicleId")}>
@@ -76,7 +91,7 @@ export function DriverFormDialog({ open, onOpenChange, driver, vehicles, onSaved
                 ))}
               </Select>
             </Field>
-            <Field id="d-email" label="Email">
+            <Field id="d-email" label="Email" error={errors.email}>
               <Input id="d-email" type="email" maxLength={200} {...field("email")} />
             </Field>
             <Field id="d-license" label="Licence number">

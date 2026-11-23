@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
-import { DensityToggle, IgnitionDot, OrderBadge, PlateTag, useDensity, VinTag, yearMakeModel } from "@/components/app/vehicle-tags";
+import { DensityToggle, IgnitionDot, PlateTag, useDensity, VinTag, yearMakeModel } from "@/components/app/vehicle-tags";
 import { StatusChip } from "@/components/app/status-chip";
 import { ACTION_COLOR, FilterTiles, RowActions } from "@/components/app/list-kit";
-import { useAddress } from "@/lib/use-address";
+import { placeText, useAddressState } from "@/lib/use-address";
 import { DriverAvatar } from "../drivers/drivers-view";
 import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
@@ -42,10 +42,10 @@ import { deviceDisplayName } from "@/lib/device-name";
 
 /** Full street address (or coordinates while it loads) with a pin; wraps to a second line when long. */
 function LocationCell({ lat, lon, moving }: { lat: number; lon: number; moving: boolean }) {
-  const a = useAddress(lat, lon, moving);
-  const text = a ? [a.line1, a.line2].filter(Boolean).join(", ") : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+  const a = useAddressState(lat, lon, moving);
+  const text = placeText(a, lat, lon);
   return (
-    <span className="flex min-w-0 items-start gap-1 text-xs leading-4 text-foreground/80" title={a?.label ?? text}>
+    <span className="flex min-w-0 items-start gap-1 text-xs leading-4 text-foreground/80" title={a.address?.label ?? text}>
       <MapPin className="mt-px size-3.5 shrink-0 text-[#2563eb]" aria-hidden="true" />
       <span className="line-clamp-2 [overflow-wrap:anywhere]">{text}</span>
     </span>
@@ -144,7 +144,6 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
               <div className="grid min-w-0 gap-0.5">
                 <p className="m-0 flex min-w-0 items-baseline gap-1.5 whitespace-nowrap" title={[v.name, ymm, ...v.groups].filter(Boolean).join(" · ")}>
                   <span className="font-semibold text-foreground">{v.name}</span>
-                  <OrderBadge order={v.sortOrder} className="self-center" />
                   {ymm && <span className="truncate text-xs text-muted-foreground">{ymm}</span>}
                 </p>
                 <p className="m-0 flex flex-wrap items-center gap-1">
@@ -330,7 +329,8 @@ export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleR
               <VehiclePicture type={v.type} state={pictureState(v.device ? v.state : null)} className="mt-0.5" />
               <div className="min-w-0 flex-1">
                 <p className="m-0 truncate font-medium text-foreground">{v.name}</p>
-                <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground">
+                {/* "x min ago" is computed from the clock, so server and browser can differ by a minute. */}
+                <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground" suppressHydrationWarning>
                   {[v.licensePlate, v.device ? deviceDisplayName(v.device.name, v.device.model) : "No device", v.location && !SILENT.has(v.state) ? u.fmtSpeed(v.location.speedKph) : null, v.device ? relativeTime(v.lastSeenAt, Date.now(), t.timeZone) : null].filter(Boolean).join(" · ")}
                 </p>
                 <div className="mt-1.5">

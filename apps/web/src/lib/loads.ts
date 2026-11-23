@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { normalizePhone } from "./phone";
 import { contextHasModule, type TenantContext } from "@rio-gps/core";
 import {
   LOAD_RADIUS_DEFAULT_M,
@@ -41,17 +42,7 @@ const INVITES_PER_LOAD_PER_HOUR = 5;
 /** Trail points returned for the detail map (the newest ones). */
 const TRAIL_LIMIT = 2_000;
 
-/**
- * Accepts the ways people type phone numbers; returns E.164 or null.
- * Ten digits are taken as North American (+1), the region RIO serves.
- */
-export function normalizePhone(raw: string): string | null {
-  const s = raw.trim().replace(/[\s().-]/g, "");
-  if (/^\+[1-9]\d{7,14}$/.test(s)) return s;
-  if (/^\d{10}$/.test(s)) return `+1${s}`;
-  if (/^1\d{10}$/.test(s)) return `+${s}`;
-  return null;
-}
+export { normalizePhone } from "./phone";
 
 const PhoneSchema = z
   .string()

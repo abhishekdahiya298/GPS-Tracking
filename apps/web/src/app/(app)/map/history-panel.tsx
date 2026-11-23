@@ -7,22 +7,22 @@
  */
 import type { GeoJSONSource, Map as MlMap } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
-import { CircleStop, Clock, Gauge, History, Pause, Play, Route, Timer, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, CircleStop, Clock, Gauge, History, Pause, Pencil, Play, Route, Timer, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toWallTime, wallTimeToUtc } from "@rio-gps/core/timezones";
+import { addDays, toWallTime, wallTimeToUtc } from "@rio-gps/core/timezones";
+import { DateRangeCalendar, daySpan, shortDay, type DayRange } from "@/components/app/date-range-calendar";
 import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { LocationPoint } from "@/lib/locations";
-import { useAddress } from "@/lib/use-address";
+import { placeText, useAddressState } from "@/lib/use-address";
 import { cn } from "@/lib/cn";
 import { indexAtTime, quickRange, timeline, trackStats, type TimelineEvent } from "./fleet-model";
 
 export const MAX_HISTORY_POINTS = 20_000;
-type Range = "24h" | "today" | "yesterday" | "7d" | "custom";
+type Range = "24h" | "today" | "yesterday" | "7d" | "day" | "custom";
 const SPEEDS = [10, 60, 300] as const;
 const KIND = {
   trip: { color: "#16a34a", label: "Driving", icon: Route },
@@ -39,11 +39,11 @@ function hm(ms: number) {
 function EventRow({ e, last, active, onPick }: { e: TimelineEvent; last: boolean; active: boolean; onPick: () => void }) {
   const u = useUnits();
   const t = useTime();
-  const a = useAddress(e.lat, e.lon, false);
+  const a = useAddressState(e.lat, e.lon, false);
   const k = KIND[e.kind];
   const Icon = k.icon;
   const title = e.kind === "trip" ? `Trip ${e.n}` : e.kind === "idle" ? "Idling" : e.endMs - e.startMs >= 4 * 3_600_000 ? "Parked" : "Stopped";
-  const place = a ? [a.line1, a.line2].filter(Boolean).join(", ") : `${e.lat.toFixed(4)}, ${e.lon.toFixed(4)}`;
+  const place = placeText(a, e.lat, e.lon);
   return (
     <li className={cn("grid grid-cols-[60px_24px_minmax(0,1fr)] gap-2 rounded-xl px-1", active && "bg-primary-soft shadow-[inset_0_0_0_1.5px_var(--color-primary)]")}>
       <span className="pt-2 text-right text-[11.5px] leading-tight tabular-nums text-muted-foreground">
@@ -63,7 +63,7 @@ function EventRow({ e, last, active, onPick }: { e: TimelineEvent; last: boolean
             {hm(e.endMs - e.startMs)}
           </span>
         </span>
-        <span className="block truncate text-xs text-foreground/75" title={a?.label ?? place}>
+        <span className="block truncate text-xs text-foreground/75" title={a.address?.label ?? place}>
           {e.kind === "trip" ? `to ${place}` : place}
         </span>
         <span className="block text-[11px] tabular-nums text-muted-foreground">
@@ -263,13 +263,62 @@ export function HistoryPanel({
     drawDone(cursor, !playing);
   }, [cursor, track, drawCursor, drawDone, playing]);
 
+  const [editing, setEditing] = useState(false);
+  const todayKey = toWallTime(new Date(), tz).slice(0, 10);
   const pickRange = (r: Range) => {
+    if (r === "custom") {
+      setRange("custom");
+      setEditing(true);
+      return;
+    }
+    setEditing(false);
     setRange(r);
-    if (r === "custom") return;
-    const q = quickRange(r, tz);
+    const q = quickRange(r as "24h" | "today" | "yesterday" | "7d", tz);
     setFrom(localInput(q.from));
     setTo(q.to ? localInput(q.to) : "");
     setLoadKey((k) => k + 1);
+  };
+  /** One whole day (today runs until now). */
+  const showDay = (day: string) => {
+    if (day >= todayKey) return pickRange("today");
+    if (day === addDays(todayKey, -1)) return pickRange("yesterday");
+    setEditing(false);
+    setRange("day");
+    setFrom(`${day}T00:00`);
+    setTo(`${addDays(day, 1)}T00:00`);
+    setLoadKey((k) => k + 1);
+  };
+  const applyCustom = (r: DayRange) => {
+    setEditing(false);
+    setRange("custom");
+    setFrom(`${r.startDay}T${r.startTime}`);
+    const end = `${r.endDay}T${r.endTime === "23:59" ? "23:59" : r.endTime}`;
+    // An end at or after now means "until now" (keeps following new points).
+    setTo(wallTimeToUtc(end, tz).getTime() >= Date.now() ? "" : end);
+    setLoadKey((k) => k + 1);
+  };
+  const shownDay = from.slice(0, 10);
+  const steppable = range === "today" || range === "yesterday" || range === "day";
+  const rangeTitle =
+    range === "24h" ? "Last 24 hours" : range === "7d" ? "Last 7 days" : range === "today" ? `Today, ${shortDay(todayKey)}` : range === "yesterday" ? `Yesterday, ${shortDay(shownDay)}` : range === "day" ? t.day(shownDay) : window_ ? `${t.dateTime(new Date(window_.start).toISOString())} → ${to ? t.dateTime(new Date(window_.end).toISOString()) : "now"}` : "";
+  const rangeSub =
+    range === "yesterday" || range === "day"
+      ? "Full day"
+      : range === "today"
+        ? `${t.time(wallTimeToUtc(from, tz).toISOString())} → now`
+        : range === "custom"
+          ? (() => {
+              const n = daySpan(from.slice(0, 10), (to || toWallTime(new Date(), tz)).slice(0, 10));
+              return `${n} day${n === 1 ? "" : "s"}${to ? "" : " · until now"}`;
+            })()
+          : window_
+            ? `${t.dateTime(new Date(window_.start).toISOString())} → now`
+            : "";
+  const calendarValue: DayRange = {
+    startDay: from.slice(0, 10),
+    endDay: (to || toWallTime(new Date(), tz)).slice(0, 10),
+    startTime: range === "custom" ? from.slice(11, 16) : "00:00",
+    endTime: range === "custom" && to ? to.slice(11, 16) : "23:59"
   };
 
   const p = track[cursor];
@@ -315,26 +364,45 @@ export function HistoryPanel({
         ))}
       </div>
 
-      {range === "custom" ? (
-        <div className="grid grid-cols-2 gap-2">
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-            From
-            <Input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </label>
-          <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-            To (empty = now)
-            <Input type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} />
-          </label>
-          <Button className="col-span-2" onClick={load} loading={busy}>
-            <Route /> Show trips
-          </Button>
-        </div>
+      {editing ? (
+        <DateRangeCalendar
+          key={`${from}|${to}`}
+          value={calendarValue}
+          today={todayKey}
+          busy={busy}
+          onApply={applyCustom}
+          onCancel={range === "custom" && window_ ? () => setEditing(false) : () => pickRange("24h")}
+        />
       ) : (
-        window_ && (
-          <p className="m-0 text-xs tabular-nums text-muted-foreground">
-            {t.dateTime(new Date(window_.start).toISOString())} → {to ? t.dateTime(new Date(window_.end).toISOString()) : "now"} · times in {t.abbr()}
-          </p>
-        )
+        <div className="flex items-center gap-2 rounded-xl bg-muted/60 p-1.5 shadow-[inset_0_0_0_1px_var(--color-border)]">
+          {steppable ? (
+            <Button variant="secondary" size="icon-sm" className="bg-background" aria-label="Previous day" onClick={() => showDay(addDays(range === "today" ? todayKey : shownDay, -1))}>
+              <ChevronLeft />
+            </Button>
+          ) : (
+            <Button variant="secondary" size="icon-sm" className="bg-background" aria-label="Pick dates" onClick={() => pickRange("custom")}>
+              <CalendarDays />
+            </Button>
+          )}
+          <div className="min-w-0 flex-1 text-center">
+            <div className="text-[13.5px] font-bold leading-tight tabular-nums text-foreground">{rangeTitle}</div>
+            <div className="truncate text-[11.5px] tabular-nums text-muted-foreground">
+              {rangeSub}
+              {rangeSub ? " · " : ""}times in {t.abbr()}
+            </div>
+          </div>
+          {steppable ? (
+            <Button variant="secondary" size="icon-sm" className="bg-background" aria-label="Next day" disabled={range === "today"} onClick={() => showDay(addDays(shownDay, 1))}>
+              <ChevronRight />
+            </Button>
+          ) : range === "custom" ? (
+            <Button variant="secondary" size="sm" className="bg-background text-primary" onClick={() => setEditing(true)}>
+              <Pencil /> Change
+            </Button>
+          ) : (
+            <span className="w-8" />
+          )}
+        </div>
       )}
 
       {error && <Alert tone="warning">{error}</Alert>}

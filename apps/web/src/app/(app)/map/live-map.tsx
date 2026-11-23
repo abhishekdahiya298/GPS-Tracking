@@ -2,7 +2,7 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 import { readMapIcons, useMapIcons } from "@/lib/map-icons";
 import { DEFAULT_ORG_MAP_PREFS, type OrgMapPrefs } from "@/lib/org-map-prefs";
-import { useAddress } from "@/lib/use-address";
+import { placeText, useAddressState } from "@/lib/use-address";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Expand, ExternalLink, Gauge, History, IdCard, KeyRound, Layers, Locate, LocateFixed, MapPin, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Phone, Plus, Radio, Satellite, Share2, Shrink, Truck, Wifi, X } from "lucide-react";
@@ -15,7 +15,7 @@ import { EmptyState } from "@/components/app/states";
 import { Select } from "@/components/ui/input";
 import { VehiclePicture, vehiclePictureSrc } from "@/components/app/vehicle-picture";
 import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
-import { OrderBadge, PlateTag, VinTag, yearMakeModel } from "@/components/app/vehicle-tags";
+import { PlateTag, VinTag, yearMakeModel } from "@/components/app/vehicle-tags";
 import { DriverAvatar } from "../drivers/drivers-view";
 import { useTime } from "@/components/app/time-context";
 import { useUnits } from "@/components/app/units-context";
@@ -152,9 +152,10 @@ function ListRow({
   const d = r.d;
   const nm = splitName(r.name);
   const loc = d.location;
-  const address = useAddress(addresses && loc ? loc.latitude : null, addresses && loc ? loc.longitude : null, r.state === "moving");
+  const addr = useAddressState(addresses && loc ? loc.latitude : null, addresses && loc ? loc.longitude : null, r.state === "moving");
+  const address = addr.address;
   const look: MapState = r.stale ? "offline" : r.state;
-  const where = !loc ? "No position yet" : address ? [address.line1, address.line2].filter(Boolean).join(", ") : `${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`;
+  const where = !loc ? "No position yet" : placeText(addr, loc.latitude, loc.longitude);
   const ymm = info ? yearMakeModel(info) : null;
   return (
     <button
@@ -163,7 +164,7 @@ function ListRow({
       aria-pressed={active}
       title={ymm ?? undefined}
       className={cn(
-        "relative grid h-full w-full cursor-pointer grid-cols-[44px_minmax(0,1fr)] items-start gap-2.5 overflow-hidden rounded-xl border-0 py-2 pl-3 pr-2.5 text-left transition-shadow",
+        "relative grid h-full w-full cursor-pointer grid-cols-[64px_minmax(0,1fr)] items-center gap-2.5 overflow-hidden rounded-xl border-0 py-2 pl-3 pr-2.5 text-left transition-shadow",
         active ? "shadow-[inset_0_0_0_2px_var(--color-primary),0_6px_14px_-6px_rgb(29_78_216/0.5)]" : "shadow-[inset_0_0_0_1px_var(--card-ring)] hover:shadow-[inset_0_0_0_1.5px_var(--card-ring-hover)]"
       )}
       style={{
@@ -173,13 +174,10 @@ function ListRow({
       }}
     >
       <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1" style={{ background: STATE_COLORS[look] }} />
-      <span className="mt-0.5 grid justify-items-center gap-1">
-        <VehiclePicture type={d.vehicle?.type} state={r.state} className="h-8 w-11 rounded-md bg-background/80" />
-      </span>
+      <VehiclePicture type={d.vehicle?.type} state={r.state} className="h-12 w-16 rounded-[10px] bg-background/85 shadow-[inset_0_0_0_1px_white]" />
       <span className="grid min-w-0 gap-[3px]">
         <span className="flex min-w-0 items-center gap-1 overflow-hidden">
           <span className="shrink-0 text-[13.5px] font-bold text-foreground">{nm.main}</span>
-          <OrderBadge order={info?.sortOrder} />
           <PlateTag plate={d.vehicle?.licensePlate} className="bg-background/70" />
           <VinTag vin={info?.vin} short className="bg-background/70" />
           <span className="ml-auto shrink-0 pl-1 text-[11px] tabular-nums text-muted-foreground">{d.lastSeenAt ? ago(d.lastSeenAt, now).replace(/ ago$/, "") : "No data"}</span>
@@ -1010,7 +1008,8 @@ export function LiveMap({
     });
   };
 
-  const address = useAddress(addresses && sel?.location ? sel.location.latitude : null, addresses && sel?.location ? sel.location.longitude : null, selState === "moving");
+  const selAddr = useAddressState(addresses && sel?.location ? sel.location.latitude : null, addresses && sel?.location ? sel.location.longitude : null, selState === "moving");
+  const address = selAddr.address;
 
   const selInfo = sel?.vehicle ? vehicleInfo[sel.vehicle.id] : undefined;
   const selYmm = selInfo ? yearMakeModel(selInfo) : null;
@@ -1069,8 +1068,8 @@ export function LiveMap({
                   <StatusBadge state={selState} stale={selStale} />
                   {sel.vehicle ? (
                     <>
-                      <PlateTag plate={sel.vehicle.licensePlate} className="bg-background/80" />
-                      <VinTag vin={selInfo?.vin} short className="bg-background/80" />
+                      <PlateTag plate={sel.vehicle.licensePlate} className="h-[22px] bg-background px-2 text-xs font-extrabold tracking-wide text-foreground shadow-[inset_0_0_0_1px_#94a3b8]" />
+                      <VinTag vin={selInfo?.vin} className="h-[22px] bg-background/80 px-2 text-[11.5px]" />
                     </>
                   ) : (
                     <span className="text-xs text-muted-foreground">GPS tracker · no vehicle linked</span>
@@ -1151,7 +1150,7 @@ export function LiveMap({
               <div className="min-w-0 flex-1">
                 <span className="sr-only">Last location: </span>
                 <p className="m-0 text-sm font-bold leading-5 [overflow-wrap:anywhere]" title={address?.label}>
-                  {address ? address.line1 : `${sel.location.latitude.toFixed(5)}, ${sel.location.longitude.toFixed(5)}`}
+                  {placeText(selAddr, sel.location.latitude, sel.location.longitude, "line1")}
                 </p>
                 <p className="m-0 text-xs text-foreground/80" title={`${time.dateTimeSec(sel.location.recordedAt)} ${time.abbr(sel.location.recordedAt)}`}>
                   {[address?.line2, selState === "moving" && !selStale && compass(sel.location.headingDeg) ? `heading ${compass(sel.location.headingDeg)}` : null].filter(Boolean).join(" · ") || `Updated ${ago(sel.location.recordedAt, now)}`}
