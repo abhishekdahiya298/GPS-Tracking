@@ -150,7 +150,7 @@ export default async function AuthLayout({ children }: { children: ReactNode }) 
           </div>
           <div className="auth-rise">{children}</div>
           <div className="auth-rise auth-rise-2 mt-8 border-t border-border pt-6">
-            <p className="m-0 mb-3 text-center text-xs font-medium text-muted-foreground">Get the RIO GPS app for iPhone and Android</p>
+            <p className="m-0 mb-3 text-center text-xs font-medium text-muted-foreground">Drivers and teams: get the RIO GPS app</p>
             <StoreBadges ios={stores.ios} android={stores.android} />
           </div>
           <div className="mt-6 flex items-center justify-center gap-2 text-xs text-muted-foreground">

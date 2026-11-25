@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, Building2, CheckCircle2, Package, Truck, UserRound } from "lucide-react";
+import { ArrowLeft, Building2, Check, CheckCircle2, Mail, MessageSquareText, Package, Truck, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { deviceTimeZone, TimeZoneSelect } from "@/components/app/time-zone-select";
@@ -17,17 +17,19 @@ const ROLES: { key: Role; title: string; hint: string; icon: typeof Truck }[] = 
   { key: "fleet", title: "I run trucks", hint: "Fleet owner or manager. Add your trucks and drivers.", icon: Building2 },
   { key: "operator", title: "I'm an owner-operator", hint: "I own my truck and drive it myself.", icon: Truck },
   { key: "broker", title: "I book loads", hint: "Broker or dispatcher. Track loads with the driver's phone.", icon: Package },
-  { key: "driver", title: "I'm a driver", hint: "I drive for a company. Needs your company's code.", icon: UserRound }
+  { key: "driver", title: "I'm a driver", hint: "I drive for a company. Join with its code.", icon: UserRound }
 ];
 const SIZES = ["1", "2-5", "6-20", "21-50", "50+"] as const;
 
-type Step = { s: "role" } | { s: "details" } | { s: "code"; token: string; phone: string; companyName?: string } | { s: "joined"; companyName: string };
+type SentTo = { email: string | null; phone: string | null };
+type Step = { s: "role" } | { s: "details" } | { s: "code"; token: string; sentTo: SentTo; companyName?: string } | { s: "joined"; companyName: string };
 
 /**
- * Create account: what describes you → your company (or the company code for drivers) → the
- * code texted to your phone. The company opens on the plan RIO chose for that role.
+ * Create account: what describes you → your company (or the company code for drivers) → one
+ * 6-digit code, sent to the email and (when texts work) the phone, typed once. The company opens
+ * on the plan RIO chose for that role.
  */
-export function SignupFlow({ open, phoneCheck, initialRole, initialCode }: { open: Record<Role, boolean>; phoneCheck: boolean; initialRole: Role | null; initialCode: string }) {
+export function SignupFlow({ open, phoneCheck, emailCheck, initialRole, initialCode }: { open: Record<Role, boolean>; phoneCheck: boolean; emailCheck: boolean; initialRole: Role | null; initialCode: string }) {
   const roles = ROLES.filter((r) => open[r.key]);
   const [role, setRole] = useState<Role>(initialRole && open[initialRole] ? initialRole : roles[0]!.key);
   const [step, setStep] = useState<Step>(initialRole && open[initialRole] ? { s: "details" } : { s: "role" });
@@ -35,7 +37,7 @@ export function SignupFlow({ open, phoneCheck, initialRole, initialCode }: { ope
   const [busy, setBusy] = useState(false);
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
-  const total = phoneCheck ? 3 : 2;
+  const total = (role === "driver" ? phoneCheck : phoneCheck || emailCheck) ? 3 : 2;
   const tzRef = useRef<HTMLSelectElement>(null);
   useEffect(() => {
     const tz = deviceTimeZone();
@@ -60,9 +62,12 @@ export function SignupFlow({ open, phoneCheck, initialRole, initialCode }: { ope
         timeZone: String(f.get("timeZone") ?? "America/Toronto"),
         agree: f.get("agree") === "on"
       };
-      const r = await api<{ status: string; token?: string; phone?: string }>("/api/signup/start", { method: "POST", json: body });
+      const r = await api<{ status: string; token?: string; sentTo?: SentTo }>("/api/signup/start", { method: "POST", json: body });
       if (r.status === "created") window.location.assign("/dashboard?welcome=1");
-      else setStep({ s: "code", token: r.token!, phone: r.phone! });
+      else {
+        setCode("");
+        setStep({ s: "code", token: r.token!, sentTo: r.sentTo! });
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : errorMessage(err));
     } finally {
@@ -76,12 +81,12 @@ export function SignupFlow({ open, phoneCheck, initialRole, initialCode }: { ope
     setError(null);
     setBusy(true);
     try {
-      const r = await api<{ status: string; token?: string; phone?: string; companyName: string }>("/api/signup/join", {
+      const r = await api<{ status: string; token?: string; sentTo?: SentTo; companyName: string }>("/api/signup/join", {
         method: "POST",
         json: { code: String(f.get("code") ?? ""), name: String(f.get("name") ?? ""), phone: String(f.get("phone") ?? "") }
       });
       if (r.status === "joined") setStep({ s: "joined", companyName: r.companyName });
-      else setStep({ s: "code", token: r.token!, phone: r.phone!, companyName: r.companyName });
+      else setStep({ s: "code", token: r.token!, sentTo: r.sentTo!, companyName: r.companyName });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : errorMessage(err));
     } finally {
@@ -109,8 +114,8 @@ export function SignupFlow({ open, phoneCheck, initialRole, initialCode }: { ope
     if (step.s !== "code") return;
     setError(null);
     try {
-      const r = await api<{ phone: string }>("/api/signup/resend", { method: "POST", json: { token: step.token } });
-      setStep({ ...step, phone: r.phone });
+      const r = await api<{ sentTo: SentTo }>("/api/signup/resend", { method: "POST", json: { token: step.token } });
+      setStep({ ...step, sentTo: r.sentTo });
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -126,7 +131,7 @@ export function SignupFlow({ open, phoneCheck, initialRole, initialCode }: { ope
     return (
       <div className="grid justify-items-center gap-3 text-center">
         <CheckCircle2 className="size-14 text-success" aria-hidden="true" />
-        <AuthHeading title={`You're in ${step.companyName}`} description="Your company sees you as a driver now. They'll send you a link for each load; open it on your phone to share your location while you're on duty." />
+        <AuthHeading title={`You're in ${step.companyName}`} description="Your company sees you as a driver now. They'll send you a link for each load to share your location from your phone." />
         <Link href="/login" className="text-sm text-primary">
           Back to sign in
         </Link>
@@ -140,7 +145,14 @@ export function SignupFlow({ open, phoneCheck, initialRole, initialCode }: { ope
         <p className="m-0 text-xs font-bold uppercase tracking-wide text-muted-foreground">
           Step {total} of {total}
         </p>
-        <AuthHeading title="Check your phone" description={`We sent a 6-digit code by text to ${step.phone}.`} />
+        <AuthHeading
+          title={role === "driver" ? "Check your phone" : "Enter your code"}
+          description={step.sentTo.email && step.sentTo.phone ? "We sent the same 6-digit code to your email and your phone. Use whichever arrives first." : step.sentTo.email ? "We sent a 6-digit code to your email." : "We sent a 6-digit code by text."}
+        />
+        <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
+          {role !== "driver" && <SentChip icon={Mail} label="Email" value={step.sentTo.email} />}
+          {(role === "driver" || phoneCheck || step.sentTo.phone) && <SentChip icon={MessageSquareText} label="Text message" value={step.sentTo.phone} />}
+        </ul>
         <Field id="code" label="Code" required>
           <Input id="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required pattern="\d{6}" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} className="h-12 text-center text-2xl tracking-[0.5em]" autoFocus />
         </Field>
@@ -155,7 +167,7 @@ export function SignupFlow({ open, phoneCheck, initialRole, initialCode }: { ope
           </button>{" "}
           ·{" "}
           <button type="button" onClick={() => setStep({ s: "details" })} className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-primary">
-            Change number
+            {role === "driver" ? "Change number" : "Change email or phone"}
           </button>
         </p>
         {role !== "driver" && (
@@ -292,5 +304,26 @@ export function SignupFlow({ open, phoneCheck, initialRole, initialCode }: { ope
         Create free account
       </Button>
     </form>
+  );
+}
+
+/** Where the code went: green "Sent" when delivered, grey "Not sent" when that way is off. */
+function SentChip({ icon: Icon, label, value }: { icon: typeof Mail; label: string; value: string | null }) {
+  return (
+    <li className={cn("flex min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2", value ? "border-success/30 bg-success/5" : "border-border bg-muted/50")}>
+      <span className={cn("grid size-8 shrink-0 place-items-center rounded-lg bg-background", value ? "text-success" : "text-muted-foreground")}>
+        <Icon className="size-4" aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1 leading-tight">
+        <b className="block text-[13px]">{label}</b>
+        <span className="block truncate text-xs text-muted-foreground">{value ?? "Not sent"}</span>
+      </span>
+      {value && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
+          <Check className="size-3" aria-hidden="true" />
+          Sent
+        </span>
+      )}
+    </li>
   );
 }

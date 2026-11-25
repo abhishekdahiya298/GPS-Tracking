@@ -142,7 +142,7 @@ export function TrackView() {
           })}
         </div>
       </div>
-      <footer className="px-4 py-3 text-center text-xs text-muted-foreground">Updates every 30 seconds · Powered by RIO GPS</footer>
+      <footer className="px-4 py-3 text-center text-xs text-muted-foreground">Live location · Powered by RIO GPS</footer>
     </div>
   );
 }

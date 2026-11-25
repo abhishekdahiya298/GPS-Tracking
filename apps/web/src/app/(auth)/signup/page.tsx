@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getAuth } from "@/lib/auth";
 import { signupOptions } from "@/lib/signup";
 import { AuthHeading } from "../auth-heading";
+import { AuthTabs } from "../auth-tabs";
 import { SignupFlow } from "./signup-flow";
 
 export const dynamic = "force-dynamic";
@@ -28,5 +29,10 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
       </>
     );
   }
-  return <SignupFlow open={opts.open} phoneCheck={opts.phoneCheck} initialRole={sp.role === "driver" || sp.code ? "driver" : null} initialCode={sp.code ?? ""} />;
+  return (
+    <>
+      <AuthTabs active="signup" />
+      <SignupFlow open={opts.open} phoneCheck={opts.phoneCheck} emailCheck={opts.emailCheck} initialRole={sp.role === "driver" || sp.code ? "driver" : null} initialCode={sp.code ?? ""} />
+    </>
+  );
 }

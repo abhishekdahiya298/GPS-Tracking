@@ -7,6 +7,9 @@ import { archiveInactiveFreeCompanies } from "@/lib/signup";
 import { POST as startPOST } from "@/app/api/signup/start/route";
 import { POST as joinPOST } from "@/app/api/signup/join/route";
 import { POST as deletePOST } from "@/app/api/account/delete/route";
+import { POST as verifyPOST } from "@/app/api/signup/verify/route";
+import { POST as resendPOST } from "@/app/api/signup/resend/route";
+import { setEmailTransportForTests, type EmailMessage } from "@/lib/email";
 
 const BASE = "http://localhost:3000";
 let ipN = 1;
@@ -101,5 +104,40 @@ describe("public sign-up", () => {
     expect(((await res.json()) as { archived: string[] }).archived).toEqual(["Dhillon Transport"]);
     const [u] = await getDb().select().from(schema.users).where(eq(schema.users.email, "gurpreet@dhillon.test"));
     expect(u).toBeUndefined();
+  });
+
+  it("with email on, one code goes to the email and is typed once", async () => {
+    const sent: EmailMessage[] = [];
+    setEmailTransportForTests(async (m) => {
+      sent.push(m);
+    });
+    try {
+      const body = company({ email: "owner@coded.test", phone: "(647) 555-0170", company: "Coded Freight" });
+      const res = await startPOST(post("/api/signup/start", body));
+      expect(res.status).toBe(202);
+      const r = (await res.json()) as { status: string; token: string; sentTo: { email: string | null; phone: string | null } };
+      expect(r.status).toBe("code_sent");
+      expect(r.sentTo.email).toMatch(/^o•+@coded\.test$/);
+      expect(r.sentTo.phone).toBeNull(); // no texts on this server
+      const mail = sent.find((m) => m.template === "signup_code" && m.to === "owner@coded.test");
+      const code = /\b(\d{6})\b/.exec(mail!.subject)![1]!;
+      // Nothing exists until the code is right.
+      const [none] = await getDb().select().from(schema.users).where(eq(schema.users.email, "owner@coded.test"));
+      expect(none).toBeUndefined();
+      const wrong = code === "000000" ? "111111" : "000000";
+      expect((await verifyPOST(post("/api/signup/verify", { token: r.token, code: wrong, password: "a-long-enough-password" }))).status).toBe(400);
+      // Send again: a fresh code replaces the old one.
+      await getDb().update(schema.phoneCodes).set({ createdAt: new Date(Date.now() - 60_000) });
+      const again = await resendPOST(post("/api/signup/resend", { token: r.token }));
+      expect(again.status).toBe(200);
+      const mail2 = sent.filter((m) => m.template === "signup_code").at(-1)!;
+      const code2 = /\b(\d{6})\b/.exec(mail2.subject)![1]!;
+      const ok = await verifyPOST(post("/api/signup/verify", { token: r.token, code: code2, password: "a-long-enough-password" }));
+      expect(ok.status).toBeLessThan(300);
+      const [u] = await getDb().select().from(schema.users).where(eq(schema.users.email, "owner@coded.test"));
+      expect(u).toBeDefined();
+    } finally {
+      setEmailTransportForTests(null);
+    }
   });
 });

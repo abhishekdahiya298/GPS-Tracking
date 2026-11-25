@@ -5,6 +5,7 @@ import { isEmailEnabled } from "@/lib/email";
 import Link from "next/link";
 import { signupOptions } from "@/lib/signup";
 import { AuthHeading } from "../auth-heading";
+import { AuthTabs } from "../auth-tabs";
 import { LoginForm } from "./login-form";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +17,13 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const target = safeNext(next);
   if (session) redirect(target);
   const signup = await signupOptions();
+  const canSignUp = signup.open.fleet || signup.open.operator || signup.open.broker;
   return (
     <>
-      <AuthHeading title="Sign in" description="Welcome back. Sign in to your fleet account." />
+      {canSignUp && <AuthTabs active="signin" next={target} />}
+      <AuthHeading title="Sign in to RIO GPS" description="Welcome back. Sign in to your fleet account." />
       <LoginForm next={target} />
-      {signup.open.fleet || signup.open.operator || signup.open.broker ? (
+      {canSignUp ? (
         <p className="m-0 mt-4 text-center text-sm">
           New to RIO GPS?{" "}
           <Link href="/signup" className="font-semibold text-primary no-underline hover:underline">

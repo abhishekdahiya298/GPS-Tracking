@@ -156,6 +156,8 @@ export const SignupSettingsSchema = z.object({
   roles: z
     .object({ fleet: roleSetting(true), operator: roleSetting(true), broker: roleSetting(false), driver: roleSetting(true) })
     .default({}),
+  /** One sign-up code goes to the email (when on) and the phone (when on and texts work). */
+  emailCheck: z.boolean().default(true),
   phoneCheck: z.boolean().default(true),
   onePerPhone: z.boolean().default(true),
   archiveInactiveDays: z.coerce.number().int().min(0).max(3650).default(90),

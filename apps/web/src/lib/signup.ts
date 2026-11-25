@@ -6,7 +6,7 @@ import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto
 import { z } from "zod";
 import { writeAudit } from "./audit";
 import { assertCanAdd, getSignupSettings, type SignupRole } from "./entitlements";
-import { isEmailEnabled, leadEmail, sendEmail } from "./email";
+import { isEmailEnabled, leadEmail, sendEmail, signupCodeEmail } from "./email";
 import { getServerEnv } from "./env";
 import { ConflictError, ForbiddenError, TooManyRequestsError, ValidationError } from "./errors";
 import { logger } from "./logger";
@@ -18,8 +18,8 @@ import { sendSms, smsConfigured } from "./sms";
 /**
  * Public sign-up: a fleet owner, owner-operator or broker opens a company on the plan the
  * platform chose for that role (Free Basic by default); a driver joins their company with its
- * code. A text-message code proves the phone (when the server can send texts), and one phone
- * can open only one company. Nothing is stored until the code is right; the password is never
+ * code. One 6-digit code is sent to the email and, when the server can send texts, to the phone
+ * too; the person types it once (whichever arrives first). One phone can open only one company. Nothing is stored until the code is right; the password is never
  * kept outside the final account.
  */
 
@@ -67,15 +67,42 @@ export async function phoneCheckActive(): Promise<boolean> {
   return (await getSignupSettings()).phoneCheck && smsConfigured();
 }
 
-async function sendCode(phoneE164: string, purpose: "signup" | "driver_join"): Promise<void> {
+/** Where a sign-up code goes: the email (always, when email works) and the phone (when texts work). */
+type CodeTo = { email?: string; name?: string; sms: boolean };
+export type SentTo = { email: string | null; phone: string | null };
+
+async function sendCode(phoneE164: string, purpose: "signup" | "driver_join", to: CodeTo = { sms: true }): Promise<SentTo> {
   await assertRateLimit("phone-code", phoneE164, 5, 3600, "Too many codes for this number. Try again in an hour.");
   const db = getDb();
   const [last] = await db.select({ createdAt: schema.phoneCodes.createdAt }).from(schema.phoneCodes).where(eq(schema.phoneCodes.phone, phoneE164)).orderBy(desc(schema.phoneCodes.createdAt)).limit(1);
   if (last && Date.now() - last.createdAt.getTime() < 40_000) throw new TooManyRequestsError("We just sent a code. Wait a few seconds before asking for another.");
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
   await db.insert(schema.phoneCodes).values({ phone: phoneE164, purpose, codeHash: hashCode(phoneE164, code), expiresAt: new Date(Date.now() + CODE_TTL_MS) });
-  const sent = await sendSms(phoneE164, `${code} is your RIO GPS code. It expires in 10 minutes.`);
-  if (!sent.sent) throw new ValidationError(sent.message || "We couldn't text that number. Check it and try again.");
+  let emailSent = false;
+  let smsSent = false;
+  let smsError = "";
+  if (to.email && isEmailEnabled()) {
+    try {
+      await sendEmail(signupCodeEmail(to.email, to.name ?? "", code, CODE_TTL_MS / 60_000));
+      emailSent = true;
+    } catch (err) {
+      logger.error("signup.code_email_failed", { purpose }, err);
+    }
+  }
+  if (to.sms) {
+    const sent = await sendSms(phoneE164, `${code} is your RIO GPS code. It expires in 10 minutes.`);
+    smsSent = sent.sent;
+    if (!sent.sent) smsError = sent.message || "";
+  }
+  if (!emailSent && !smsSent) throw new ValidationError(smsError || "We couldn't send your code. Check your email and phone, then try again.");
+  return { email: emailSent && to.email ? maskEmail(to.email) : null, phone: smsSent ? mask(phoneE164) : null };
+}
+
+/** Sign-up asks for a code when email or texts can deliver it. */
+async function companyCodeChannels(): Promise<{ any: boolean; sms: boolean }> {
+  const s = await getSignupSettings();
+  const sms = s.phoneCheck && smsConfigured();
+  return { any: (s.emailCheck && isEmailEnabled()) || sms, sms };
 }
 
 async function checkCode(phoneE164: string, code: string): Promise<void> {
@@ -92,7 +119,7 @@ async function checkCode(phoneE164: string, code: string): Promise<void> {
   const b = Buffer.from(hashCode(phoneE164, code), "hex");
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
     await db.update(schema.phoneCodes).set({ attempts: sql`${schema.phoneCodes.attempts} + 1` }).where(eq(schema.phoneCodes.id, row.id));
-    throw new ValidationError("That code isn't right. Check the text and try again.");
+    throw new ValidationError("That code isn't right. Check your email or texts and try again.");
   }
   await db.update(schema.phoneCodes).set({ verifiedAt: new Date() }).where(eq(schema.phoneCodes.id, row.id));
 }
@@ -117,24 +144,29 @@ async function dropPending(token: string) {
   }
 }
 
+const maskEmail = (e: string) => {
+  const [user = "", domain = ""] = e.split("@");
+  return `${user.slice(0, 1)}${"•".repeat(Math.max(2, Math.min(6, user.length - 1)))}@${domain}`;
+};
 const mask = (p: string) => `${p.slice(0, -4).replace(/\d/g, "•").replace(/^\+?•/, "+1 ")}${p.slice(-2).padStart(4, "•")}`;
 
 // ---------- company sign-up ----------
 
-export type StartResult = { status: "code_sent"; token: string; phone: string } | { status: "created"; email: string };
+export type StartResult = { status: "code_sent"; token: string; sentTo: SentTo } | { status: "created"; email: string };
 
-/** Step 2: checks everything, then texts a code (or creates the company when codes are off). */
+/** Step 2: checks everything, then sends one code to the email and phone (or creates the company when no channel can deliver a code). */
 export async function startCompanySignup(input: CompanySignup, ip: string | null): Promise<StartResult> {
   await assertRateLimit("signup", ip ?? "unknown", 5, 3600, "Too many sign-ups from this network. Try again later.");
   const settings = await getSignupSettings();
   if (!settings.roles[input.role].open) throw new ForbiddenError("Sign-up for this kind of account is closed. Contact RIO GPS.");
   await assertNewAccount(input.email, input.phone, settings.onePerPhone);
-  if (settings.phoneCheck && smsConfigured()) {
-    await sendCode(input.phone, "signup");
+  const channels = await companyCodeChannels();
+  if (channels.any) {
+    const sentTo = await sendCode(input.phone, "signup", { email: settings.emailCheck ? input.email : undefined, name: input.name, sms: channels.sms });
     const rest: Omit<CompanySignup, "password" | "agree"> = { role: input.role, company: input.company, name: input.name, phone: input.phone, email: input.email, fleetSize: input.fleetSize, country: input.country, timeZone: input.timeZone };
-    return { status: "code_sent", token: await savePending({ kind: "company", ...rest }), phone: mask(input.phone) };
+    return { status: "code_sent", token: await savePending({ kind: "company", ...rest }), sentTo };
   }
-  if (settings.phoneCheck) logger.warn("signup.phone_check_skipped", { reason: "sms_not_configured" });
+  logger.warn("signup.code_skipped", { reason: "no_email_or_sms" });
   await createCompany(input, input.password);
   return { status: "created", email: input.email };
 }
@@ -166,10 +198,14 @@ export async function verifySignup(input: z.infer<typeof VerifySchema>): Promise
   return { status: "joined", companyName: pending.companyName };
 }
 
-export async function resendCode(token: string): Promise<{ phone: string }> {
+export async function resendCode(token: string): Promise<{ sentTo: SentTo }> {
   const pending = await readPending(token);
-  await sendCode(pending.phone, pending.kind === "company" ? "signup" : "driver_join");
-  return { phone: mask(pending.phone) };
+  if (pending.kind === "company") {
+    const channels = await companyCodeChannels();
+    const s = await getSignupSettings();
+    return { sentTo: await sendCode(pending.phone, "signup", { email: s.emailCheck ? pending.email : undefined, name: pending.name, sms: channels.sms }) };
+  }
+  return { sentTo: await sendCode(pending.phone, "driver_join") };
 }
 
 function slugFrom(name: string): string {
@@ -252,7 +288,7 @@ async function createCompany(input: CompanySignup, password: string): Promise<st
 
 // ---------- driver joins ----------
 
-export type JoinResult = { status: "code_sent"; token: string; phone: string; companyName: string } | { status: "joined"; companyName: string };
+export type JoinResult = { status: "code_sent"; token: string; sentTo: SentTo; companyName: string } | { status: "joined"; companyName: string };
 
 export async function startDriverJoin(input: z.infer<typeof DriverJoinSchema>, ip: string | null): Promise<JoinResult> {
   await assertRateLimit("driver-join", ip ?? "unknown", 10, 3600, "Too many tries from this network. Try again later.");
@@ -265,8 +301,8 @@ export async function startDriverJoin(input: z.infer<typeof DriverJoinSchema>, i
     .limit(1);
   if (!org || org.status !== "active") throw new ValidationError("We couldn't find a company with that code. Check it with your company.");
   if (settings.phoneCheck && smsConfigured()) {
-    await sendCode(input.phone, "driver_join");
-    return { status: "code_sent", token: await savePending({ kind: "driver", organizationId: org.id, companyName: org.name, name: input.name, phone: input.phone }), phone: mask(input.phone), companyName: org.name };
+    const sentTo = await sendCode(input.phone, "driver_join");
+    return { status: "code_sent", token: await savePending({ kind: "driver", organizationId: org.id, companyName: org.name, name: input.name, phone: input.phone }), sentTo, companyName: org.name };
   }
   await addJoinedDriver({ kind: "driver", organizationId: org.id, companyName: org.name, name: input.name, phone: input.phone });
   return { status: "joined", companyName: org.name };
@@ -311,9 +347,9 @@ export async function companyJoinCode(organizationId: string): Promise<string> {
 }
 
 /** Which roles are open (the public sign-up page reads it). */
-export async function signupOptions(): Promise<{ open: Record<SignupRole, boolean>; phoneCheck: boolean }> {
+export async function signupOptions(): Promise<{ open: Record<SignupRole, boolean>; phoneCheck: boolean; emailCheck: boolean }> {
   const s = await getSignupSettings();
-  return { open: { fleet: s.roles.fleet.open, operator: s.roles.operator.open, broker: s.roles.broker.open, driver: s.roles.driver.open }, phoneCheck: s.phoneCheck && smsConfigured() };
+  return { open: { fleet: s.roles.fleet.open, operator: s.roles.operator.open, broker: s.roles.broker.open, driver: s.roles.driver.open }, phoneCheck: s.phoneCheck && smsConfigured(), emailCheck: s.emailCheck && isEmailEnabled() };
 }
 
 
