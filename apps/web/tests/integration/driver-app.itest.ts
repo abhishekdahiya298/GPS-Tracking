@@ -13,6 +13,7 @@ import { POST as companySignoutPOST } from "@/app/api/drivers/[id]/app-signout/r
 import { GET as statusGET } from "@/app/api/drivers/app-status/route";
 import { POST as redeemPOST } from "@/app/api/driver-app/invite/route";
 import { GET as meGET } from "@/app/api/driver-app/me/route";
+import { GET as loadsGET } from "@/app/api/driver-app/loads/route";
 import { POST as reportPOST } from "@/app/api/driver-app/report/route";
 import { POST as signoutPOST } from "@/app/api/driver-app/signout/route";
 import { PUT as pushPUT } from "@/app/api/driver-app/push/route";
@@ -68,6 +69,11 @@ describe("driver app", () => {
     expect((await redeemPOST(app("POST", "/api/driver-app/invite", { token: t }, ""))).status).toBe(400);
     const me = (await (await meGET(app("GET", "/api/driver-app/me"))).json()) as { vehicle: { name: string } };
     expect(me.vehicle.name).toBe("Truck 7");
+    // A load on the driver's truck shows in the driver app; nothing else does.
+    await getDb().execute(sql`insert into loads (organization_id, reference, status, tracking_mode, vehicle_id, pickup_address, pickup_lat, pickup_lon, delivery_address, delivery_lat, delivery_lon, driver_token_hash)
+      values (${orgId}, 'L-7001', 'tracking', 'vehicle', ${vehicleId}, '1 Peel St', 43.7, -79.7, '2 Rue Cohen', 45.5, -73.6, 'x1'), (${orgId}, 'L-7002', 'tracking', 'phone', null, 'A', 43, -79, 'B', 44, -78, 'x2')`);
+    const loads = (await (await loadsGET(app("GET", "/api/driver-app/loads"))).json()) as { loads: { reference: string }[] };
+    expect(loads.loads.map((l) => l.reference)).toEqual(["L-7001"]);
   });
 
   it("phone points go through the tracker pipeline; the phone stands for a truck without a tracker", async () => {

@@ -547,3 +547,46 @@ export async function peekDriverInvite(token: string): Promise<{ state: "ok" | "
   if (r.expiresAt < new Date()) return { state: "expired", ...who };
   return { state: "ok", ...who };
 }
+
+// ---------- the driver's loads (driver app Today / Loads) ----------
+
+export interface DriverLoadDto {
+  id: string;
+  reference: string;
+  status: string;
+  notes: string | null;
+  pickup: { name: string | null; address: string; lat: number; lon: number; appointmentAt: string | null };
+  delivery: { name: string | null; address: string; lat: number; lon: number; appointmentAt: string | null };
+  deliveredAt: string | null;
+}
+
+/**
+ * Loads for this driver: on their truck, or sent to their phone number. Open loads plus those
+ * delivered in the last 24 hours, soonest pickup first.
+ */
+export async function driverLoads(auth: DriverAuth): Promise<DriverLoadDto[]> {
+  const db = getDb();
+  const [d] = await db.select({ vehicleId: schema.drivers.vehicleId, phone: schema.drivers.phone }).from(schema.drivers).where(eq(schema.drivers.id, auth.driverId));
+  if (!d) throw new UnauthorizedError("Your sign-in has ended. Sign in again.");
+  const phone = d.phone ? normalizePhone(d.phone) : null;
+  const rows = await db.execute<{ id: string; reference: string; status: string; notes: string | null; pickup_name: string | null; pickup_address: string; pickup_lat: number; pickup_lon: number; pickup_appointment_at: Date | null; delivery_name: string | null; delivery_address: string; delivery_lat: number; delivery_lon: number; delivery_appointment_at: Date | null; delivered_at: Date | null }>(sql`
+    select id, reference, status, notes, pickup_name, pickup_address, pickup_lat, pickup_lon, pickup_appointment_at,
+           delivery_name, delivery_address, delivery_lat, delivery_lon, delivery_appointment_at, ended_at as delivered_at
+    from loads
+    where organization_id = ${auth.organizationId}
+      and (${d.vehicleId ? sql`vehicle_id = ${d.vehicleId}` : sql`false`} or ${phone ? sql`driver_phone = ${phone}` : sql`false`})
+      and status not in ('cancelled', 'declined')
+      and (status <> 'delivered' or ended_at > now() - interval '24 hours')
+    order by (status = 'delivered'), coalesce(pickup_appointment_at, created_at)
+    limit 50`);
+  const iso = (v: Date | string | null) => (v ? new Date(v).toISOString() : null);
+  return rows.map((r) => ({
+    id: r.id,
+    reference: r.reference,
+    status: r.status,
+    notes: r.notes,
+    pickup: { name: r.pickup_name, address: r.pickup_address, lat: Number(r.pickup_lat), lon: Number(r.pickup_lon), appointmentAt: iso(r.pickup_appointment_at) },
+    delivery: { name: r.delivery_name, address: r.delivery_address, lat: Number(r.delivery_lat), lon: Number(r.delivery_lon), appointmentAt: iso(r.delivery_appointment_at) },
+    deliveredAt: iso(r.delivered_at)
+  }));
+}
