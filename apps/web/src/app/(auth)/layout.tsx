@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { BrandMark } from "@/components/app/brand-mark";
 import { StoreBadges } from "@/components/app/store-badges";
 import { storeLinks } from "@/lib/app-releases";
+import { GetAppChip } from "@/components/app/get-app-chip";
 
 const STATE = { moving: "#22c55e", idle: "#f59e0b", stopped: "#3b82f6", offline: "#8a93a1" };
 const ROUTE_A = "M-10 150 C 70 150 90 86 160 90 S 270 170 340 120 S 430 60 470 70";
@@ -82,6 +83,7 @@ export default async function AuthLayout({ children }: { children: ReactNode }) 
   const stores = await storeLinks();
   return (
     <main className="flex h-dvh overflow-hidden bg-background">
+      <GetAppChip ios={stores.ios} android={stores.android} label="Drivers and teams: sign in on the app" />
       <aside className="relative hidden w-[46%] max-w-[860px] flex-col overflow-hidden bg-[linear-gradient(150deg,#071a4a_0%,#0a2463_45%,#1d4fb8_100%)] px-8 py-8 text-white lg:flex xl:px-12 2xl:px-16">
         <svg aria-hidden="true" viewBox="0 0 400 300" preserveAspectRatio="xMaxYMin slice" className="pointer-events-none absolute right-0 top-0 h-72 w-2/3 opacity-60">
           <path d="M150 300 290 0h46L196 300z" fill="#ffffff" opacity="0.05" />

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getServerEnv } from "@/lib/env";
 import { DeviceListQuery, listDevicesPage, parseListQuery } from "@/lib/fleet-list";
 import { requireTenantPage } from "@/lib/request-context";
+import { getPlatformSettings } from "@/lib/platform-settings";
 import { DevicesView } from "./devices-view";
 
 export const dynamic = "force-dynamic";
@@ -19,5 +20,5 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
   const manage = contextHasPermission(ctx, "devices.manage");
   const data = await listDevicesPage(ctx.organizationId, q, new Date(), getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS, { includeImeiLast4: manage });
   const can = { manage, assign: contextHasPermission(ctx, "devices.assign"), unassign: contextHasPermission(ctx, "devices.unassign"), superAdmin: ctx.isSuperAdmin };
-  return <DevicesView data={data} query={q} can={can} />;
+  return <DevicesView data={data} query={q} can={can} supportEmail={(await getPlatformSettings()).supportEmail} />;
 }

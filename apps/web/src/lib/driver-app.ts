@@ -12,6 +12,7 @@ import { logger } from "./logger";
 import { normalizePhone } from "./phone";
 import { assertRateLimit } from "./rate-limit";
 import { checkDriverSignInCode, sendDriverSignInCode } from "./signup";
+import { getPlatformSettings } from "./platform-settings";
 import { smsConfigured } from "./sms";
 
 /**
@@ -24,7 +25,6 @@ import { smsConfigured } from "./sms";
 
 type Tx = Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0];
 
-const INVITE_TTL_MS = 7 * 86_400_000;
 const sha = (v: string) => createHash("sha256").update(`${getServerEnv().AUTH_SECRET}:driver-app:${v}`).digest("hex");
 const newToken = () => randomBytes(24).toString("base64url");
 const origin = () => new URL(getServerEnv().AUTH_URL).origin;
@@ -47,7 +47,7 @@ export async function createDriverInvite(ctx: TenantContext, driverId: string, a
   if (!driver) throw new NotFoundError("Driver not found");
   if (driver.status !== "active") throw new ValidationError("This driver is inactive. Make them active first.");
   const token = newToken();
-  const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+  const expiresAt = new Date(Date.now() + (await getPlatformSettings()).driverInviteDays * 86_400_000);
   await db.transaction(async (tx) => {
     await tx.update(schema.driverInvites).set({ expiresAt: new Date() }).where(and(eq(schema.driverInvites.driverId, driverId), isNull(schema.driverInvites.usedAt)));
     await tx.insert(schema.driverInvites).values({ organizationId: ctx.organizationId, driverId, tokenHash: sha(token), expiresAt, createdBy: actorUserId });
@@ -224,7 +224,6 @@ export const DriverReportSchema = z.object({
 export type DriverReport = z.infer<typeof DriverReportSchema>;
 
 /** Points worse than this are dropped (a phone with no GPS lock guesses from cell towers). */
-const MAX_ACCURACY_M = 200;
 
 /**
  * Stores the phone's points (oldest first) through the tracker pipeline and updates the phone's
@@ -238,7 +237,8 @@ export async function recordDriverReport(auth: DriverAuth, report: DriverReport,
   const deviceId = driver.phoneDeviceId ?? (await db.transaction((tx) => ensurePhoneDevice(tx, driver.id, auth.organizationId, driver.name)));
   await syncPhoneAssignment(auth.organizationId, deviceId, driver.vehicleId, now);
 
-  const points = [...report.points].filter((p) => p.recordedAt.getTime() <= now.getTime() + 120_000 && (p.accuracyM ?? 0) <= MAX_ACCURACY_M).sort((a, b) => a.recordedAt.getTime() - b.recordedAt.getTime());
+  const { driverMaxAccuracyM: maxAccuracyM } = await getPlatformSettings();
+  const points = [...report.points].filter((p) => p.recordedAt.getTime() <= now.getTime() + 120_000 && (p.accuracyM ?? 0) <= maxAccuracyM).sort((a, b) => a.recordedAt.getTime() - b.recordedAt.getTime());
   let stored = 0;
   let lastFix: Date | null = null;
   for (const p of points) {
@@ -367,13 +367,14 @@ export interface DriverAppStatusDto {
 }
 
 /** A phone that hasn't reported for this long is "stale" (asleep, no signal, app killed). */
+/** Default "Not heard from" time; Platform settings can change it. */
 const STALE_MS = 30 * 60_000;
 
-export function appState(row: { signedIn: boolean | null; permission: string | null; locationEnabled: boolean | null; lastReportAt: Date | null } | null, now = Date.now()): DriverAppState {
+export function appState(row: { signedIn: boolean | null; permission: string | null; locationEnabled: boolean | null; lastReportAt: Date | null } | null, now = Date.now(), staleMs = STALE_MS): DriverAppState {
   if (!row) return "no_app";
   if (!row.signedIn) return "signed_out";
   if (row.permission === "off" || row.locationEnabled === false) return "location_off";
-  if (!row.lastReportAt || now - row.lastReportAt.getTime() > STALE_MS) return "stale";
+  if (!row.lastReportAt || now - row.lastReportAt.getTime() > staleMs) return "stale";
   return "sharing";
 }
 
@@ -399,10 +400,11 @@ export async function listDriverAppStatus(organizationId: string, driverIds?: st
     .leftJoin(schema.driverAppStatus, eq(schema.driverAppStatus.driverId, schema.drivers.id))
     .where(where);
   const now = Date.now();
+  const staleMs = (await getPlatformSettings()).driverStaleMinutes * 60_000;
   const iso = (d: Date | string | null) => (d ? new Date(d).toISOString() : null);
   return rows.map((r) => ({
     driverId: r.driverId,
-    state: appState(r.signedIn === null ? null : { signedIn: r.signedIn, permission: r.permission, locationEnabled: r.locationEnabled, lastReportAt: r.lastReportAt }, now),
+    state: appState(r.signedIn === null ? null : { signedIn: r.signedIn, permission: r.permission, locationEnabled: r.locationEnabled, lastReportAt: r.lastReportAt }, now, staleMs),
     batteryPct: r.batteryPct,
     charging: r.charging,
     permission: r.permission,
@@ -453,4 +455,19 @@ export async function driversForMap(organizationId: string): Promise<MapDriverDt
       app
     };
   });
+}
+
+/** What an invite link is for, without using it up (the /driver-app page shows "Join <company>"). */
+export async function peekDriverInvite(token: string): Promise<{ state: "ok" | "used" | "expired" | "unknown"; driverName?: string; companyName?: string }> {
+  const [r] = await getDb()
+    .select({ usedAt: schema.driverInvites.usedAt, expiresAt: schema.driverInvites.expiresAt, driverName: schema.drivers.name, companyName: schema.organizations.name })
+    .from(schema.driverInvites)
+    .innerJoin(schema.drivers, eq(schema.drivers.id, schema.driverInvites.driverId))
+    .innerJoin(schema.organizations, eq(schema.organizations.id, schema.driverInvites.organizationId))
+    .where(eq(schema.driverInvites.tokenHash, sha(token)));
+  if (!r) return { state: "unknown" };
+  const who = { driverName: r.driverName, companyName: r.companyName };
+  if (r.usedAt) return { state: "used", ...who };
+  if (r.expiresAt < new Date()) return { state: "expired", ...who };
+  return { state: "ok", ...who };
 }

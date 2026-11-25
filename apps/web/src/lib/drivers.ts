@@ -7,6 +7,7 @@ import { z } from "zod";
 import { writeAudit } from "./audit";
 import { appState, signOutDriverEverywhere, type DriverAppState } from "./driver-app";
 import { NotFoundError } from "./errors";
+import { getPlatformSettings } from "./platform-settings";
 import { likePattern, PAGE_SIZES } from "./fleet-list";
 
 /**
@@ -105,6 +106,7 @@ const licenseSoon = sql`(d.license_expires_on is not null and d.license_expires_
 
 export async function listDriversPage(organizationId: string, q: DriverListQuery) {
   const db = getDb();
+  const staleMin = (await getPlatformSettings()).driverStaleMinutes;
   const search = q.search
     ? sql` and (d.name ilike ${likePattern(q.search)} or coalesce(d.phone, '') ilike ${likePattern(q.search)} or coalesce(d.email, '') ilike ${likePattern(q.search)} or coalesce(d.license_number, '') ilike ${likePattern(q.search)} or coalesce(v.name, '') ilike ${likePattern(q.search)})`
     : sql``;
@@ -124,7 +126,7 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
     unassigned: sql`d.status = 'active' and d.vehicle_id is null`,
     license: licenseSoon,
     inactive: sql`d.status = 'inactive'`,
-    sharing: sql`d.status = 'active' and s.signed_in and coalesce(s.permission, '') <> 'off' and s.location_enabled is not false and s.last_report_at > now() - interval '30 minutes'`,
+    sharing: sql`d.status = 'active' and s.signed_in and coalesce(s.permission, '') <> 'off' and s.location_enabled is not false and s.last_report_at > now() - make_interval(mins => ${staleMin})`,
     location_off: sql`d.status = 'active' and s.signed_in and (s.permission = 'off' or s.location_enabled = false)`,
     no_app: sql`d.status = 'active' and (s.driver_id is null or not s.signed_in)`
   };
@@ -187,7 +189,7 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
             }
           : null,
         app: {
-          state: appState(r.s_signed_in == null ? null : { signedIn: Boolean(r.s_signed_in), permission: (r.s_permission as string | null) ?? null, locationEnabled: r.s_loc == null ? null : Boolean(r.s_loc), lastReportAt: r.s_report ? new Date(r.s_report as string) : null }, now),
+          state: appState(r.s_signed_in == null ? null : { signedIn: Boolean(r.s_signed_in), permission: (r.s_permission as string | null) ?? null, locationEnabled: r.s_loc == null ? null : Boolean(r.s_loc), lastReportAt: r.s_report ? new Date(r.s_report as string) : null }, now, staleMin * 60_000),
           batteryPct: r.s_battery == null ? null : Number(r.s_battery),
           charging: r.s_charging == null ? null : Boolean(r.s_charging),
           lastReportAt: r.s_report ? new Date(r.s_report as string).toISOString() : null,

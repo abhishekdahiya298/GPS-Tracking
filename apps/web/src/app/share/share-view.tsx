@@ -1,4 +1,6 @@
 "use client";
+import { Truck } from "lucide-react";
+import { BrandMark } from "@/components/app/brand-mark";
 import "maplibre-gl/dist/maplibre-gl.css";
 /**
  * Public share page: one vehicle's current position, refreshed every 15 seconds.
@@ -140,45 +142,45 @@ export function ShareView() {
   const u = units(view.unitSystem);
   const f = dateFormatter(view.timeZone, view.timeFormat);
   const moving = loc !== null && (loc.speedKph ?? 0) >= 5;
+  const state3 = !loc ? "none" : moving ? "moving" : "stopped";
+  const chip = { moving: { label: `Moving · ${loc ? u.fmtSpeed(loc.speedKph) : ""}`, color: "#15803d" }, stopped: { label: loc?.ignition === true ? "Stopped · engine on" : "Stopped", color: "#b91c1c" }, none: { label: "Waiting", color: "#475569" } }[state3];
   return (
-    <div className="flex h-dvh flex-col bg-canvas">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border bg-background px-4 py-3">
-        <div className="min-w-0">
-          <p className="m-0 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            <span aria-hidden="true" className="flex size-5 items-center justify-center rounded bg-primary text-[11px] font-bold text-white">
-              R
-            </span>
-            RIO GPS · shared location
-          </p>
-          <h1 className="m-0 mt-0.5 truncate text-lg font-semibold">{view.vehicleName}</h1>
-        </div>
-        <div className="text-sm" aria-live="polite">
-          {loc ? (
-            <>
-              <span className="font-medium">{moving ? `Moving · ${u.fmtSpeed(loc.speedKph)}` : loc.ignition === true ? "Stopped · engine on" : "Stopped"}</span>
-              <span className="text-muted-foreground">
-                {" "}
-                · position from {ago(now - Date.parse(loc.recordedAt))} ({f.time(loc.recordedAt)} {f.abbr(loc.recordedAt)})
-              </span>
-            </>
-          ) : (
-            <span className="text-muted-foreground">No position yet. This page updates by itself.</span>
-          )}
-        </div>
-      </header>
-      <main className="relative min-h-0 flex-1">
+    <div className="relative h-dvh bg-canvas">
+      <main className="absolute inset-0">
         {loc ? (
           // maplibre's CSS sets position:relative on the map element, so size it via a wrapper.
           <div className="absolute inset-0">
             <div ref={mapDiv} className="h-full w-full" />
           </div>
         ) : (
-          <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">The vehicle hasn&apos;t reported a position yet.</div>
+          <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">The vehicle hasn&apos;t reported a position yet. This page updates by itself.</div>
         )}
       </main>
-      <footer className="shrink-0 border-t border-border bg-background px-4 py-2 text-xs text-muted-foreground">
-        Live location · link expires {f.dateTime(view.expiresAt)} {f.abbr(view.expiresAt)}
-      </footer>
+      <section aria-live="polite" className="absolute inset-x-3 bottom-3 mx-auto max-w-md rounded-2xl border border-border bg-background/95 p-4 shadow-pop backdrop-blur">
+        <div className="flex items-start gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl text-white" style={{ background: `linear-gradient(150deg, ${chip.color}cc, ${chip.color})` }}>
+            <Truck className="size-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="m-0 truncate text-[17px] font-semibold text-[#0a2463] dark:text-foreground">{view.vehicleName}</h1>
+            <p className="m-0 truncate text-xs text-muted-foreground">Shared live location</p>
+          </div>
+          <span className="inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-xs font-semibold" style={{ color: chip.color, background: `color-mix(in srgb, ${chip.color} 12%, transparent)` }}>
+            {chip.label}
+          </span>
+        </div>
+        {loc && (
+          <p className="m-0 mt-2.5 text-sm">
+            Position from {ago(now - Date.parse(loc.recordedAt))} <span className="text-muted-foreground">({f.time(loc.recordedAt)} {f.abbr(loc.recordedAt)})</span>
+          </p>
+        )}
+        <p className="m-0 mt-2 flex items-center justify-between gap-2 text-[11.5px] text-muted-foreground">
+          <span>
+            Live location · link expires {f.dateTime(view.expiresAt)} {f.abbr(view.expiresAt)}
+          </span>
+          <BrandMark className="h-5" />
+        </p>
+      </section>
     </div>
   );
 }
@@ -186,11 +188,8 @@ export function ShareView() {
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center bg-canvas px-4 py-10">
-      <div className="mb-6 flex items-center gap-2 text-lg font-semibold text-foreground">
-        <span aria-hidden="true" className="flex size-8 items-center justify-center rounded-md bg-primary text-sm font-bold text-white">
-          R
-        </span>
-        RIO GPS
+      <div className="mb-6 flex justify-center">
+        <BrandMark className="h-10" />
       </div>
       <div className="w-full max-w-sm rounded-xl border border-border bg-background p-6 text-center shadow-card">{children}</div>
     </main>

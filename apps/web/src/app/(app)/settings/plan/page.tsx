@@ -1,4 +1,5 @@
 import { contextHasPermission } from "@rio-gps/core";
+import { getPlatformSettings } from "@/lib/platform-settings";
 import { BookOpen, CalendarDays, CheckCircle2, Crown, History, Info, Layers, Radio, ReceiptText, Tag, Truck } from "lucide-react";
 import { IconTitle } from "@/components/app/icon-title";
 import { redirect } from "next/navigation";
@@ -20,6 +21,7 @@ export default async function PlanPage() {
   if (!contextHasPermission(rc.ctx, "billing.read")) redirect("/dashboard");
   const orgId = rc.ctx.organizationId;
   const now = new Date();
+  const { supportEmail } = await getPlatformSettings();
   const period = periodOf(now, rc.timeZone);
   const periods = [period, previousPeriod(period, 1), previousPeriod(period, 2), previousPeriod(period, 3)];
   const [history, access, catalog, ...months] = await Promise.all([customerPlanHistory(orgId), planAccessFor(orgId), listPlans(), ...periods.map((p) => usageStatement(p, orgId, now).then((r) => r[0]!))]);
@@ -143,7 +145,7 @@ export default async function PlanPage() {
                 </span>
                 <p className="m-0 mt-3 text-base font-semibold text-[#0a2463] dark:text-foreground">No plan on record yet</p>
                 <p className="m-0 mt-1 max-w-sm text-sm text-muted-foreground">Your plan and prices appear here once RIO GPS sets them up for your company.</p>
-                <a href="mailto:support@riogps.com" className="mt-3 text-sm font-medium text-primary no-underline hover:underline">
+                <a href={`mailto:${supportEmail}`} className="mt-3 text-sm font-medium text-primary no-underline hover:underline">
                   Contact RIO GPS
                 </a>
               </div>

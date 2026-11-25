@@ -1,4 +1,6 @@
 "use client";
+import { BrandMark } from "@/components/app/brand-mark";
+import { StoreBadges } from "@/components/app/store-badges";
 /**
  * The driver's page. Asks for consent, then sends the phone's location while this page is open:
  * on the first fix, then every couple of minutes, plus whenever the page comes back into view.
@@ -9,7 +11,7 @@
  * pauses until it is opened again. The page says so, and keeps the screen on when allowed.
  */
 import { dateFormatter } from "@rio-gps/core/timezones";
-import { ArrowDown, CheckCircle2, Loader2, MapPin, PauseCircle, ShieldCheck, XCircle } from "lucide-react";
+import { ArrowDown, CheckCircle2, Loader2, MapPin, PauseCircle, ShieldCheck, Smartphone, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { DriverView as View, PingResult } from "@/lib/load-public";
@@ -52,18 +54,15 @@ function ago(ms: number) {
 function Shell({ children, wide }: { children: ReactNode; wide?: boolean }) {
   return (
     <main className="flex min-h-dvh flex-col items-center bg-canvas px-4 py-6">
-      <div className="mb-5 flex items-center gap-2 text-base font-semibold text-foreground">
-        <span aria-hidden="true" className="flex size-7 items-center justify-center rounded-md bg-primary text-xs font-bold text-white">
-          R
-        </span>
-        RIO GPS
+      <div className="mb-5 flex justify-center">
+        <BrandMark className="h-10" />
       </div>
       <div className={`w-full ${wide ? "max-w-md" : "max-w-sm"} rounded-xl border border-border bg-background p-5 shadow-card`}>{children}</div>
     </main>
   );
 }
 
-export function DriverView() {
+export function DriverView({ stores }: { stores: { ios: string; android: string } }) {
   const [token, setToken] = useState<string | null>(null);
   const [state, setState] = useState<State>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
@@ -349,13 +348,21 @@ export function DriverView() {
             </li>
           </ul>
           {geo}
-          <Button size="lg" className="w-full" loading={busy} onClick={() => void act("accept")}>
-            <MapPin aria-hidden="true" /> Share my location
+          {/* The RIO GPS app is the way to share: it keeps working with the screen off. */}
+          <div className="grid gap-2 rounded-xl bg-primary-soft/60 p-3">
+            <p className="m-0 flex items-center gap-2 text-sm font-semibold text-[#0a2463] dark:text-foreground">
+              <Smartphone className="size-4" aria-hidden="true" /> Best: use the RIO GPS app
+            </p>
+            <p className="m-0 text-xs text-muted-foreground">The app shares your location even with the screen off, and shows all your loads in one place.</p>
+            <StoreBadges ios={stores.ios} android={stores.android} />
+          </div>
+          <Button size="lg" variant="secondary" className="w-full" loading={busy} onClick={() => void act("accept")}>
+            <MapPin aria-hidden="true" /> No app? Share from this page
           </Button>
           <Button variant="ghost" className="w-full" disabled={busy} onClick={() => void act("decline")}>
             Decline
           </Button>
-          <p className="m-0 text-center text-xs text-muted-foreground">Your phone will ask to allow location. Tap Allow.</p>
+          <p className="m-0 text-center text-xs text-muted-foreground">From this page, keep it open while you drive. Your phone will ask to allow location: tap Allow.</p>
         </div>
       </Shell>
     );
