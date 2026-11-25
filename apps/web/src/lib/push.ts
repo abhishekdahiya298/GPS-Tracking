@@ -121,6 +121,25 @@ const expoTransport: PushTransport = async (messages) => {
 };
 
 let transport: PushTransport = expoTransport;
+
+/** Sends messages straight to push addresses (driver phones). Returns how many were accepted. */
+export async function sendPushMessages(messages: PushMessage[]): Promise<{ sent: number; gone: string[] }> {
+  let sent = 0;
+  const gone: string[] = [];
+  for (let i = 0; i < messages.length; i += 100) {
+    const batch = messages.slice(i, i + 100);
+    try {
+      const results = await transport(batch);
+      results.forEach((r, j) => {
+        if (r.ok) sent++;
+        else if (r.unregistered) gone.push(batch[j]!.to);
+      });
+    } catch {
+      // The push service is down: nothing sent from this batch.
+    }
+  }
+  return { sent, gone };
+}
 export function setPushTransportForTests(t: PushTransport | null) {
   transport = t ?? expoTransport;
 }

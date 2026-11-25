@@ -21,6 +21,8 @@ export const driverAppSessions = pgTable(
     platform: text("platform"),
     appVersion: text("app_version"),
     deviceModel: text("device_model"),
+    /** Expo push address of this phone, so the company can reach the driver (location requests, loads). */
+    pushToken: text("push_token"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp("revoked_at", { withTimezone: true })
@@ -47,6 +49,9 @@ export const driverAppStatus = pgTable("driver_app_status", {
   signedIn: boolean("signed_in").notNull().default(false),
   lastReportAt: timestamp("last_report_at", { withTimezone: true }),
   lastFixAt: timestamp("last_fix_at", { withTimezone: true }),
+  /** The company last asked the driver to turn location on (push), and who asked. Limits repeats. */
+  locationAskedAt: timestamp("location_asked_at", { withTimezone: true }),
+  locationAskedBy: uuid("location_asked_by").references(() => users.id, { onDelete: "set null" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
 });
 

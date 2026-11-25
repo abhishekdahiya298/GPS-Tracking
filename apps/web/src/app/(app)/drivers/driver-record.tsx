@@ -2,6 +2,7 @@
 import { AlertTriangle, Bell, History, LogOut, MapPin, Pencil, Send, X } from "lucide-react";
 import { RelativeTime } from "@/components/app/local-time";
 import { APP_STATE, AppStateChip, Battery } from "./driver-app-bits";
+import { AskLocationDialog, canAskAgainAt } from "./ask-location-dialog";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTime } from "@/components/app/time-context";
@@ -216,6 +217,8 @@ function DriverAppCard({ driver, canUpdate, onInvite, onChanged }: { driver: Dri
   const a = driver.app;
   const s = APP_STATE[a.state];
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const nextAsk = canAskAgainAt(a.locationAskedAt);
   const inApp = a.state !== "no_app" && a.state !== "signed_out";
   async function signOut() {
     setBusy(true);
@@ -272,6 +275,27 @@ function DriverAppCard({ driver, canUpdate, onInvite, onChanged }: { driver: Dri
           </div>
         </div>
       )}
+      {canUpdate && (a.state === "location_off" || a.state === "stale") && (
+        <div className="grid gap-1.5">
+          <Button size="sm" disabled={!a.canNotify || nextAsk !== null} onClick={() => setAsking(true)}>
+            <Send /> Ask to turn on location
+          </Button>
+          <span className="text-[11.5px] text-muted-foreground">
+            {!a.canNotify ? (
+              "Notifications are off on this phone. Call the driver instead."
+            ) : nextAsk ? (
+              <>Asked {a.locationAskedAt && <RelativeTime iso={a.locationAskedAt} />} · you can ask again after {new Date(nextAsk).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</>
+            ) : a.locationAskedAt ? (
+              <>
+                Last asked <RelativeTime iso={a.locationAskedAt} />
+              </>
+            ) : (
+              "Sends a notification with a Turn on button."
+            )}
+          </span>
+        </div>
+      )}
+      {asking && <AskLocationDialog driverId={driver.id} driverName={driver.name} since={a.lastReportAt} onClose={() => setAsking(false)} onSent={onChanged} />}
       <div className="flex flex-wrap gap-2">
         {mapId && inApp && (
           <Button asChild size="sm" variant="secondary" className="flex-1">

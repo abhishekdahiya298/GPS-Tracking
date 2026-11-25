@@ -15,6 +15,9 @@ import { POST as redeemPOST } from "@/app/api/driver-app/invite/route";
 import { GET as meGET } from "@/app/api/driver-app/me/route";
 import { POST as reportPOST } from "@/app/api/driver-app/report/route";
 import { POST as signoutPOST } from "@/app/api/driver-app/signout/route";
+import { PUT as pushPUT } from "@/app/api/driver-app/push/route";
+import { POST as askPOST } from "@/app/api/drivers/[id]/ask-location/route";
+import { setPushTransportForTests, type PushMessage } from "@/lib/push";
 
 const BASE = "http://localhost:3000";
 const PASSWORD = "correct-horse-battery-staple";
@@ -104,6 +107,24 @@ describe("driver app", () => {
     expect(onMap).toMatchObject({ id: driverId, source: "phone", vehicle: { id: vehicleId } });
   });
 
+  it("the company can ask the driver to turn location on, once every 15 minutes", async () => {
+    const sentMsgs: PushMessage[] = [];
+    setPushTransportForTests(async (m) => (sentMsgs.push(...m), m.map(() => ({ ok: true }))));
+    // No push address yet: the company is told to call.
+    expect((await askPOST(web("POST", `/api/drivers/${driverId}/ask-location`, {}), params(driverId))).status).toBe(400);
+    expect((await pushPUT(app("PUT", "/api/driver-app/push", { token: "ExponentPushToken[abc123def456]" }))).status).toBe(204);
+    const res = await askPOST(web("POST", `/api/drivers/${driverId}/ask-location`, { message: "Turn it on for L-2041" }), params(driverId));
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { sent: number }).sent).toBe(1);
+    expect(sentMsgs[0]).toMatchObject({ to: "ExponentPushToken[abc123def456]", body: "Turn it on for L-2041", data: { type: "location_request" } });
+    expect((await askPOST(web("POST", `/api/drivers/${driverId}/ask-location`, {}), params(driverId))).status).toBe(429);
+    const me = (await (await meGET(app("GET", "/api/driver-app/me"))).json()) as { locationRequest: { from: string } | null };
+    expect(me.locationRequest?.from).toBe("Owner");
+    const st = (await (await statusGET(web("GET", "/api/drivers/app-status"))).json()) as { drivers: { driverId: string; canNotify: boolean; locationAskedAt: string | null }[] };
+    expect(st.drivers.find((d) => d.driverId === driverId)).toMatchObject({ canNotify: true });
+    setPushTransportForTests(null);
+  });
+
   it("location off shows as location off", async () => {
     await reportPOST(app("POST", "/api/driver-app/report", { points: [], permission: "off", battery: { pct: 40 } }));
     const st = (await (await statusGET(web("GET", "/api/drivers/app-status"))).json()) as { drivers: { driverId: string; state: string }[] };
@@ -119,7 +140,12 @@ describe("driver app", () => {
     const { invite } = (await (await invitePOST(web("POST", `/api/drivers/${driverId}/app-invite`, {}), params(driverId))).json()) as { invite: { url: string } };
     token = ((await (await redeemPOST(app("POST", "/api/driver-app/invite", { token: new URL(invite.url).searchParams.get("t") }, ""))).json()) as { token: string }).token;
     expect((await meGET(app("GET", "/api/driver-app/me"))).status).toBe(200);
+    const pushed: PushMessage[] = [];
+    setPushTransportForTests(async (m) => (pushed.push(...m), m.map(() => ({ ok: true }))));
+    await pushPUT(app("PUT", "/api/driver-app/push", { token: "ExponentPushToken[zzz999yyy888]" }));
     const out = await companySignoutPOST(web("POST", `/api/drivers/${driverId}/app-signout`), params(driverId));
+    expect(pushed.map((p) => p.data.type)).toEqual(["driver_signed_out"]);
+    setPushTransportForTests(null);
     expect(((await out.json()) as { signedOut: number }).signedOut).toBe(1);
     expect((await reportPOST(app("POST", "/api/driver-app/report", { points: [] }))).status).toBe(401);
   });

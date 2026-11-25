@@ -11,6 +11,7 @@ import type { MapDriverDto } from "@/lib/driver-app";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { cn } from "@/lib/cn";
 import { APP_STATE, AppStateChip, Battery } from "../drivers/driver-app-bits";
+import { AskLocationDialog, canAskAgainAt } from "../drivers/ask-location-dialog";
 import { DriverAvatar } from "../drivers/drivers-view";
 
 type DFilter = "all" | "driving" | "stopped" | "location_off" | "no_app";
@@ -27,6 +28,8 @@ export function DriversMapPanel({ map, devices, version, onFocus }: { map: MlMap
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<DFilter>("all");
   const [selected, setSelected] = useState<string | null>(null);
+  const [ask, setAsk] = useState<MapDriverDto | null>(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -41,7 +44,7 @@ export function DriversMapPanel({ map, devices, version, onFocus }: { map: MlMap
       live = false;
       clearInterval(t);
     };
-  }, []);
+  }, [reload]);
 
   const rows = useMemo(() => {
     void version;
@@ -254,8 +257,20 @@ export function DriversMapPanel({ map, devices, version, onFocus }: { map: MlMap
                         <span className="flex flex-wrap items-center gap-1.5 pt-0.5">
                           <MapPinOff className="size-3.5 text-danger" aria-hidden="true" />
                           <span className="text-[11.5px] text-danger">Location is off on the phone</span>
+                          {d.app.canNotify && !canAskAgainAt(d.app.locationAskedAt) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAsk(d);
+                              }}
+                              className="ml-auto inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border-0 bg-primary px-2 text-xs font-semibold text-primary-foreground"
+                            >
+                              <Send className="size-3.5" aria-hidden="true" /> Ask
+                            </button>
+                          )}
                           {d.phone && (
-                            <a href={`tel:${d.phone}`} onClick={(e) => e.stopPropagation()} className="ml-auto inline-flex h-7 items-center gap-1 rounded-md border border-border bg-background px-2 text-xs font-semibold text-foreground no-underline">
+                            <a href={`tel:${d.phone}`} onClick={(e) => e.stopPropagation()} className={cn("inline-flex h-7 items-center gap-1 rounded-md border border-border bg-background px-2 text-xs font-semibold text-foreground no-underline", !(d.app.canNotify && !canAskAgainAt(d.app.locationAskedAt)) && "ml-auto")}>
                               <Phone className="size-3.5" aria-hidden="true" /> Call
                             </a>
                           )}
@@ -281,6 +296,7 @@ export function DriversMapPanel({ map, devices, version, onFocus }: { map: MlMap
             })}
           </ul>
         )}
+        {ask && <AskLocationDialog driverId={ask.id} driverName={ask.name} since={ask.app.lastReportAt} onClose={() => setAsk(null)} onSent={() => setReload((n) => n + 1)} />}
         <p className="m-2 mt-3 flex items-start gap-1.5 text-[11.5px] text-muted-foreground">
           <ShieldCheck className="mt-px size-3.5 shrink-0" aria-hidden="true" />
           Drivers share location all the time while signed in to the driver app. When the truck has a tracker, we use it; the phone fills in otherwise.

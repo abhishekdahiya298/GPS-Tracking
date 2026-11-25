@@ -98,7 +98,7 @@ export interface DriverRow {
   assignedAt: string | null;
   vehicle: { id: string; name: string; type: string; licensePlate: string | null; deviceId: string | null; moving: boolean; speedKph: number | null; lastSeenAt: string | null } | null;
   /** The RIO GPS app on the driver's phone (always on while signed in). */
-  app: { state: DriverAppState; batteryPct: number | null; charging: boolean | null; lastReportAt: string | null; phoneDeviceId: string | null; speedKph: number | null; inviteSentAt: string | null };
+  app: { state: DriverAppState; batteryPct: number | null; charging: boolean | null; lastReportAt: string | null; phoneDeviceId: string | null; speedKph: number | null; inviteSentAt: string | null; locationAskedAt: string | null; canNotify: boolean };
 }
 
 /** Licence expiring within 30 days (or already expired). */
@@ -145,6 +145,8 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
              s.signed_in as s_signed_in, s.permission as s_permission, s.location_enabled as s_loc, s.battery_pct as s_battery, s.charging as s_charging, s.last_report_at as s_report,
              pl.speed_kph as p_speed,
              (select max(i.created_at) from driver_invites i where i.driver_id = d.id) as s_invited,
+             s.location_asked_at as s_asked,
+             exists (select 1 from driver_app_sessions x where x.driver_id = d.id and x.revoked_at is null and x.push_token is not null) as s_notify,
              count(*) over() as total
       ${base} and ${filters[q.state]}
       order by d.status asc, ${order}, d.id
@@ -195,7 +197,9 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
           lastReportAt: r.s_report ? new Date(r.s_report as string).toISOString() : null,
           phoneDeviceId: (r.phone_device_id as string | null) ?? null,
           speedKph: r.p_speed == null ? null : Number(r.p_speed),
-          inviteSentAt: r.s_invited ? new Date(r.s_invited as string).toISOString() : null
+          inviteSentAt: r.s_invited ? new Date(r.s_invited as string).toISOString() : null,
+          locationAskedAt: r.s_asked ? new Date(r.s_asked as string).toISOString() : null,
+          canNotify: Boolean(r.s_notify)
         }
       };
     }),
