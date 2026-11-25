@@ -1,11 +1,11 @@
 import type { NormalizedPosition, TenantContext } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { writeAudit } from "./audit";
 import { getServerEnv } from "./env";
-import { ForbiddenError, NotFoundError, UnauthenticatedError as UnauthorizedError, ValidationError } from "./errors";
+import { ForbiddenError, NotFoundError, TooManyRequestsError, UnauthenticatedError as UnauthorizedError, ValidationError } from "./errors";
 import { ingestPosition } from "./ingest";
 import { afterStoredPosition } from "./ingest-pipeline";
 import { logger } from "./logger";
@@ -13,6 +13,7 @@ import { normalizePhone } from "./phone";
 import { assertRateLimit } from "./rate-limit";
 import { checkDriverSignInCode, sendDriverSignInCode } from "./signup";
 import { getPlatformSettings } from "./platform-settings";
+import { sendPushMessages } from "./push";
 import { smsConfigured } from "./sms";
 
 /**
@@ -191,6 +192,7 @@ export async function signOutDriver(auth: DriverAuth): Promise<void> {
 /** The carrier signs a driver out of every phone (or making them inactive does). */
 export async function signOutDriverEverywhere(organizationId: string, driverId: string, actorUserId: string | null): Promise<number> {
   const db = getDb();
+  const tokens = await openPushTokens(organizationId, driverId);
   const rows = await db
     .update(schema.driverAppSessions)
     .set({ revokedAt: new Date() })
@@ -198,7 +200,59 @@ export async function signOutDriverEverywhere(organizationId: string, driverId: 
     .returning({ id: schema.driverAppSessions.id });
   await db.update(schema.driverAppStatus).set({ signedIn: false, updatedAt: new Date() }).where(eq(schema.driverAppStatus.driverId, driverId));
   if (rows.length) await writeAudit({ action: "driver.app_signed_out_by_company", actorUserId, organizationId, targetType: "driver", targetId: driverId, metadata: { sessions: rows.length }, ipAddress: null, userAgent: null });
+  // The phone shows "You're signed out" (D15) even before the app next talks to the server.
+  if (tokens.length) await sendPushMessages(tokens.map((to) => ({ to, title: "You're signed out", body: "Your company signed you out of RIO GPS. Location sharing has stopped.", data: { type: "driver_signed_out" }, sound: "default" as const, channelId: "alerts" })));
   return rows.length;
+}
+
+// ---------- push to the driver's phone ----------
+
+async function openPushTokens(organizationId: string, driverId: string): Promise<string[]> {
+  const rows = await getDb()
+    .select({ token: schema.driverAppSessions.pushToken })
+    .from(schema.driverAppSessions)
+    .where(and(eq(schema.driverAppSessions.driverId, driverId), eq(schema.driverAppSessions.organizationId, organizationId), isNull(schema.driverAppSessions.revokedAt), isNotNull(schema.driverAppSessions.pushToken)));
+  return [...new Set(rows.map((r) => r.token!).filter(Boolean))];
+}
+
+export const PushTokenSchema = z.object({ token: z.string().trim().min(10).max(300).regex(/^(ExponentPushToken|ExpoPushToken)\[.+\]$/, "Not a push address").nullable() });
+
+/** The driver app saves (or clears) this phone's push address for its session. */
+export async function setDriverPushToken(auth: DriverAuth, token: string | null): Promise<void> {
+  await getDb().update(schema.driverAppSessions).set({ pushToken: token }).where(eq(schema.driverAppSessions.id, auth.sessionId));
+}
+
+/** How long the company waits before asking the same driver again. */
+export const ASK_LOCATION_EVERY_MS = 15 * 60_000;
+export const AskLocationSchema = z.object({ message: z.string().trim().max(240).optional() });
+
+/**
+ * "Ask to turn on location" (A10B, O6): a push to the driver's phone with a Turn on button.
+ * At most once every 15 minutes per driver; the driver sees who asked.
+ */
+export async function askDriverLocation(ctx: TenantContext, driverId: string, actor: { userId: string; name: string }, message?: string, now = new Date()): Promise<{ sent: number; askedAt: string; nextAt: string }> {
+  const db = getDb();
+  const [d] = await db
+    .select({ id: schema.drivers.id, name: schema.drivers.name, status: schema.drivers.status, askedAt: schema.driverAppStatus.locationAskedAt, signedIn: schema.driverAppStatus.signedIn })
+    .from(schema.drivers)
+    .leftJoin(schema.driverAppStatus, eq(schema.driverAppStatus.driverId, schema.drivers.id))
+    .where(and(eq(schema.drivers.id, driverId), eq(schema.drivers.organizationId, ctx.organizationId)));
+  if (!d) throw new NotFoundError("Driver not found");
+  if (d.status !== "active") throw new ValidationError("This driver is inactive.");
+  if (!d.signedIn) throw new ValidationError(`${d.name} isn't signed in to the driver app. Send an app invite instead.`);
+  if (d.askedAt && now.getTime() - d.askedAt.getTime() < ASK_LOCATION_EVERY_MS) {
+    const wait = Math.ceil((ASK_LOCATION_EVERY_MS - (now.getTime() - d.askedAt.getTime())) / 60_000);
+    throw new TooManyRequestsError(`You asked recently. You can ask ${d.name} again in ${wait} min.`);
+  }
+  const tokens = await openPushTokens(ctx.organizationId, driverId);
+  if (!tokens.length) throw new ValidationError(`${d.name}'s phone hasn't turned on notifications. Call them instead.`);
+  const body = message?.trim() || "Your company can't see your location. Tap to turn it back on.";
+  const { sent } = await sendPushMessages(
+    tokens.map((to) => ({ to, title: `${actor.name} asks: turn on location`, body, data: { type: "location_request", from: actor.name, message: message?.trim() ?? "", at: now.toISOString() }, sound: "default" as const, channelId: "alerts" }))
+  );
+  await db.update(schema.driverAppStatus).set({ locationAskedAt: now, locationAskedBy: actor.userId, updatedAt: now }).where(eq(schema.driverAppStatus.driverId, driverId));
+  await writeAudit({ action: "driver.location_requested", actorUserId: actor.userId, organizationId: ctx.organizationId, targetType: "driver", targetId: driverId, metadata: { sent, message: message?.trim() ?? null }, ipAddress: null, userAgent: null });
+  return { sent, askedAt: now.toISOString(), nextAt: new Date(now.getTime() + ASK_LOCATION_EVERY_MS).toISOString() };
 }
 
 // ---------- location reports ----------
@@ -329,6 +383,19 @@ export interface DriverMeDto {
   company: { id: string; name: string; phone: string | null };
   vehicle: { id: string; name: string; licensePlate: string | null } | null;
   sharing: { always: true; note: string };
+  /** The company asked to turn location on in the last hour. */
+  locationRequest: { at: string; from: string | null } | null;
+}
+
+/** A request from the company in the last hour, shown on D14 when the app opens. */
+async function recentLocationRequest(driverId: string): Promise<{ at: string; from: string | null } | null> {
+  const [r] = await getDb()
+    .select({ at: schema.driverAppStatus.locationAskedAt, from: schema.users.name })
+    .from(schema.driverAppStatus)
+    .leftJoin(schema.users, eq(schema.users.id, schema.driverAppStatus.locationAskedBy))
+    .where(eq(schema.driverAppStatus.driverId, driverId));
+  if (!r?.at || Date.now() - r.at.getTime() > 60 * 60_000) return null;
+  return { at: r.at.toISOString(), from: r.from ?? null };
 }
 
 export async function driverMe(auth: DriverAuth): Promise<DriverMeDto> {
@@ -344,7 +411,8 @@ export async function driverMe(auth: DriverAuth): Promise<DriverMeDto> {
     driver: { id: r.id, name: r.name, phone: r.phone },
     company: { id: r.orgId, name: r.orgName, phone: r.orgPhone },
     vehicle: r.vId ? { id: r.vId, name: r.vName!, licensePlate: r.vPlate } : null,
-    sharing: { always: true, note: `${r.orgName} sees your location while you're signed in.` }
+    sharing: { always: true, note: `${r.orgName} sees your location while you're signed in.` },
+    locationRequest: await recentLocationRequest(auth.driverId)
   };
 }
 
@@ -364,6 +432,10 @@ export interface DriverAppStatusDto {
   lastFixAt: string | null;
   phoneDeviceId: string | null;
   inviteSentAt: string | null;
+  /** The company last asked this driver to turn location on. */
+  locationAskedAt: string | null;
+  /** The driver's phone can get notifications (needed to ask). */
+  canNotify: boolean;
 }
 
 /** A phone that hasn't reported for this long is "stale" (asleep, no signal, app killed). */
@@ -394,7 +466,9 @@ export async function listDriverAppStatus(organizationId: string, driverIds?: st
       appVersion: schema.driverAppStatus.appVersion,
       lastReportAt: schema.driverAppStatus.lastReportAt,
       lastFixAt: schema.driverAppStatus.lastFixAt,
-      inviteSentAt: sql<Date | null>`(select max(i.created_at) from driver_invites i where i.driver_id = ${schema.drivers.id})`
+      inviteSentAt: sql<Date | null>`(select max(i.created_at) from driver_invites i where i.driver_id = ${schema.drivers.id})`,
+      locationAskedAt: schema.driverAppStatus.locationAskedAt,
+      canNotify: sql<boolean>`exists (select 1 from driver_app_sessions x where x.driver_id = ${schema.drivers.id} and x.revoked_at is null and x.push_token is not null)`
     })
     .from(schema.drivers)
     .leftJoin(schema.driverAppStatus, eq(schema.driverAppStatus.driverId, schema.drivers.id))
@@ -413,7 +487,9 @@ export async function listDriverAppStatus(organizationId: string, driverIds?: st
     lastReportAt: iso(r.lastReportAt),
     lastFixAt: iso(r.lastFixAt),
     phoneDeviceId: r.phoneDeviceId,
-    inviteSentAt: iso(r.inviteSentAt)
+    inviteSentAt: iso(r.inviteSentAt),
+    locationAskedAt: iso(r.locationAskedAt),
+    canNotify: Boolean(r.canNotify)
   }));
 }
 
@@ -470,4 +546,47 @@ export async function peekDriverInvite(token: string): Promise<{ state: "ok" | "
   if (r.usedAt) return { state: "used", ...who };
   if (r.expiresAt < new Date()) return { state: "expired", ...who };
   return { state: "ok", ...who };
+}
+
+// ---------- the driver's loads (driver app Today / Loads) ----------
+
+export interface DriverLoadDto {
+  id: string;
+  reference: string;
+  status: string;
+  notes: string | null;
+  pickup: { name: string | null; address: string; lat: number; lon: number; appointmentAt: string | null };
+  delivery: { name: string | null; address: string; lat: number; lon: number; appointmentAt: string | null };
+  deliveredAt: string | null;
+}
+
+/**
+ * Loads for this driver: on their truck, or sent to their phone number. Open loads plus those
+ * delivered in the last 24 hours, soonest pickup first.
+ */
+export async function driverLoads(auth: DriverAuth): Promise<DriverLoadDto[]> {
+  const db = getDb();
+  const [d] = await db.select({ vehicleId: schema.drivers.vehicleId, phone: schema.drivers.phone }).from(schema.drivers).where(eq(schema.drivers.id, auth.driverId));
+  if (!d) throw new UnauthorizedError("Your sign-in has ended. Sign in again.");
+  const phone = d.phone ? normalizePhone(d.phone) : null;
+  const rows = await db.execute<{ id: string; reference: string; status: string; notes: string | null; pickup_name: string | null; pickup_address: string; pickup_lat: number; pickup_lon: number; pickup_appointment_at: Date | null; delivery_name: string | null; delivery_address: string; delivery_lat: number; delivery_lon: number; delivery_appointment_at: Date | null; delivered_at: Date | null }>(sql`
+    select id, reference, status, notes, pickup_name, pickup_address, pickup_lat, pickup_lon, pickup_appointment_at,
+           delivery_name, delivery_address, delivery_lat, delivery_lon, delivery_appointment_at, ended_at as delivered_at
+    from loads
+    where organization_id = ${auth.organizationId}
+      and (${d.vehicleId ? sql`vehicle_id = ${d.vehicleId}` : sql`false`} or ${phone ? sql`driver_phone = ${phone}` : sql`false`})
+      and status not in ('cancelled', 'declined')
+      and (status <> 'delivered' or ended_at > now() - interval '24 hours')
+    order by (status = 'delivered'), coalesce(pickup_appointment_at, created_at)
+    limit 50`);
+  const iso = (v: Date | string | null) => (v ? new Date(v).toISOString() : null);
+  return rows.map((r) => ({
+    id: r.id,
+    reference: r.reference,
+    status: r.status,
+    notes: r.notes,
+    pickup: { name: r.pickup_name, address: r.pickup_address, lat: Number(r.pickup_lat), lon: Number(r.pickup_lon), appointmentAt: iso(r.pickup_appointment_at) },
+    delivery: { name: r.delivery_name, address: r.delivery_address, lat: Number(r.delivery_lat), lon: Number(r.delivery_lon), appointmentAt: iso(r.delivery_appointment_at) },
+    deliveredAt: iso(r.delivered_at)
+  }));
 }
