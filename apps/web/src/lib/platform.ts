@@ -50,7 +50,7 @@ export async function getPlatformOverview(onlineThresholdSeconds: number, now = 
              count(*) filter (where d.status = 'active' and d.last_seen_at <= ${at}::timestamptz - interval '24 hours')::int as silent,
              count(*) filter (where d.status = 'active' and d.last_seen_at is null)::int as never,
              count(*) filter (where d.status <> 'active')::int as deactivated
-      from gps_devices d join organizations o on o.id = d.organization_id and o.status <> 'archived' and ${nd}`),
+      from gps_devices d join organizations o on o.id = d.organization_id and o.status <> 'archived' and ${nd} where d.kind = 'tracker'`),
     db.execute<{ total: number; recent: number }>(sql`
       select count(distinct u.id)::int as total,
              count(distinct u.id) filter (where exists (select 1 from sessions s where s.user_id = u.id and s.created_at > ${at}::timestamptz - interval '7 days'))::int as recent
@@ -63,10 +63,10 @@ export async function getPlatformOverview(onlineThresholdSeconds: number, now = 
              (select count(*)::int from leads where status = 'new') as leads`),
     db.execute<{ id: string; name: string; status: OrganizationStatus; created_at: Date; trackers: number; silent: number; never: number; members: number; signed_in_ever: number; signed_in_14d: number }>(sql`
       select o.id, o.name, o.status, o.created_at,
-        (select count(*)::int from gps_devices d where d.organization_id = o.id and d.status = 'active') as trackers,
-        (select count(*)::int from gps_devices d where d.organization_id = o.id and d.status = 'active'
+        (select count(*)::int from gps_devices d where d.organization_id = o.id and d.kind = 'tracker' and d.status = 'active') as trackers,
+        (select count(*)::int from gps_devices d where d.organization_id = o.id and d.kind = 'tracker' and d.status = 'active'
            and d.last_seen_at <= ${at}::timestamptz - interval '24 hours') as silent,
-        (select count(*)::int from gps_devices d where d.organization_id = o.id and d.status = 'active' and d.last_seen_at is null) as never,
+        (select count(*)::int from gps_devices d where d.organization_id = o.id and d.kind = 'tracker' and d.status = 'active' and d.last_seen_at is null) as never,
         (select count(*)::int from memberships m join users u on u.id = m.user_id where m.organization_id = o.id and not u.is_super_admin) as members,
         (select count(*)::int from memberships m join users u on u.id = m.user_id
            where m.organization_id = o.id and not u.is_super_admin and exists (select 1 from sessions s where s.user_id = u.id)) as signed_in_ever,
@@ -74,12 +74,12 @@ export async function getPlatformOverview(onlineThresholdSeconds: number, now = 
            where m.organization_id = o.id and not u.is_super_admin and exists (select 1 from sessions s where s.user_id = u.id and s.created_at > ${at}::timestamptz - interval '14 days')) as signed_in_14d
       from organizations o where o.status <> 'archived' and ${nd}`),
     db.execute<{ id: string; name: string; created_at: Date; trackers: number; status: OrganizationStatus }>(sql`
-      select o.id, o.name, o.created_at, o.status, (select count(*)::int from gps_devices d where d.organization_id = o.id) as trackers
+      select o.id, o.name, o.created_at, o.status, (select count(*)::int from gps_devices d where d.organization_id = o.id and d.kind = 'tracker') as trackers
       from organizations o where o.status <> 'archived' and ${nd} order by o.created_at desc limit 5`),
     db.execute<{ in_stock: number; no_sim: number; unused: number; wasted: number; off: number }>(sql`
       select (select count(*)::int from gps_devices where organization_id is null and status <> 'retired') as in_stock,
         (select count(*)::int from gps_devices d join organizations o on o.id = d.organization_id and o.status <> 'archived' and ${nd}
-           where d.status = 'active' and not exists (select 1 from sim_cards s where s.device_id = d.id)) as no_sim,
+           where d.status = 'active' and d.kind = 'tracker' and not exists (select 1 from sim_cards s where s.device_id = d.id)) as no_sim,
         count(*) filter (where s.status = 'active' and (d.id is null or d.organization_id is null or d.status = 'retired'))::int as unused,
         coalesce(sum(s.monthly_cost_cents) filter (where s.status = 'active' and (d.id is null or d.organization_id is null or d.status = 'retired')), 0)::int as wasted,
         count(*) filter (where s.status <> 'active' and d.organization_id is not null and d.status = 'active')::int as off
@@ -176,7 +176,7 @@ export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresh
   }[q.sort];
   const forCustomer = q.customer ? sql`and d.organization_id = ${q.customer}` : sql``;
   const base = sql`from gps_devices d left join organizations o on o.id = d.organization_id left join sim_cards s on s.device_id = d.id
-    where (o.id is null or o.status <> 'archived') ${search} ${forCustomer}`;
+    where d.kind = 'tracker' and (o.id is null or o.status <> 'archived') ${search} ${forCustomer}`;
   const db = getDb();
   const [rows, counts, customers] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
@@ -202,7 +202,7 @@ export async function listPlatformTrackers(q: PlatformTrackerQuery, onlineThresh
     // The customer filter's choices: every current customer with trackers, and how many.
     db.execute<{ id: string; name: string; is_demo: boolean; n: number }>(sql`
       select o.id, o.name, o.is_demo, count(d.id)::int as n
-      from organizations o join gps_devices d on d.organization_id = o.id
+      from organizations o join gps_devices d on d.organization_id = o.id and d.kind = 'tracker'
       where o.status <> 'archived' and ${hideDemo ? sql`not o.is_demo` : sql`true`}
       group by o.id order by lower(o.name)`)
   ]);

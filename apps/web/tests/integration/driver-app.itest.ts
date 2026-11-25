@@ -1,0 +1,118 @@
+import "./setup-env";
+import { closeDb, getDb, schema } from "@rio-gps/db";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createUserWithMembership } from "@/lib/admin-users";
+import { getAuth } from "@/lib/auth";
+import { createCustomer } from "@/lib/customers";
+import { listPlans } from "@/lib/plans";
+import { POST as invitePOST } from "@/app/api/drivers/[id]/app-invite/route";
+import { POST as companySignoutPOST } from "@/app/api/drivers/[id]/app-signout/route";
+import { GET as statusGET } from "@/app/api/drivers/app-status/route";
+import { POST as redeemPOST } from "@/app/api/driver-app/invite/route";
+import { GET as meGET } from "@/app/api/driver-app/me/route";
+import { POST as reportPOST } from "@/app/api/driver-app/report/route";
+import { POST as signoutPOST } from "@/app/api/driver-app/signout/route";
+
+const BASE = "http://localhost:3000";
+const PASSWORD = "correct-horse-battery-staple";
+const meta = { ipAddress: null, userAgent: null };
+let cookie = "";
+let orgId = "";
+let driverId = "";
+let vehicleId = "";
+let token = "";
+
+const web = (method: string, path: string, body?: unknown) =>
+  new Request(`${BASE}${path}`, { method, headers: { cookie, "content-type": "application/json", origin: BASE }, body: body === undefined ? undefined : JSON.stringify(body) });
+const app = (method: string, path: string, body?: unknown, bearer = token) =>
+  new Request(`${BASE}${path}`, { method, headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json", "x-forwarded-for": "198.51.100.7" }, body: body === undefined ? undefined : JSON.stringify(body) });
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+
+beforeAll(async () => {
+  const db = getDb();
+  await db.execute(sql`truncate audit_logs, rate_limits, sessions, accounts, memberships, users, organizations restart identity cascade`);
+  const plans = Object.fromEntries((await listPlans()).map((p) => [p.name, p.id]));
+  const [pf] = await db.insert(schema.users).values({ email: "root@rio.test", name: "Root", isSuperAdmin: true, emailVerified: true }).returning();
+  orgId = (await createCustomer(pf!.id, { name: "Phone Freight", slug: "phone-freight", timeZone: "America/Toronto", unitSystem: "imperial", planId: plans["Free Basic"], admin: { email: "first@phone.test", name: "First" } }, meta)).organizationId;
+  await createUserWithMembership({ email: "owner@phone.test", name: "Owner", password: PASSWORD, organizationSlug: "phone-freight", role: "ORG_ADMIN" });
+  const res = await getAuth().handler(new Request(`${BASE}/api/auth/sign-in/email`, { method: "POST", headers: { "content-type": "application/json", origin: BASE, "x-forwarded-for": "198.18.9.1" }, body: JSON.stringify({ email: "owner@phone.test", password: PASSWORD }) }));
+  cookie = res.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
+  const [v] = await db.insert(schema.vehicles).values({ organizationId: orgId, name: "Truck 7", type: "truck" }).returning();
+  vehicleId = v!.id;
+  const [d] = await db.insert(schema.drivers).values({ organizationId: orgId, name: "Priya Nair", phone: "+14165550101", vehicleId }).returning();
+  driverId = d!.id;
+});
+afterAll(async () => {
+  await closeDb();
+});
+
+describe("driver app", () => {
+  it("the company makes a personal link; the app signs in with it once", async () => {
+    const res = await invitePOST(web("POST", `/api/drivers/${driverId}/app-invite`, {}), params(driverId));
+    expect(res.status).toBe(201);
+    const { invite } = (await res.json()) as { invite: { url: string; appUrl: string } };
+    expect(invite.url).toMatch(/\/driver-app\?t=/);
+    const t = new URL(invite.url).searchParams.get("t")!;
+    const signIn = await redeemPOST(app("POST", "/api/driver-app/invite", { token: t, device: { platform: "ios", appVersion: "2.2.0" } }, ""));
+    expect(signIn.status).toBe(201);
+    const s = (await signIn.json()) as { token: string; company: { name: string } };
+    expect(s.company.name).toBe("Phone Freight");
+    token = s.token;
+    // Single use.
+    expect((await redeemPOST(app("POST", "/api/driver-app/invite", { token: t }, ""))).status).toBe(400);
+    const me = (await (await meGET(app("GET", "/api/driver-app/me"))).json()) as { vehicle: { name: string } };
+    expect(me.vehicle.name).toBe("Truck 7");
+  });
+
+  it("phone points go through the tracker pipeline; the phone stands for a truck without a tracker", async () => {
+    const t0 = Date.now() - 60_000;
+    const res = await reportPOST(
+      app("POST", "/api/driver-app/report", {
+        points: [
+          { latitude: 43.7, longitude: -79.7, speedKph: 80, recordedAt: new Date(t0).toISOString(), accuracyM: 8 },
+          { latitude: 43.71, longitude: -79.69, speedKph: 82, recordedAt: new Date(t0 + 30_000).toISOString(), accuracyM: 6 },
+          { latitude: 43.0, longitude: -79.0, recordedAt: new Date(t0 + 40_000).toISOString(), accuracyM: 1500 }
+        ],
+        battery: { pct: 64, charging: false },
+        permission: "always",
+        locationEnabled: true
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { stored: number }).stored).toBe(2); // the 1.5 km guess is dropped
+    const db = getDb();
+    const [drv] = await db.select({ dev: schema.drivers.phoneDeviceId }).from(schema.drivers).where(eq(schema.drivers.id, driverId));
+    const [dev] = await db.select().from(schema.gpsDevices).where(eq(schema.gpsDevices.id, drv!.dev!));
+    expect(dev).toMatchObject({ kind: "phone", organizationId: orgId });
+    const [cur] = await db.select().from(schema.currentLocations).where(eq(schema.currentLocations.deviceId, dev!.id));
+    expect(cur!.latitude).toBeCloseTo(43.71);
+    const [asg] = await db.select().from(schema.deviceAssignments).where(and(eq(schema.deviceAssignments.deviceId, dev!.id), isNull(schema.deviceAssignments.unassignedAt)));
+    expect(asg!.vehicleId).toBe(vehicleId);
+    // Phones are not trackers: not on the plan's tracker count.
+    const [{ n }] = (await db.execute<{ n: number }>(sql`select count(*)::int as n from gps_devices where organization_id = ${orgId} and kind = 'tracker'`)) as unknown as [{ n: number }];
+    expect(n).toBe(0);
+    const st = (await (await statusGET(web("GET", "/api/drivers/app-status"))).json()) as { drivers: { driverId: string; state: string; batteryPct: number }[] };
+    expect(st.drivers.find((d) => d.driverId === driverId)).toMatchObject({ state: "sharing", batteryPct: 64 });
+  });
+
+  it("location off shows as location off", async () => {
+    await reportPOST(app("POST", "/api/driver-app/report", { points: [], permission: "off", battery: { pct: 40 } }));
+    const st = (await (await statusGET(web("GET", "/api/drivers/app-status"))).json()) as { drivers: { driverId: string; state: string }[] };
+    expect(st.drivers.find((d) => d.driverId === driverId)!.state).toBe("location_off");
+  });
+
+  it("signing out stops sharing; the company can sign a driver out too", async () => {
+    expect((await signoutPOST(app("POST", "/api/driver-app/signout"))).status).toBe(204);
+    expect((await meGET(app("GET", "/api/driver-app/me"))).status).toBe(401);
+    const st = (await (await statusGET(web("GET", "/api/drivers/app-status"))).json()) as { drivers: { driverId: string; state: string }[] };
+    expect(st.drivers.find((d) => d.driverId === driverId)!.state).toBe("signed_out");
+    // New link, new sign-in, then the company signs them out.
+    const { invite } = (await (await invitePOST(web("POST", `/api/drivers/${driverId}/app-invite`, {}), params(driverId))).json()) as { invite: { url: string } };
+    token = ((await (await redeemPOST(app("POST", "/api/driver-app/invite", { token: new URL(invite.url).searchParams.get("t") }, ""))).json()) as { token: string }).token;
+    expect((await meGET(app("GET", "/api/driver-app/me"))).status).toBe(200);
+    const out = await companySignoutPOST(web("POST", `/api/drivers/${driverId}/app-signout`), params(driverId));
+    expect(((await out.json()) as { signedOut: number }).signedOut).toBe(1);
+    expect((await reportPOST(app("POST", "/api/driver-app/report", { points: [] }))).status).toBe(401);
+  });
+});

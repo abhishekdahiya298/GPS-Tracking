@@ -27,7 +27,7 @@ export function middleware(request: NextRequest) {
   requestHeaders.set("Content-Security-Policy", csp);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);
-  if (pathname === "/share" || pathname === "/d" || pathname === "/track") {
+  if (pathname === "/share" || pathname === "/d" || pathname === "/track" || pathname === "/driver-app") {
     // Public share, driver and shipper pages: never send a Referer (map tiles come from another origin) and keep it out of search engines.
     response.headers.set("Referrer-Policy", "no-referrer");
     response.headers.set("X-Robots-Tag", "noindex, nofollow");

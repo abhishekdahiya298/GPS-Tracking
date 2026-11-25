@@ -71,7 +71,7 @@ export async function phoneCheckActive(): Promise<boolean> {
 type CodeTo = { email?: string; name?: string; sms: boolean };
 export type SentTo = { email: string | null; phone: string | null };
 
-async function sendCode(phoneE164: string, purpose: "signup" | "driver_join", to: CodeTo = { sms: true }): Promise<SentTo> {
+async function sendCode(phoneE164: string, purpose: "signup" | "driver_join" | "driver_signin", to: CodeTo = { sms: true }): Promise<SentTo> {
   await assertRateLimit("phone-code", phoneE164, 5, 3600, "Too many codes for this number. Try again in an hour.");
   const db = getDb();
   const [last] = await db.select({ createdAt: schema.phoneCodes.createdAt }).from(schema.phoneCodes).where(eq(schema.phoneCodes.phone, phoneE164)).orderBy(desc(schema.phoneCodes.createdAt)).limit(1);
@@ -96,6 +96,14 @@ async function sendCode(phoneE164: string, purpose: "signup" | "driver_join", to
   }
   if (!emailSent && !smsSent) throw new ValidationError(smsError || "We couldn't send your code. Check your email and phone, then try again.");
   return { email: emailSent && to.email ? maskEmail(to.email) : null, phone: smsSent ? mask(phoneE164) : null };
+}
+
+/** Driver app sign-in: a code by text to a driver's phone. */
+export async function sendDriverSignInCode(phoneE164: string): Promise<SentTo> {
+  return sendCode(phoneE164, "driver_signin");
+}
+export async function checkDriverSignInCode(phoneE164: string, code: string): Promise<void> {
+  return checkCode(phoneE164, code);
 }
 
 /** Sign-up asks for a code when email or texts can deliver it. */

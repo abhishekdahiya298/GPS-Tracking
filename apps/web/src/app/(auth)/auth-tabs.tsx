@@ -13,7 +13,7 @@ export function AuthTabs({ active, next }: { active: "signin" | "signup"; next?:
     { key: "signup" as const, href: "/signup", label: "Create account", hint: "Free, no card", Icon: Sparkles }
   ];
   return (
-    <nav aria-label="Sign in or create account" className="mb-6 grid grid-cols-2 gap-1.5 rounded-2xl bg-[linear-gradient(180deg,#eef3fb,#e6ecf7)] p-1.5 ring-1 ring-inset ring-[#dbe3ef] dark:bg-muted dark:ring-border">
+    <nav aria-label="Sign in or create account" className="mb-5 grid grid-cols-2 gap-1.5 rounded-2xl bg-[linear-gradient(180deg,#eef3fb,#e6ecf7)] p-1.5 ring-1 ring-inset ring-[#dbe3ef] dark:bg-muted dark:ring-border">
       {tabs.map(({ key, href, label, hint, Icon }) => {
         const on = key === active;
         return (

@@ -387,7 +387,7 @@ export async function recordTrackerMonths(now = new Date()): Promise<number> {
     insert into billable_trackers (organization_id, device_id, imei, period, first_seen_at)
     select d.organization_id, d.id, d.imei, to_char(${now.toISOString()}::timestamptz at time zone o.time_zone, 'YYYY-MM'), ${now.toISOString()}::timestamptz
     from gps_devices d join organizations o on o.id = d.organization_id
-    where d.status <> 'retired' and o.status = 'active'
+    where d.status <> 'retired' and d.kind = 'tracker' and o.status = 'active'
     on conflict do nothing
     returning device_id`);
   return rows.length;
@@ -399,7 +399,7 @@ export async function recordTrackerMonth(deviceId: string, now = new Date()): Pr
     insert into billable_trackers (organization_id, device_id, imei, period, first_seen_at)
     select d.organization_id, d.id, d.imei, to_char(${now.toISOString()}::timestamptz at time zone o.time_zone, 'YYYY-MM'), ${now.toISOString()}::timestamptz
     from gps_devices d join organizations o on o.id = d.organization_id
-    where d.id = ${deviceId}::uuid and d.status <> 'retired' and o.status = 'active'
+    where d.id = ${deviceId}::uuid and d.status <> 'retired' and d.kind = 'tracker' and o.status = 'active'
     on conflict do nothing`);
 }
 

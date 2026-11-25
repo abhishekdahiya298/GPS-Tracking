@@ -161,6 +161,7 @@ function GlanceMap({ offlineSeconds }: { offlineSeconds: number }) {
         });
         let popup: Popup | null = null;
         const fl = new FleetLayer(m, {
+          iconScale: 1.35,
           onSelect: (id) => window.location.assign(`/map?focus=${encodeURIComponent(id)}`),
           onHover: (id, ll) => {
             popup?.remove();

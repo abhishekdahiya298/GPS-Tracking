@@ -40,7 +40,12 @@ const DETAIL_ZOOM = 9;
  * Where a vehicle's name tag sits: beside a photo pin (like the phone app and Life360), under the
  * other icons. Offsets are in ems of the 11 px label text.
  */
-function labelPlace(style: IconPrefs["style"]): { "text-anchor": "left" | "top"; "text-offset": [number, number] } {
+function labelPlace(style: IconPrefs["style"], k = 1): { "text-anchor": "left" | "top"; "text-offset": [number, number] } {
+  const p = labelPlaceBase(style);
+  return { "text-anchor": p["text-anchor"], "text-offset": [p["text-offset"][0] * k, p["text-offset"][1] * k] };
+}
+
+function labelPlaceBase(style: IconPrefs["style"]): { "text-anchor": "left" | "top"; "text-offset": [number, number] } {
   // Photo and pin icons stand on their tip (anchor bottom): the name goes below the point.
   // Badges and top-down icons are centred on it: the name goes below the icon, clear of it.
   if (style === "photo") return { "text-anchor": "left", "text-offset": [2.6, -3.2] };
@@ -287,7 +292,12 @@ export class FleetLayer {
 
   constructor(
     private map: MlMap,
-    private opts: { onSelect: (id: string) => void; onHover?: (id: string | null, lngLat?: [number, number]) => void }
+    private opts: {
+      onSelect: (id: string) => void;
+      onHover?: (id: string | null, lngLat?: [number, number]) => void;
+      /** Bigger pins for a zoomed-out overview map (the dashboard card): 1 = live map size. */
+      iconScale?: number;
+    }
   ) {}
 
   /** How vehicles are drawn (Settings → Account → Map icons). Redraws at once. */
@@ -304,7 +314,7 @@ export class FleetLayer {
       m.setLayoutProperty("fleet-icons", "icon-rotation-alignment", prefs.style === "top" ? "map" : "viewport");
     }
     if (m.getLayer("fleet-labels")) {
-      const place = labelPlace(prefs.style);
+      const place = labelPlace(prefs.style, this.opts.iconScale);
       m.setLayoutProperty("fleet-labels", "text-anchor", place["text-anchor"]);
       m.setLayoutProperty("fleet-labels", "text-offset", place["text-offset"]);
     }
@@ -453,6 +463,7 @@ export class FleetLayer {
           "icon-ignore-placement": true
         }
       });
+      const k = this.opts.iconScale ?? 1;
       // Every vehicle: the 3D pin in its status colour, anchored at its tip (drawn pin until the image loads).
       m.addLayer({
         id: "fleet-icons",
@@ -462,7 +473,7 @@ export class FleetLayer {
         filter: NOT_CLUSTER as never,
         layout: {
           "icon-image": ["coalesce", ["image", ["get", "pin"]], ["image", ["concat", "pin-", ["get", "type"], "-", ["get", "state"]]]] as never,
-          "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.85, 9, 0.95, 14, 1, 18, 1.1],
+          "icon-size": ["interpolate", ["linear"], ["zoom"], 3, 0.85 * k, 9, 0.95 * k, 14, 1 * k, 18, 1.1 * k],
           "icon-anchor": this.prefs.style === "pin" || this.prefs.style === "photo" ? "bottom" : "center",
           "icon-rotate": this.prefs.style === "top" ? ["to-number", ["get", "rot"]] : 0,
           "icon-rotation-alignment": this.prefs.style === "top" ? "map" : "viewport",
@@ -485,7 +496,7 @@ export class FleetLayer {
             "text-font": ["Noto Sans Regular"],
             "text-size": 11,
             "text-line-height": 1.25,
-            ...labelPlace(this.prefs.style),
+            ...labelPlace(this.prefs.style, this.opts.iconScale),
             "text-optional": true,
             "icon-image": "veh-chip",
             "icon-text-fit": "both",

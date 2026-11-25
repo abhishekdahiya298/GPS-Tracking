@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, Building2, Check, CheckCircle2, Mail, MessageSquareText, Package, Truck, UserRound } from "lucide-react";
+import { ArrowLeft, Building2, Globe2, Check, CheckCircle2, Mail, MessageSquareText, Package, Truck, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { deviceTimeZone, TimeZoneSelect } from "@/components/app/time-zone-select";
@@ -241,43 +241,50 @@ export function SignupFlow({ open, phoneCheck, emailCheck, initialRole, initialC
         <Button type="submit" loading={busy} className="h-11">
           Join company
         </Button>
-        <p className="m-0 text-xs text-muted-foreground">No code? Ask the person who runs your trucks to add you in RIO GPS. Your company sees your location only while you&apos;re on duty.</p>
+        <p className="m-0 text-xs text-muted-foreground">No code? Ask the person who runs your trucks to add you in RIO GPS. Your company sees your location while you&apos;re signed in to the RIO GPS app.</p>
       </form>
     );
   }
 
+  const roleLabel = ROLES.find((r) => r.key === role)!.title.replace(/^I( am|'m)? ?/i, "");
   return (
-    <form onSubmit={submitCompany} className="grid gap-3.5">
-      {back}
-      <p className="m-0 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-        Step 2 of {total} · {ROLES.find((r) => r.key === role)!.title.replace(/^I( am|'m)? ?/i, "")}
-      </p>
-      <AuthHeading title="Your company" description="You'll be the admin. You can add your team and drivers next." />
-      <Field id="company" label="Company name" required>
-        <Input id="company" name="company" required maxLength={80} autoComplete="organization" />
-      </Field>
+    <form onSubmit={submitCompany} className="grid gap-3">
+      <div className="flex items-center gap-2">
+        {roles.length > 1 && (
+          <button type="button" onClick={() => setStep({ s: "role" })} aria-label="Back" className="grid size-7 cursor-pointer place-items-center rounded-lg border border-border bg-background text-primary hover:bg-muted">
+            <ArrowLeft className="size-4" aria-hidden="true" />
+          </button>
+        )}
+        <p className="m-0 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+          Step 2 of {total} · {roleLabel}
+        </p>
+      </div>
+      <AuthHeading compact title="Your company" description="You'll be the admin. Add your team and drivers next." />
       <div className="grid gap-3 sm:grid-cols-2">
+        <Field id="company" label="Company name" required>
+          <Input id="company" name="company" required maxLength={80} autoComplete="organization" />
+        </Field>
         <Field id="name" label="Your name" required>
           <Input id="name" name="name" required maxLength={80} autoComplete="name" />
         </Field>
         <Field id="phone" label="Mobile phone" required>
           <Input id="phone" name="phone" type="tel" required autoComplete="tel" placeholder="(905) 555-0121" />
         </Field>
+        <Field id="email" label="Work email" required>
+          <Input id="email" name="email" type="email" required autoComplete="email" placeholder="you@company.com" />
+        </Field>
       </div>
-      <Field id="email" label="Work email" required>
-        <Input id="email" name="email" type="email" required autoComplete="email" />
-      </Field>
-      <Field id="password" label="Password" required description="At least 10 characters.">
-        <PasswordInput id="password" name="password" required minLength={10} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      <Field id="password" label="Password" required>
+        <PasswordInput id="password" name="password" required minLength={10} autoComplete="new-password" placeholder="At least 10 characters" value={password} onChange={(e) => setPassword(e.target.value)} />
       </Field>
       {role !== "broker" && (
-        <fieldset className="m-0 grid gap-1.5 border-0 p-0">
-          <legend className="mb-1 p-0 text-sm font-medium">How many trucks do you run?</legend>
+        <fieldset className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-0 p-0">
+          <legend className="float-left mr-1 p-0 text-sm font-medium">Trucks</legend>
           <div className="flex flex-wrap gap-1.5">
             {SIZES.map((s, i) => (
               <label key={s} className="cursor-pointer">
                 <input type="radio" name="fleetSize" value={s} defaultChecked={role === "operator" ? i === 0 : i === 1} className="peer sr-only" />
-                <span className="inline-flex h-9 items-center rounded-full border border-border px-3.5 text-sm font-semibold peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-primary">
+                <span className="inline-flex h-8 items-center rounded-full border border-border px-3 text-[13px] font-semibold peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-primary">
                   {s}
                 </span>
               </label>
@@ -285,25 +292,63 @@ export function SignupFlow({ open, phoneCheck, emailCheck, initialRole, initialC
           </div>
         </fieldset>
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field id="country" label="Country">
-          <Select id="country" name="country" defaultValue="CA">
-            <option value="CA">Canada</option>
-            <option value="US">United States</option>
-          </Select>
-        </Field>
-        <Field id="timeZone" label="Time zone">
-          <TimeZoneSelect ref={tzRef} id="timeZone" name="timeZone" defaultValue="America/Toronto" />
-        </Field>
-      </div>
-      <label className="flex items-start gap-2 text-sm">
-        <Checkbox name="agree" required className="mt-0.5" /> <span>I agree to the <a href="https://riogps.com/terms" target="_blank" rel="noreferrer">Terms</a> and <a href="https://riogps.com/privacy" target="_blank" rel="noreferrer">Privacy policy</a></span>
+      <RegionPicker tzRef={tzRef} />
+      <label className="flex items-start gap-2 text-xs text-muted-foreground">
+        <Checkbox name="agree" required className="mt-px" />
+        <span>
+          I agree to the <a href="https://riogps.com/terms" target="_blank" rel="noreferrer">Terms</a> and <a href="https://riogps.com/privacy" target="_blank" rel="noreferrer">Privacy policy</a>
+        </span>
       </label>
       {error && <Alert tone="danger">{error}</Alert>}
       <Button type="submit" loading={busy} className="h-11">
         Create free account
       </Button>
     </form>
+  );
+}
+
+/**
+ * Country and time zone, filled from the browser. Shown as one line ("Canada · Toronto time")
+ * with Change; the selects stay in the form while folded, so they are always sent.
+ */
+function RegionPicker({ tzRef }: { tzRef: React.RefObject<HTMLSelectElement> }) {
+  const [openPick, setOpenPick] = useState(false);
+  const [summary, setSummary] = useState("Canada");
+  const countryRef = useRef<HTMLSelectElement>(null);
+  const refresh = () => {
+    const c = countryRef.current?.selectedOptions[0]?.text ?? "";
+    const tz = tzRef.current?.value ?? "";
+    const city = tz.split("/").pop()?.replace(/_/g, " ");
+    setSummary(city ? `${c} · ${city} time` : c);
+  };
+  useEffect(() => {
+    const id = setTimeout(refresh, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div className="rounded-xl border border-border bg-muted/40 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 text-sm">
+        <span className="flex min-w-0 items-center gap-2">
+          <Globe2 className="size-4 shrink-0 text-primary" aria-hidden="true" />
+          <span className="truncate">{summary}</span>
+        </span>
+        <button type="button" onClick={() => setOpenPick((v) => !v)} aria-expanded={openPick} className="cursor-pointer border-0 bg-transparent p-0 text-sm font-semibold text-primary">
+          {openPick ? "Done" : "Change"}
+        </button>
+      </div>
+      <div className={cn("mt-2 grid gap-2 sm:grid-cols-2", !openPick && "hidden")}>
+        <Field id="country" label="Country">
+          <Select id="country" name="country" defaultValue="CA" ref={countryRef} onChange={refresh}>
+            <option value="CA">Canada</option>
+            <option value="US">United States</option>
+          </Select>
+        </Field>
+        <Field id="timeZone" label="Time zone">
+          <TimeZoneSelect ref={tzRef} id="timeZone" name="timeZone" defaultValue="America/Toronto" onChange={refresh} />
+        </Field>
+      </div>
+    </div>
   );
 }
 

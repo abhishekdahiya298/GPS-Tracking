@@ -65,7 +65,7 @@ export interface CustomerDto {
 export async function listCustomers(): Promise<CustomerDto[]> {
   const rows = await getDb().execute<{ id: string; name: string; slug: string; created_at: Date; devices: number; members: number }>(sql`
     select o.id, o.name, o.slug, o.created_at,
-      (select count(*)::int from gps_devices d where d.organization_id = o.id) as devices,
+      (select count(*)::int from gps_devices d where d.organization_id = o.id and d.kind = 'tracker') as devices,
       (select count(*)::int from memberships m join users u on u.id = m.user_id where m.organization_id = o.id and not u.is_super_admin) as members
     from organizations o order by o.name`);
   return rows.map((r) => ({ id: r.id, name: r.name, slug: r.slug, createdAt: new Date(r.created_at).toISOString(), devices: r.devices, members: r.members }));
@@ -276,8 +276,8 @@ export async function listCustomersPage(
   const rows = await getDb().execute<{ id: string; name: string; slug: string; created_at: Date; devices: number; members: number; active_devices: number; total: number; status: OrganizationStatus; status_reason: string | null; is_demo: boolean }>(sql`
     with f as (
       select o.id, o.name, o.slug, o.created_at, o.status, o.status_reason, o.is_demo,
-        (select count(*)::int from gps_devices d where d.organization_id = o.id) as devices,
-        (select count(*)::int from gps_devices d where d.organization_id = o.id and d.last_seen_at > now() - interval '24 hours') as active_devices,
+        (select count(*)::int from gps_devices d where d.organization_id = o.id and d.kind = 'tracker') as devices,
+        (select count(*)::int from gps_devices d where d.organization_id = o.id and d.kind = 'tracker' and d.last_seen_at > now() - interval '24 hours') as active_devices,
         (select count(*)::int from memberships m join users u on u.id = m.user_id where m.organization_id = o.id and not u.is_super_admin) as members
       from organizations o ${search}
     )
@@ -344,7 +344,7 @@ export async function getCustomerDetail(organizationId: string): Promise<Custome
       left join sim_cards s on s.device_id = d.id
       left join device_assignments a on a.device_id = d.id and a.organization_id = d.organization_id and a.unassigned_at is null
       left join vehicles v on v.id = a.vehicle_id and v.organization_id = d.organization_id
-      where d.organization_id = ${organizationId} order by d.created_at`)
+      where d.organization_id = ${organizationId} and d.kind = 'tracker' order by d.created_at`)
   ]);
   return {
     id: org.id,
