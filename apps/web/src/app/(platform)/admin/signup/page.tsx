@@ -3,6 +3,7 @@ import { getSignupSettings, getUpgradeContact } from "@/lib/entitlements";
 import { listLeads } from "@/lib/leads";
 import { listPlans } from "@/lib/plans";
 import { getRequestContext } from "@/lib/request-context";
+import { isEmailEnabled } from "@/lib/email";
 import { smsConfigured } from "@/lib/sms";
 import { SignupSettingsView } from "./signup-settings-view";
 
@@ -20,6 +21,7 @@ export default async function SignupSettingsPage() {
       contact={contact}
       plans={plans.filter((p) => p.active).map((p) => ({ id: p.id, name: p.name, visibility: p.visibility }))}
       smsReady={smsConfigured()}
+      emailReady={isEmailEnabled()}
       requests={leads.leads.filter((l) => l.source !== "website").slice(0, 6)}
     />
   );

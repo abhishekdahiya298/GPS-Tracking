@@ -24,7 +24,7 @@ const ROLES = [
 ] as const;
 
 /** Who can sign up, which plan they start on, protection, and how customers reach RIO to upgrade. */
-export function SignupSettingsView({ signup, contact, plans, requests, smsReady }: { signup: SignupSettings; contact: UpgradeContact; plans: { id: string; name: string; visibility: string }[]; requests: LeadDto[]; smsReady: boolean }) {
+export function SignupSettingsView({ signup, contact, plans, requests, smsReady, emailReady }: { signup: SignupSettings; contact: UpgradeContact; plans: { id: string; name: string; visibility: string }[]; requests: LeadDto[]; smsReady: boolean; emailReady: boolean }) {
   const router = useRouter();
   const [s, setS] = useState(signup);
   const [c, setC] = useState({ phone: contact.phone ?? "", whatsapp: contact.whatsapp ?? "", email: contact.email ?? "", message: contact.message ?? "", trialDays: String(contact.trialDays) });
@@ -99,10 +99,12 @@ export function SignupSettingsView({ signup, contact, plans, requests, smsReady 
               <CardTitle>Protection</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 pt-4">
-              <Toggle label="Check phone with a text code" hint="Stops fake sign-ups" checked={s.phoneCheck} onChange={(v) => setS({ ...s, phoneCheck: v })} />
-              {s.phoneCheck && !smsReady && (
-                <p className="m-0 rounded-lg bg-warning/10 px-3 py-2 text-xs">Text messages aren&apos;t set up on the server (Twilio settings), so sign-ups skip the code for now. One company per phone still applies.</p>
-              )}
+              <p className="m-0 text-xs text-muted-foreground">New companies get one 6-digit code and type it once. It goes to every way that&apos;s on below, so it still arrives if one of them fails.</p>
+              <Toggle label="Send the code by email" hint="Stops fake sign-ups" checked={s.emailCheck} onChange={(v) => setS({ ...s, emailCheck: v })} />
+              {s.emailCheck && !emailReady && <p className="m-0 rounded-lg bg-warning/10 px-3 py-2 text-xs">Email isn&apos;t set up on the server, so the code can&apos;t go by email.</p>}
+              <Toggle label="Also send the code by text message" hint="Drivers always get it by text" checked={s.phoneCheck} onChange={(v) => setS({ ...s, phoneCheck: v })} />
+              {s.phoneCheck && !smsReady && <p className="m-0 rounded-lg bg-warning/10 px-3 py-2 text-xs">Text messages aren&apos;t set up on the server yet (Twilio), so the code goes by email only for now.</p>}
+              {!((s.emailCheck && emailReady) || (s.phoneCheck && smsReady)) && <p className="m-0 rounded-lg bg-danger-soft px-3 py-2 text-xs text-danger">No way to send a code is working, so sign-ups skip the code. One company per phone still applies.</p>}
               <Toggle label="One free company per phone" hint="The same number can't open a second free company" checked={s.onePerPhone} onChange={(v) => setS({ ...s, onePerPhone: v })} />
               <Toggle label="Email me on every new sign-up" hint="To every platform admin" checked={s.notifyEmail} onChange={(v) => setS({ ...s, notifyEmail: v })} />
               <Field id="archive-days" label="Archive inactive free companies after (days)" description="0 = never. Archived companies can be restored.">

@@ -139,6 +139,19 @@ export function inviteEmail(to: string, name: string, orgName: string, url: stri
   };
 }
 
+export function signupCodeEmail(to: string, name: string, code: string, expiresMinutes: number): EmailMessage {
+  return {
+    to,
+    template: "signup_code",
+    subject: `${code} is your RIO GPS code`,
+    html: layout(
+      "Confirm your email",
+      `<p>Hi ${esc(name || "there")},</p><p>Use this code to finish creating your RIO GPS account. It expires in ${expiresMinutes} minutes.</p><p style="font-size:30px;font-weight:700;letter-spacing:8px;margin:20px 0;color:#0a2463">${esc(code)}</p><p style="color:#5b6475;font-size:13px">If you didn't ask for this, you can ignore this email.</p>`
+    ),
+    text: `Hi ${name || "there"},\n\n${code} is your RIO GPS code. It expires in ${expiresMinutes} minutes.\n\nIf you didn't ask for this, you can ignore this email.`
+  };
+}
+
 export function accessGrantedEmail(to: string, name: string, orgName: string, loginUrl: string): EmailMessage {
   return {
     to,

@@ -177,7 +177,7 @@ export function ShareView() {
         )}
       </main>
       <footer className="shrink-0 border-t border-border bg-background px-4 py-2 text-xs text-muted-foreground">
-        Updates every 15 seconds · link expires {f.dateTime(view.expiresAt)} {f.abbr(view.expiresAt)}
+        Live location · link expires {f.dateTime(view.expiresAt)} {f.abbr(view.expiresAt)}
       </footer>
     </div>
   );
