@@ -11,7 +11,7 @@ import { driversForMap } from "@/lib/driver-app";
 import { POST as invitePOST } from "@/app/api/drivers/[id]/app-invite/route";
 import { POST as companySignoutPOST } from "@/app/api/drivers/[id]/app-signout/route";
 import { GET as statusGET } from "@/app/api/drivers/app-status/route";
-import { POST as redeemPOST } from "@/app/api/driver-app/invite/route";
+import { GET as peekGET, POST as redeemPOST } from "@/app/api/driver-app/invite/route";
 import { GET as meGET } from "@/app/api/driver-app/me/route";
 import { GET as loadsGET } from "@/app/api/driver-app/loads/route";
 import { POST as reportPOST } from "@/app/api/driver-app/report/route";
@@ -60,6 +60,9 @@ describe("driver app", () => {
     const { invite } = (await res.json()) as { invite: { url: string; appUrl: string } };
     expect(invite.url).toMatch(/\/driver-app\?t=/);
     const t = new URL(invite.url).searchParams.get("t")!;
+    const peek = async (q: string) => (await (await peekGET(app("GET", `/api/driver-app/invite?t=${q}`, undefined, ""))).json()) as { state: string; companyName?: string };
+    expect(await peek(t)).toMatchObject({ state: "ok", companyName: "Phone Freight" });
+    expect((await peek("x".repeat(20))).state).toBe("unknown");
     const signIn = await redeemPOST(app("POST", "/api/driver-app/invite", { token: t, device: { platform: "ios", appVersion: "2.2.0" } }, ""));
     expect(signIn.status).toBe(201);
     const s = (await signIn.json()) as { token: string; company: { name: string } };
@@ -67,6 +70,7 @@ describe("driver app", () => {
     token = s.token;
     // Single use.
     expect((await redeemPOST(app("POST", "/api/driver-app/invite", { token: t }, ""))).status).toBe(400);
+    expect((await peek(t)).state).toBe("used");
     const me = (await (await meGET(app("GET", "/api/driver-app/me"))).json()) as { vehicle: { name: string } };
     expect(me.vehicle.name).toBe("Truck 7");
     // A load on the driver's truck shows in the driver app; nothing else does.

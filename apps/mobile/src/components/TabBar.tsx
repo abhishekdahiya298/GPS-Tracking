@@ -18,7 +18,12 @@ const TAB_ICONS: Record<string, { idle: IconName; active: IconName }> = {
   index: { idle: "grid-outline", active: "grid" },
   map: { idle: "map-outline", active: "map" },
   alerts: { idle: "notifications-outline", active: "notifications" },
-  account: { idle: "person-outline", active: "person" }
+  account: { idle: "person-outline", active: "person" },
+  // Driver tabs
+  today: { idle: "home-outline", active: "home" },
+  loads: { idle: "cube-outline", active: "cube" },
+  drive: { idle: "map-outline", active: "map" },
+  me: { idle: "person-outline", active: "person" }
 };
 
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
