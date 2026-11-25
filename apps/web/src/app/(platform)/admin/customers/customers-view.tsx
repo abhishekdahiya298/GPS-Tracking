@@ -1,7 +1,7 @@
 "use client";
 import { LocalDate } from "@/components/app/local-time";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Archive, ArchiveRestore, Building2, Eye, MoreHorizontal, PauseCircle, PlayCircle, Plus, Settings2 } from "lucide-react";
+import { Archive, ArchiveRestore, Building2, Eye, Layers, MoreHorizontal, PauseCircle, Pencil, PlayCircle, Plus, Power, Settings2, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -11,7 +11,7 @@ import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useListParams } from "@/components/app/use-list-params";
-import { SegmentedFilter } from "@/components/app/filter-bar";
+import { ACTION_COLOR, FilterTiles, RowActions } from "@/components/app/list-kit";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -40,29 +40,57 @@ export function CustomersView({ data, query, startCreating, plans, hideDemo }: {
         id: "name",
         header: "Customer",
         meta: { sortKey: "name" } as ColumnMeta,
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 font-medium">
-              {row.original.name}
-              {row.original.isDemo && <DemoTag />}
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <div className="flex min-w-0 items-center gap-3">
+              <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ background: avatarColor(c.name) }}>
+                {initials(c.name)}
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 truncate font-semibold">
+                  {c.name}
+                  {c.isDemo && <DemoTag />}
+                </div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {c.slug} · {c.members} user{c.members === 1 ? "" : "s"}
+                </div>
+              </div>
             </div>
-            <div className="text-xs text-muted-foreground">{row.original.slug}</div>
-          </div>
-        )
+          );
+        }
       },
-      { id: "members", header: "Users", meta: { sortKey: "members", className: "text-right tabular-nums" } as ColumnMeta, cell: ({ row }) => row.original.members },
+      {
+        id: "plan",
+        header: "Plan",
+        cell: ({ row }) =>
+          row.original.planName ? (
+            <span className="inline-flex flex-wrap items-center gap-1">
+              <span className="inline-flex h-6 items-center rounded-full bg-primary-soft px-2.5 text-xs font-semibold text-primary">{row.original.planName}</span>
+              {row.original.trialEndsAt && <span className="text-[11px] font-semibold text-warning">Trial</span>}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">No plan</span>
+          )
+      },
       {
         id: "devices",
         header: "Trackers",
-        meta: { sortKey: "devices", className: "text-right tabular-nums whitespace-nowrap" } as ColumnMeta,
-        cell: ({ row }) => (
-          <span>
-            {row.original.devices}
-            {row.original.devices > 0 && <span className="text-xs text-muted-foreground"> · {row.original.activeDevices} active</span>}
-          </span>
-        )
+        meta: { sortKey: "devices", className: "whitespace-nowrap" } as ColumnMeta,
+        cell: ({ row }) => {
+          const c = row.original;
+          const pct = c.devices ? Math.round((c.activeDevices / c.devices) * 100) : 0;
+          return (
+            <span className="flex items-center gap-2">
+              <b className="w-5 tabular-nums">{c.devices}</b>
+              <span aria-hidden="true" className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
+                <span className="block h-full rounded-full bg-success" style={{ width: `${pct}%` }} />
+              </span>
+              <span className="text-xs text-muted-foreground">{c.activeDevices} online</span>
+            </span>
+          );
+        }
       },
-      { id: "created", header: "Created", meta: { sortKey: "created", className: "whitespace-nowrap" } as ColumnMeta, cell: ({ row }) => <LocalDate iso={row.original.createdAt} /> },
       {
         id: "status",
         header: "Status",
@@ -75,51 +103,57 @@ export function CustomersView({ data, query, startCreating, plans, hideDemo }: {
           return c.devices === 0 ? <StatusBadge tone="warning" label="Setup: no trackers" /> : c.activeDevices > 0 ? <StatusBadge tone="success" label="Active" /> : <StatusBadge tone="neutral" label="No recent data" />;
         }
       },
+      { id: "created", header: "Since", meta: { sortKey: "created", className: "whitespace-nowrap" } as ColumnMeta, cell: ({ row }) => <LocalDate iso={row.original.createdAt} /> },
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
         meta: { className: "w-0 text-right" } as ColumnMeta,
-        cell: ({ row }) => (
-          <div onClick={(e) => e.stopPropagation()}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton label={`Actions for ${row.original.name}`} size="icon-sm" variant="ghost">
-                  <MoreHorizontal aria-hidden="true" />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem asChild>
-                  <Link href={`/admin/customers/${row.original.id}`}>
-                    <Settings2 aria-hidden="true" /> Manage
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void viewAs(row.original.id)}>
-                  <Eye aria-hidden="true" /> View as customer
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {row.original.status === "active" && (
-                  <DropdownMenuItem onSelect={() => setChanging({ customer: row.original, action: "suspend" })}>
-                    <PauseCircle aria-hidden="true" /> Suspend…
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <RowActions
+              actions={[
+                { icon: Eye, label: "View as customer", color: ACTION_COLOR.map, onClick: () => void viewAs(c.id) },
+                { icon: Pencil, label: "Manage", color: ACTION_COLOR.edit, href: `/admin/customers/${c.id}` }
+              ]}
+            >
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <IconButton label={`More for ${c.name}`} size="icon-sm" variant="ghost">
+                    <MoreHorizontal aria-hidden="true" />
+                  </IconButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  <DropdownMenuItem asChild>
+                    <Link href={`/admin/customers/${c.id}`}>
+                      <Settings2 aria-hidden="true" /> Manage
+                    </Link>
                   </DropdownMenuItem>
-                )}
-                {row.original.status === "suspended" && (
-                  <DropdownMenuItem onSelect={() => setChanging({ customer: row.original, action: "reactivate" })}>
-                    <PlayCircle aria-hidden="true" /> Reactivate…
-                  </DropdownMenuItem>
-                )}
-                {row.original.status === "archived" ? (
-                  <DropdownMenuItem onSelect={() => setChanging({ customer: row.original, action: "restore" })}>
-                    <ArchiveRestore aria-hidden="true" /> Restore…
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem className="text-danger" onSelect={() => setChanging({ customer: row.original, action: "archive" })}>
-                    <Archive aria-hidden="true" /> Archive…
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )
+                  <DropdownMenuSeparator />
+                  {c.status === "active" && (
+                    <DropdownMenuItem onSelect={() => setChanging({ customer: c, action: "suspend" })}>
+                      <PauseCircle aria-hidden="true" /> Suspend…
+                    </DropdownMenuItem>
+                  )}
+                  {c.status === "suspended" && (
+                    <DropdownMenuItem onSelect={() => setChanging({ customer: c, action: "reactivate" })}>
+                      <PlayCircle aria-hidden="true" /> Reactivate…
+                    </DropdownMenuItem>
+                  )}
+                  {c.status === "archived" ? (
+                    <DropdownMenuItem onSelect={() => setChanging({ customer: c, action: "restore" })}>
+                      <ArchiveRestore aria-hidden="true" /> Restore…
+                    </DropdownMenuItem>
+                  ) : (
+                    <DropdownMenuItem className="text-danger" onSelect={() => setChanging({ customer: c, action: "archive" })}>
+                      <Archive aria-hidden="true" /> Archive…
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </RowActions>
+          );
+        }
       }
     ],
     []
@@ -129,12 +163,26 @@ export function CustomersView({ data, query, startCreating, plans, hideDemo }: {
     <>
       <PageHeader
         title="Customers"
-        description="Every customer company on RIO GPS. Archived customers are kept and can be restored."
+        description={`${data.counts.current} customer compan${data.counts.current === 1 ? "y" : "ies"}. Archived customers are kept and can be restored.`}
         actions={
-          <Button onClick={() => setCreating(true)}>
-            <Plus /> New customer
-          </Button>
+          <>
+            <HideDemoToggle hidden={hideDemo} onDark />
+            <Button variant="secondary" onClick={() => setCreating(true)}>
+              <Plus /> New customer
+            </Button>
+          </>
         }
+      />
+      <FilterTiles
+        label="Customer status"
+        value={query.view}
+        onChange={(v) => set({ view: v === "current" ? null : v })}
+        options={[
+          { value: "current", label: "Current", count: data.counts.current, icon: Building2, color: "#0a2463" },
+          { value: "suspended", label: "Suspended", count: data.counts.suspended, icon: Power, color: "#b91c1c" },
+          { value: "archived", label: "Archived", count: data.counts.archived, icon: Layers, color: "#526079" },
+          { value: "all", label: "All", count: data.counts.all, icon: Users, color: "#6d28d9" }
+        ]}
       />
       <Card>
         <DataTable<CustomerRow>
@@ -154,18 +202,6 @@ export function CustomersView({ data, query, startCreating, plans, hideDemo }: {
           toolbar={
             <>
               <SearchInput value={query.search} onChange={(v) => set({ search: v })} placeholder="Search customers…" label="Search customers" className="sm:w-72" />
-              <SegmentedFilter
-                label="Customer status"
-                value={query.view}
-                onChange={(v) => set({ view: v === "current" ? null : v })}
-                options={[
-                  { value: "current", label: "Current", count: data.counts.current },
-                  { value: "suspended", label: "Suspended", count: data.counts.suspended },
-                  { value: "archived", label: "Archived", count: data.counts.archived },
-                  { value: "all", label: "All", count: data.counts.all }
-                ]}
-              />
-              <HideDemoToggle hidden={hideDemo} className="sm:ml-auto" />
             </>
           }
           mobileRow={(c) => (
@@ -217,4 +253,15 @@ export function CustomersView({ data, query, startCreating, plans, hideDemo }: {
       )}
     </>
   );
+}
+
+const AVATAR = ["#1d4ed8", "#0f766e", "#6d28d9", "#9a3412", "#be185d", "#0369a1", "#15803d", "#4338ca"];
+function avatarColor(name: string): string {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return `linear-gradient(150deg, ${AVATAR[h % AVATAR.length]}, #0a2463)`;
+}
+function initials(name: string): string {
+  const w = name.replace(/[^A-Za-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+  return ((w[0]?.[0] ?? "") + (w[1]?.[0] ?? w[0]?.[1] ?? "")).toUpperCase();
 }

@@ -278,3 +278,8 @@ export function timeline(track: LocationPoint[]): TimelineEvent[] {
   stop(cursor, pts.length - 1);
   return out;
 }
+
+/** Our own vehicle pictures: loaded by the fleet layer, never stubbed out as a missing map image. */
+export function isFleetIcon(id: string): boolean {
+  return /^(photo|top|pin|circle|square)-/.test(id);
+}

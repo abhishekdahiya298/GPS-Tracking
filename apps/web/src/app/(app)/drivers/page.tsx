@@ -6,13 +6,14 @@ import { DriverListQuery, listDriversPage } from "@/lib/drivers";
 import { parseListQuery } from "@/lib/fleet-list";
 import { requireTenantPage } from "@/lib/request-context";
 import { companyJoinCode } from "@/lib/signup";
+import { smsConfigured } from "@/lib/sms";
 import { DriversView } from "./drivers-view";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Drivers · RIO GPS" };
 
 export default async function DriversPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { ctx } = await requireTenantPage("/drivers");
+  const { ctx, orgName } = await requireTenantPage("/drivers");
   if (!contextHasPermission(ctx, "vehicles.read")) redirect("/dashboard");
   const sp = await searchParams;
   const q = parseListQuery(DriverListQuery, sp);
@@ -35,6 +36,8 @@ export default async function DriversPage({ searchParams }: { searchParams: Prom
   return (
     <DriversView
       joinCode={joinCode}
+      companyName={orgName}
+      smsReady={smsConfigured()}
       openInvite={sp.invite === "1"}
       data={data}
       query={q}

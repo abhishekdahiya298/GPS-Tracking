@@ -1,16 +1,18 @@
 "use client";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { readMapIcons, useMapIcons } from "@/lib/map-icons";
+import { isFleetIcon } from "@/app/(app)/map/fleet-model";
 import { DEFAULT_ORG_MAP_PREFS, type OrgMapPrefs } from "@/lib/org-map-prefs";
 import { placeText, useAddressState } from "@/lib/use-address";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Expand, ExternalLink, Gauge, History, IdCard, KeyRound, Layers, Locate, LocateFixed, MapPin, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Phone, Plus, Radio, Satellite, Share2, Shrink, Truck, Wifi, X } from "lucide-react";
+import { Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Expand, ExternalLink, Gauge, History, IdCard, KeyRound, Layers, Locate, LocateFixed, MapPin, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Phone, Plus, Radio, Satellite, Share2, Shrink, Truck, Users, Wifi, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { shapeRing } from "@rio-gps/core/geo";
 import { SearchInput } from "@/components/app/search-input";
+import { DriversMapPanel } from "./drivers-map-panel";
 import { EmptyState } from "@/components/app/states";
 import { Select } from "@/components/ui/input";
 import { VehiclePicture, vehiclePictureSrc } from "@/components/app/vehicle-picture";
@@ -219,8 +221,11 @@ export function LiveMap({
   platformAdmin = false,
   drivers = {},
   vehicleInfo = {},
-  mapPrefs = DEFAULT_ORG_MAP_PREFS
+  mapPrefs = DEFAULT_ORG_MAP_PREFS,
+  canDrivers = false
 }: {
+  /** Show the Vehicles | Drivers switch (needs drivers and locations access). */
+  canDrivers?: boolean;
   /** VIN, year/make/model and the company's list order of each vehicle (vehicle id → details). */
   vehicleInfo?: Record<string, VehicleInfo>;
   /** The company's map defaults (Settings → Map display). */
@@ -252,6 +257,8 @@ export function LiveMap({
   const fitted = useRef(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  // Vehicles | Drivers (A03). Drivers is always on: every active driver, with or without a load.
+  const [mode, setMode] = useState<"vehicles" | "drivers">(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("view") === "drivers" ? "drivers" : "vehicles"));
   const [historyFor, setHistoryFor] = useState<string | null>(null);
   const [deepLink, setDeepLink] = useState<{ device: string; from: string; to: string } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -340,7 +347,7 @@ export function LiveMap({
     m.addControl(new maplibregl.ScaleControl({ maxWidth: 100, unit: u.speed === "mph" ? "imperial" : "metric" }), "bottom-right");
     m.on("styleimagemissing", (e) => {
       // The OpenFreeMap styles reference a few icons their sprites don't ship.
-      if (!m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+      if (!isFleetIcon(e.id) && !m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
     });
     // Panning by hand means "let me look around": stop following.
     m.on("dragstart", () => setFollow(false));
@@ -746,6 +753,37 @@ export function LiveMap({
         </span>
       </div>
 
+      {canDrivers && !historyFor && (
+        <div role="tablist" aria-label="Show" className="mx-3 mb-2 grid grid-cols-2 gap-1 rounded-xl bg-muted p-1">
+          {(
+            [
+              ["vehicles", "Vehicles", "On trackers", Truck],
+              ["drivers", "Drivers", "Always on", Users]
+            ] as const
+          ).map(([k, label, hint, Icon]) => {
+            const on = mode === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => setMode(k)}
+                className={cn("flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border-0 px-2 py-1.5 text-left", on ? "bg-[linear-gradient(135deg,#1849c6,#0a2463)] text-white shadow-card" : "bg-transparent text-foreground hover:bg-background/60")}
+              >
+                <span className={cn("grid size-7 shrink-0 place-items-center rounded-md", on ? "bg-white/15" : "bg-background text-primary")}>
+                  <Icon className="size-4" aria-hidden="true" />
+                </span>
+                <span className="min-w-0 leading-tight">
+                  <b className="block truncate text-[13px]">{label}</b>
+                  <span className={cn("block truncate text-[11px]", on ? "text-white/75" : "text-muted-foreground")}>{hint}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {historyFor && historyDevice ? (
         <div className="min-h-0 flex-1 overflow-auto border-t border-border">
           <HistoryPanel
@@ -760,6 +798,8 @@ export function LiveMap({
             }}
           />
         </div>
+      ) : mode === "drivers" && canDrivers ? (
+        <DriversMapPanel map={map} devices={devices} version={version} onFocus={focus} />
       ) : (
         <>
           <div className="grid grid-cols-[minmax(0,1fr)] gap-2 border-b border-border bg-gradient-to-b from-background to-canvas px-3 pb-2.5">

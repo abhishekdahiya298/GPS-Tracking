@@ -1,6 +1,8 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { BadgeAlert, Car, History, IdCard, Layers, Map as MapIcon, Navigation, Pencil, Phone, Plus, Share2, Trash2, UserCheck, UserMinus, UserX, Users } from "lucide-react";
+import { BadgeAlert, Car, History, IdCard, Layers, Map as MapIcon, MapPinOff, Navigation, Pencil, Phone, Plus, Send, Smartphone, SmartphoneNfc, Trash2, UserCheck, UserMinus, UserPlus, UserX, Users } from "lucide-react";
+import { AppStateChip, Battery } from "./driver-app-bits";
+import { InviteDriversDialog } from "./invite-drivers-dialog";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
@@ -58,8 +60,8 @@ export function DriverAvatar({ name, className = "size-9 text-sm" }: { name: str
 }
 
 /** Drivers and the vehicle each one drives now, with quick assign / reassign. */
-export function DriversView({ data, query, can, vehicles, joinCode = null, openInvite = false }: { data: Data; query: DriverListQuery; can: Can; vehicles: VehicleOption[]; joinCode?: string | null; openInvite?: boolean }) {
-  const [invite, setInvite] = useState(openInvite);
+export function DriversView({ data, query, can, vehicles, joinCode = null, openInvite = false, companyName, smsReady }: { data: Data; query: DriverListQuery; can: Can; vehicles: VehicleOption[]; joinCode?: string | null; openInvite?: boolean; companyName: string; smsReady: boolean }) {
+  const [invite, setInvite] = useState<null | { prefill?: { id: string; name: string; phone: string | null }[] }>(openInvite ? {} : null);
   const u = useUnits();
   const { set, refresh, pending } = useListParams();
   const [form, setForm] = useState<{ driver: DriverRow | null } | null>(null);
@@ -77,7 +79,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {
         id: "name",
         header: "Driver",
-        meta: { sortKey: "name", width: "30%" } satisfies ColumnMeta,
+        meta: { sortKey: "name", width: "26%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => (
           <div className={cn("flex min-w-0 items-center gap-3", d.status === "inactive" && "opacity-60")}>
             <span className="relative shrink-0">
@@ -106,7 +108,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {
         id: "vehicle",
         header: "Vehicle now",
-        meta: { sortKey: "vehicle", width: "27%" } satisfies ColumnMeta,
+        meta: { sortKey: "vehicle", width: "24%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) =>
           d.vehicle ? (
             <Link href={`/vehicles/${d.vehicle.id}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-2.5 text-foreground no-underline hover:underline" title={VEHICLE_TYPE_LABEL[asVehicleType(d.vehicle.type)]}>
@@ -137,21 +139,21 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {
         id: "now",
         header: "Now",
-        meta: { width: "16%" } satisfies ColumnMeta,
+        meta: { width: "19%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => {
           if (d.status === "inactive") return <span className="text-xs text-muted-foreground">Off</span>;
-          if (!d.vehicle) return <span className="text-xs text-muted-foreground">No vehicle</span>;
-          if (!d.vehicle.deviceId) return <span className="text-xs text-muted-foreground">No GPS device</span>;
-          return d.vehicle.moving ? (
-            <StatusChip status="moving" label={`Driving · ${u.fmtSpeed(d.vehicle.speedKph ?? 0)}`} />
-          ) : (
-            <span className="grid gap-0.5">
-              <StatusChip status="stopped" label="Not driving" />
-              {d.vehicle.lastSeenAt && (
-                <span className="text-[11px] text-muted-foreground">
-                  <RelativeTime iso={d.vehicle.lastSeenAt} />
-                </span>
-              )}
+          const app = (
+            <span className="flex items-center gap-1.5">
+              <AppStateChip state={d.app.state} className="h-5 px-1.5 text-[11px]" />
+              {(d.app.state === "sharing" || d.app.state === "stale") && <Battery pct={d.app.batteryPct} charging={d.app.charging} />}
+            </span>
+          );
+          if (d.vehicle?.moving) return <span className="grid gap-1"><StatusChip status="moving" label={`Driving · ${u.fmtSpeed(d.vehicle.speedKph ?? 0)}`} />{app}</span>;
+          if (!d.vehicle?.deviceId && d.app.state === "sharing" && (d.app.speedKph ?? 0) >= 5) return <span className="grid gap-1"><StatusChip status="moving" label={`Driving · ${u.fmtSpeed(d.app.speedKph ?? 0)}`} />{app}</span>;
+          return (
+            <span className="grid gap-1">
+              {d.vehicle?.deviceId ? <StatusChip status="stopped" label="Not driving" /> : !d.vehicle ? <span className="text-xs text-muted-foreground">No load · no truck</span> : null}
+              {app}
             </span>
           );
         }
@@ -159,7 +161,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {
         id: "license",
         header: "Licence",
-        meta: { sortKey: "license", hideable: true, label: "Licence", width: "15%" } satisfies ColumnMeta,
+        meta: { sortKey: "license", hideable: true, label: "Licence", width: "13%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => {
           const days = licenseDays(d.licenseExpiresOn);
           if (days == null) return <span className="text-xs text-muted-foreground">{d.licenseNumber ?? "—"}</span>;
@@ -180,11 +182,12 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {
         id: "actions",
         header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "whitespace-nowrap text-right", width: "12%" } satisfies ColumnMeta,
+        meta: { className: "whitespace-nowrap text-right", width: "18%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => (
           <RowActions
             actions={[
-              { icon: MapIcon, label: `Show ${d.vehicle?.name ?? ""} on the map`, color: ACTION_COLOR.map, href: d.vehicle?.deviceId ? `/map?focus=${d.vehicle.deviceId}` : undefined, hidden: !can.map || !d.vehicle?.deviceId },
+              { icon: MapIcon, label: `Show ${d.name} on the map`, color: ACTION_COLOR.map, href: d.vehicle?.deviceId ? `/map?focus=${d.vehicle.deviceId}` : d.app.phoneDeviceId ? `/map?focus=${d.app.phoneDeviceId}` : undefined, hidden: !can.map || !(d.vehicle?.deviceId || (d.app.phoneDeviceId && d.app.state !== "no_app")) },
+              { icon: Send, label: "Send app invite", color: "#c2410c", onClick: () => setInvite({ prefill: [{ id: d.id, name: d.name, phone: d.phone }] }), hidden: !can.create || d.status !== "active" || (d.app.state !== "no_app" && d.app.state !== "signed_out") },
               {
                 icon: History,
                 label: "Today's trips",
@@ -208,15 +211,13 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
     <>
       <PageHeader
         title="Drivers"
-        description="Who drives which vehicle, and whether they are on the road now."
+        description={`${c.active ?? 0} active · ${c.sharing ?? 0} sharing location${c.location_off ? ` · ${c.location_off} location off` : ""}${c.no_app ? ` · ${c.no_app} not in the app` : ""}`}
         actions={
           can.create && (
             <div className="flex flex-wrap gap-2">
-              {joinCode && (
-                <Button variant="secondary" onClick={() => setInvite(true)}>
-                  <Share2 /> Invite drivers
-                </Button>
-              )}
+              <Button variant="secondary" onClick={() => setInvite({})}>
+                <UserPlus /> Invite drivers
+              </Button>
               <Button onClick={() => setForm({ driver: null })}>
                 <Plus /> Add driver
               </Button>
@@ -224,7 +225,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
           )
         }
       />
-      {invite && joinCode && <InviteDriversDialog code={joinCode} onClose={() => setInvite(false)} />}
+      {invite && <InviteDriversDialog companyName={companyName} code={joinCode} vehicles={vehicles} smsReady={smsReady} prefill={invite.prefill} onClose={() => setInvite(null)} onDone={refresh} />}
       <FilterTiles
         label="Filter drivers"
         value={query.state}
@@ -232,8 +233,10 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
         options={[
           { value: "all", label: "All drivers", count: c.all ?? 0, icon: Layers, color: "#133a8f" },
           { value: "active", label: "Active", count: c.active ?? 0, icon: UserCheck, color: "#15803d" },
+          { value: "sharing", label: "Sharing", count: c.sharing ?? 0, icon: SmartphoneNfc, color: "#0369a1" },
+          { value: "location_off", label: "Location off", count: c.location_off ?? 0, icon: MapPinOff, color: "#b91c1c" },
+          { value: "no_app", label: "No app yet", count: c.no_app ?? 0, icon: Smartphone, color: "#c2410c" },
           { value: "driving", label: "Driving now", count: c.driving ?? 0, icon: Navigation, color: "#15803d" },
-          { value: "assigned", label: "With a vehicle", count: c.assigned ?? 0, icon: UserCheck, color: "#0f766e" },
           { value: "unassigned", label: "No vehicle", count: c.unassigned ?? 0, icon: Users, color: "#b45309" },
           { value: "license", label: "Licence due", count: c.license ?? 0, icon: BadgeAlert, color: "#b91c1c" },
           { value: "inactive", label: "Inactive", count: c.inactive ?? 0, icon: UserX, color: "#475569" }
@@ -256,7 +259,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
           rowLabel={(d) => `Open ${d.name}'s record`}
           loading={pending}
           layout="fixed"
-          minWidth={760}
+          minWidth={980}
           density={density}
           toolbar={
             <>
@@ -298,7 +301,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {/* The record opens as a drawer over the right of the page, so the table keeps its full width. */}
       {selected && (
         <div className="fixed inset-x-2 bottom-2 top-16 z-40 overflow-y-auto overscroll-contain rounded-2xl animate-in sm:left-auto sm:right-4 sm:top-[72px] sm:w-[400px]">
-          <DriverRecordPanel driver={selected} canUpdate={can.update} onEdit={() => setForm({ driver: selected })} onClose={() => setSelectedId(null)} onChanged={refresh} />
+          <DriverRecordPanel driver={selected} canUpdate={can.update} onEdit={() => setForm({ driver: selected })} onInvite={can.create ? () => setInvite({ prefill: [{ id: selected.id, name: selected.name, phone: selected.phone }] }) : undefined} onClose={() => setSelectedId(null)} onChanged={refresh} />
         </div>
       )}
       {form && <DriverFormDialog open onOpenChange={(o) => !o && setForm(null)} driver={form.driver} vehicles={vehicles} onSaved={refresh} />}
@@ -338,45 +341,5 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
         }}
       />
     </>
-  );
-}
-
-/** Drivers join with the company code (or the link that carries it). */
-function InviteDriversDialog({ code, onClose }: { code: string; onClose: () => void }) {
-  const link = typeof window === "undefined" ? `/signup?code=${encodeURIComponent(code)}` : `${window.location.origin}/signup?code=${encodeURIComponent(code)}`;
-  const text = `Join our company on RIO GPS: ${link} (company code ${code})`;
-  const copy = async (v: string) => {
-    try {
-      await navigator.clipboard.writeText(v);
-      toast.success("Copied");
-    } catch {
-      toast.error("Couldn't copy. Select the text and copy it.");
-    }
-  };
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title="Invite drivers" description="Drivers open the link (or type the code at Create account → I'm a driver). They're added to your Drivers list after confirming their phone." className="max-w-md">
-        <div className="grid gap-3 px-5 py-4">
-          <div className="grid justify-items-center gap-1 rounded-xl bg-muted/60 p-4 text-center">
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Company code</span>
-            <b className="text-2xl tracking-wider">{code}</b>
-          </div>
-          <div className="flex gap-2">
-            <Input readOnly value={link} aria-label="Invite link" onFocus={(e) => e.currentTarget.select()} />
-            <Button variant="secondary" onClick={() => void copy(link)}>
-              Copy link
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <a className={buttonVariants({ variant: "secondary", size: "sm" })} href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer">
-              WhatsApp
-            </a>
-            <a className={buttonVariants({ variant: "secondary", size: "sm" })} href={`sms:?&body=${encodeURIComponent(text)}`}>
-              Text message
-            </a>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }

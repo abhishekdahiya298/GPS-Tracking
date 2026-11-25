@@ -219,3 +219,10 @@ html [data-sonner-toaster][data-sonner-theme="light"] {
 @utility auth-dash { animation: auth-dash 1.4s linear infinite; }
 @utility auth-float { animation: auth-float 6s ease-in-out infinite; }
 @utility auth-draw { stroke-dasharray: 1; animation: auth-draw 2.4s 400ms cubic-bezier(0.4, 0, 0.2, 1) both; }
+
+/* Live map → Drivers: avatar pins over the vehicle icons (A03). */
+.driver-pin { display: grid; justify-items: center; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; }
+.driver-pin-ring { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 9999px; border: 3px solid #15803d; background: linear-gradient(150deg, #2456d6, #0a2463); color: #fff; font: 700 13px/1 var(--font-sans, system-ui); box-shadow: 0 0 0 2px #fff, 0 6px 14px -4px rgb(3 12 40 / 0.5); }
+.driver-pin[data-selected="true"] .driver-pin-ring { transform: scale(1.12); }
+.driver-pin-tag { display: grid; justify-items: center; padding: 3px 8px; border-radius: 8px; border-top: 3px solid #15803d; background: #fff; color: #0a2463; font: 700 11.5px/1.25 var(--font-sans, system-ui); white-space: nowrap; box-shadow: 0 4px 10px -4px rgb(3 12 40 / 0.4); }
+.driver-pin-tag small { font-weight: 500; font-size: 10.5px; color: #5b6475; }

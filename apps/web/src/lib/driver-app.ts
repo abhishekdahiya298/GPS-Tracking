@@ -414,3 +414,43 @@ export async function listDriverAppStatus(organizationId: string, driverIds?: st
     inviteSentAt: iso(r.inviteSentAt)
   }));
 }
+
+export interface MapDriverDto {
+  id: string;
+  name: string;
+  phone: string | null;
+  vehicle: { id: string; name: string } | null;
+  /** The device whose position stands for the driver: the truck's tracker first, else the phone. */
+  deviceId: string | null;
+  source: "tracker" | "phone" | null;
+  app: DriverAppStatusDto;
+}
+
+/** Every active driver for the live map's Drivers view (A03): where each one is and their app. */
+export async function driversForMap(organizationId: string): Promise<MapDriverDto[]> {
+  const rows = await getDb().execute<{ id: string; name: string; phone: string | null; vehicle_id: string | null; vehicle_name: string | null; tracker_id: string | null; tracker_kind: string | null; phone_device_id: string | null }>(sql`
+    select d.id, d.name, d.phone, v.id as vehicle_id, v.name as vehicle_name, a.device_id as tracker_id, g.kind as tracker_kind, d.phone_device_id
+    from drivers d
+    left join vehicles v on v.id = d.vehicle_id and v.organization_id = d.organization_id
+    left join device_assignments a on a.vehicle_id = v.id and a.unassigned_at is null and a.organization_id = d.organization_id
+    left join gps_devices g on g.id = a.device_id
+    where d.organization_id = ${organizationId} and d.status = 'active'
+    order by lower(d.name)`);
+  const status = new Map((await listDriverAppStatus(organizationId)).map((s) => [s.driverId, s]));
+  return rows.map((r) => {
+    const app = status.get(r.id)!;
+    const tracker = r.tracker_id && r.tracker_kind === "tracker" ? r.tracker_id : null;
+    const phoneDev = r.phone_device_id && app.state !== "no_app" ? r.phone_device_id : null;
+    // A phone that stands in for a truck without a tracker is that truck's device.
+    const deviceId = tracker ?? (r.tracker_id && r.tracker_kind === "phone" ? r.tracker_id : phoneDev);
+    return {
+      id: r.id,
+      name: r.name,
+      phone: r.phone,
+      vehicle: r.vehicle_id ? { id: r.vehicle_id, name: r.vehicle_name ?? "" } : null,
+      deviceId,
+      source: tracker ? "tracker" : deviceId ? "phone" : null,
+      app
+    };
+  });
+}

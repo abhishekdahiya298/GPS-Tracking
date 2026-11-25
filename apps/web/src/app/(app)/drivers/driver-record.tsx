@@ -1,5 +1,7 @@
 "use client";
-import { AlertTriangle, Bell, History, Pencil, X } from "lucide-react";
+import { AlertTriangle, Bell, History, LogOut, MapPin, Pencil, Send, X } from "lucide-react";
+import { RelativeTime } from "@/components/app/local-time";
+import { APP_STATE, AppStateChip, Battery } from "./driver-app-bits";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useTime } from "@/components/app/time-context";
@@ -21,7 +23,7 @@ function hm(seconds: number) {
 const days = (a: string, b: string | null) => Math.max(1, Math.round(((b ? Date.parse(b) : Date.now()) - Date.parse(a)) / 86_400_000));
 
 /** A driver's record beside the list: active switch, licence, last 7 days and every vehicle they drove. */
-export function DriverRecordPanel({ driver, canUpdate, onEdit, onClose, onChanged }: { driver: DriverRow; canUpdate: boolean; onEdit: () => void; onClose: () => void; onChanged: () => void }) {
+export function DriverRecordPanel({ driver, canUpdate, onEdit, onInvite, onClose, onChanged }: { driver: DriverRow; canUpdate: boolean; onEdit: () => void; onInvite?: () => void; onClose: () => void; onChanged: () => void }) {
   const u = useUnits();
   const time = useTime();
   const [rec, setRec] = useState<DriverRecord | null>(null);
@@ -89,6 +91,8 @@ export function DriverRecordPanel({ driver, canUpdate, onEdit, onClose, onChange
             <span className="block text-xs text-muted-foreground">{active ? "Turn off when someone leaves. Their trips and history are kept." : "Can't be assigned to a vehicle until turned on again."}</span>
           </span>
         </label>
+
+        {active && <DriverAppCard driver={driver} canUpdate={canUpdate} onInvite={onInvite} onChanged={onChanged} />}
 
         <div className="grid grid-cols-2 gap-1.5">
           {facts.map(([l, v]) => (
@@ -204,5 +208,89 @@ export function DriverRecordPanel({ driver, canUpdate, onEdit, onClose, onChange
         )}
       </div>
     </aside>
+  );
+}
+
+/** The RIO GPS app on the driver's phone: whether it is sharing, battery, and sign out (A10). */
+function DriverAppCard({ driver, canUpdate, onInvite, onChanged }: { driver: DriverRow; canUpdate: boolean; onInvite?: () => void; onChanged: () => void }) {
+  const a = driver.app;
+  const s = APP_STATE[a.state];
+  const [busy, setBusy] = useState(false);
+  const inApp = a.state !== "no_app" && a.state !== "signed_out";
+  async function signOut() {
+    setBusy(true);
+    try {
+      await api(`/api/drivers/${driver.id}/app-signout`, { method: "POST" });
+      toast.success(`${driver.name} is signed out of the app.`);
+      onChanged();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const mapId = driver.vehicle?.deviceId ?? a.phoneDeviceId;
+  return (
+    <section aria-label="Driver app" className="grid gap-2.5 rounded-xl p-3" style={{ background: `linear-gradient(120deg, var(--color-background) 30%, color-mix(in srgb, ${s.color} 10%, var(--color-background)))`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${s.color} 28%, transparent)` }}>
+      <div className="flex items-start gap-2.5">
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg text-white" style={{ background: s.color }}>
+          <s.Icon className="size-[18px]" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <b className="block text-[13px]">Driver app</b>
+          <span className="block text-xs text-muted-foreground">
+            {inApp ? (
+              <>
+                {a.lastReportAt ? (
+                  <>
+                    Last update <RelativeTime iso={a.lastReportAt} />
+                  </>
+                ) : (
+                  "Signed in"
+                )}
+              </>
+            ) : a.inviteSentAt ? (
+              <>
+                Invite sent <RelativeTime iso={a.inviteSentAt} />
+              </>
+            ) : (
+              s.hint
+            )}
+          </span>
+        </span>
+        <AppStateChip state={a.state} />
+      </div>
+      {inApp && (
+        <div className="grid grid-cols-2 gap-1.5">
+          <div className="min-w-0 rounded-lg bg-background/80 px-2.5 py-1.5 shadow-[inset_0_0_0_1px_var(--color-border)]">
+            <span className="block text-[11px] text-muted-foreground">Location from</span>
+            <b className="block truncate text-[13px]">{driver.vehicle?.deviceId ? `${driver.vehicle.name} tracker` : "Driver's phone"}</b>
+          </div>
+          <div className="min-w-0 rounded-lg bg-background/80 px-2.5 py-1.5 shadow-[inset_0_0_0_1px_var(--color-border)]">
+            <span className="block text-[11px] text-muted-foreground">Phone battery</span>
+            {a.batteryPct != null ? <Battery pct={a.batteryPct} charging={a.charging} className="text-[13px]" /> : <b className="block text-[13px]">—</b>}
+          </div>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {mapId && inApp && (
+          <Button asChild size="sm" variant="secondary" className="flex-1">
+            <Link href={`/map?focus=${mapId}`}>
+              <MapPin /> See on map
+            </Link>
+          </Button>
+        )}
+        {canUpdate && onInvite && !inApp && (
+          <Button size="sm" className="flex-1" onClick={onInvite}>
+            <Send /> {a.inviteSentAt ? "Send a new invite" : "Send app invite"}
+          </Button>
+        )}
+        {canUpdate && inApp && (
+          <Button size="sm" variant="secondary" loading={busy} onClick={() => void signOut()} title="Sign the driver out of the app on every phone">
+            <LogOut /> Sign out
+          </Button>
+        )}
+      </div>
+    </section>
   );
 }

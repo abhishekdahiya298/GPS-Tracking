@@ -6,6 +6,7 @@
  */
 import "maplibre-gl/dist/maplibre-gl.css";
 import { readMapIcons, useMapIcons } from "@/lib/map-icons";
+import { isFleetIcon } from "@/app/(app)/map/fleet-model";
 import type { Map as MlMap, Popup } from "maplibre-gl";
 import { preferredStyleUrl } from "@/lib/map-style";
 import { Maximize2, Radio } from "lucide-react";
@@ -154,7 +155,7 @@ function GlanceMap({ offlineSeconds }: { offlineSeconds: number }) {
         m.getCanvas().setAttribute("aria-label", "Small map of the fleet. Open the live map for the full vehicle list.");
         m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
         m.on("styleimagemissing", (e) => {
-          if (!m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
+          if (!isFleetIcon(e.id) && !m.hasImage(e.id)) m.addImage(e.id, { width: 1, height: 1, data: new Uint8Array(4) });
         });
         m.on("error", () => {
           if (!m.isStyleLoaded()) setFailed(true);
