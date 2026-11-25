@@ -7,6 +7,10 @@ import { Appearance } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AlertsProvider } from "@/alerts/AlertsProvider";
 import { SessionProvider, useSession } from "@/auth/SessionProvider";
+import { DriverDataProvider } from "@/driver/DriverData";
+import { DriverSessionProvider, useDriverSession } from "@/driver/DriverSession";
+// Defines the background location task; it must exist before the phone wakes the app for it.
+import "@/driver/tracking";
 import { FleetProvider } from "@/fleet/FleetProvider";
 import { routeForNotification } from "@/push/model";
 import { refreshPushRegistration } from "@/push/service";
@@ -34,8 +38,15 @@ const pushedOptions = () => ({
 
 function Screens() {
   const { state } = useSession();
-  const ready = state.status !== "loading";
-  const signedIn = state.status === "signedIn";
+  const driver = useDriverSession();
+  const ds = driver.state;
+  const ready = state.status !== "loading" && ds.status !== "loading";
+  // A phone is signed in either as a driver (driver tabs) or as an owner/dispatcher (fleet tabs).
+  const driverIn = ds.status === "signedIn";
+  const setupDone = ds.status === "signedIn" && ds.setupDone;
+  const ended = ds.status === "ended";
+  const signedIn = state.status === "signedIn" && !driverIn && !ended;
+  const signedOut = !signedIn && !driverIn && !ended;
 
   useEffect(() => {
     if (ready) void SplashScreen.hideAsync();
@@ -46,15 +57,32 @@ function Screens() {
     if (signedIn) void refreshPushRegistration();
   }, [signedIn]);
 
-  // A tapped notification (also the one that opened the app) leads to the Alerts tab.
+  // A tapped notification (also the one that opened the app): alerts for owners; for drivers,
+  // the company's "turn on location" request (D14) or a sign-out notice.
   const router = useRouter();
   const tapped = Notifications.useLastNotificationResponse();
   useEffect(() => {
-    if (!signedIn || !tapped) return;
-    const route = routeForNotification(tapped.notification.request.content.data);
-    if (route) router.navigate(route);
+    if (!tapped) return;
+    const data = (tapped.notification.request.content.data ?? {}) as Record<string, unknown>;
+    if (driverIn) {
+      if (data.type === "location_request") router.navigate({ pathname: "/driver/request", params: { from: String(data.from ?? ""), message: String(data.message ?? ""), at: String(data.at ?? "") } });
+      else void driver.refresh();
+    } else if (signedIn) {
+      const route = routeForNotification(data);
+      if (route) router.navigate(route);
+    } else return;
     void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
-  }, [signedIn, tapped, router]);
+  }, [signedIn, driverIn, tapped, router]);
+
+  // A request or sign-out notice arriving while a driver has the app open.
+  useEffect(() => {
+    if (!driverIn) return;
+    const sub = Notifications.addNotificationReceivedListener((n) => {
+      const data = (n.request.content.data ?? {}) as Record<string, unknown>;
+      if (data.type === "driver_signed_out") void driver.refresh();
+    });
+    return () => sub.remove();
+  }, [driverIn]);
 
   // The look changed (Account, or the phone went dark): draw every screen again in the new
   // colours, at once and without restarting the app. Session and fleet data stay as they are.
@@ -72,13 +100,29 @@ function Screens() {
         <Stack.Screen name="alert/[id]" options={{ ...pushed, title: "Alert" }} />
         <Stack.Screen name="password" options={{ ...pushed, title: "Change password" }} />
       </Stack.Protected>
-      <Stack.Protected guard={!signedIn}>
+      <Stack.Protected guard={driverIn && setupDone}>
+        <Stack.Screen name="(driver)" />
+        <Stack.Screen name="driver/request" options={{ presentation: "modal" }} />
+      </Stack.Protected>
+      <Stack.Protected guard={driverIn && !setupDone}>
+        <Stack.Screen name="driver/setup" />
+      </Stack.Protected>
+      <Stack.Protected guard={ended}>
+        <Stack.Screen name="driver/ended" />
+      </Stack.Protected>
+      <Stack.Protected guard={signedOut}>
+        <Stack.Screen name="welcome" />
         <Stack.Screen name="login" />
         <Stack.Screen name="forgot" />
+        <Stack.Screen name="signup/index" />
+        <Stack.Screen name="signup/details" />
+        <Stack.Screen name="signup/code" />
+        <Stack.Screen name="driver/index" />
       </Stack.Protected>
     </Stack>
   );
   // Fleet and alert data are only loaded, and only kept, while someone is signed in.
+  if (driverIn) return <DriverDataProvider>{stack}</DriverDataProvider>;
   return signedIn ? (
     <FleetProvider>
       <AlertsProvider>{stack}</AlertsProvider>
@@ -104,7 +148,9 @@ export default function RootLayout() {
       {/* Before anything else: an app version the server no longer supports can't be used. */}
       <UpdateGate>
         <SessionProvider>
-          <Screens />
+          <DriverSessionProvider>
+            <Screens />
+          </DriverSessionProvider>
         </SessionProvider>
       </UpdateGate>
     </SafeAreaProvider>
