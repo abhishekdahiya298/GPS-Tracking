@@ -14,7 +14,8 @@ export const metadata = { title: "Drivers · RIO GPS" };
 export default async function DriversPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { ctx } = await requireTenantPage("/drivers");
   if (!contextHasPermission(ctx, "vehicles.read")) redirect("/dashboard");
-  const q = parseListQuery(DriverListQuery, await searchParams);
+  const sp = await searchParams;
+  const q = parseListQuery(DriverListQuery, sp);
   const [data, vehicles] = await Promise.all([
     listDriversPage(ctx.organizationId, q),
     // The vehicle picker: every active vehicle, with who drives it now.
@@ -34,6 +35,7 @@ export default async function DriversPage({ searchParams }: { searchParams: Prom
   return (
     <DriversView
       joinCode={joinCode}
+      openInvite={sp.invite === "1"}
       data={data}
       query={q}
       can={can}

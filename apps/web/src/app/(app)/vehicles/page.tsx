@@ -13,7 +13,8 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
   const rc = await requireTenantPage("/vehicles");
   const { ctx } = rc;
   if (!contextHasPermission(ctx, "vehicles.read")) redirect("/dashboard");
-  const q = parseListQuery(VehicleListQuery, await searchParams);
+  const sp = await searchParams;
+  const q = parseListQuery(VehicleListQuery, sp);
   const groups = await listGroups(ctx.organizationId);
   // A group that no longer exists (deleted, or an id from elsewhere) is not a filter.
   if (q.group && !groups.some((g) => g.id === q.group)) q.group = undefined;
@@ -27,5 +28,5 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
     unassign: contextHasPermission(ctx, "devices.unassign"),
     map: contextHasPermission(ctx, "locations.read")
   };
-  return <VehiclesView data={data} query={q} can={can} groups={groups} />;
+  return <VehiclesView data={data} query={q} can={can} groups={groups} openNew={sp.new === "1" && can.create} />;
 }

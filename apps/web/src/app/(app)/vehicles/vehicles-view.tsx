@@ -57,12 +57,12 @@ const SILENT = new Set<string>(["offline", "never_seen", "inactive", "parked"]);
 
 type Can = { create: boolean; update: boolean; remove: boolean; assign: boolean; unassign: boolean; map: boolean };
 
-export function VehiclesView({ data, query, can, groups }: { data: Page<VehicleRow, VehicleState>; query: VehicleListQuery; can: Can; groups: GroupDto[] }) {
+export function VehiclesView({ data, query, can, groups, openNew = false }: { data: Page<VehicleRow, VehicleState>; query: VehicleListQuery; can: Can; groups: GroupDto[]; openNew?: boolean }) {
   const u = useUnits();
   const t = useTime();
   const router = useRouter();
   const { set, refresh, pending } = useListParams();
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(openNew);
   const [editing, setEditing] = useState<EditableVehicle | null>(null);
   const [assignFor, setAssignFor] = useState<VehicleRow | null>(null);
   const [deleting, setDeleting] = useState<VehicleRow | null>(null);

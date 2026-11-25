@@ -58,8 +58,8 @@ export function DriverAvatar({ name, className = "size-9 text-sm" }: { name: str
 }
 
 /** Drivers and the vehicle each one drives now, with quick assign / reassign. */
-export function DriversView({ data, query, can, vehicles, joinCode = null }: { data: Data; query: DriverListQuery; can: Can; vehicles: VehicleOption[]; joinCode?: string | null }) {
-  const [invite, setInvite] = useState(false);
+export function DriversView({ data, query, can, vehicles, joinCode = null, openInvite = false }: { data: Data; query: DriverListQuery; can: Can; vehicles: VehicleOption[]; joinCode?: string | null; openInvite?: boolean }) {
+  const [invite, setInvite] = useState(openInvite);
   const u = useUnits();
   const { set, refresh, pending } = useListParams();
   const [form, setForm] = useState<{ driver: DriverRow | null } | null>(null);
