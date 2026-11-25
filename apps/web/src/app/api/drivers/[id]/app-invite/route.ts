@@ -26,7 +26,7 @@ export async function POST(request: Request, { params }: Params) {
     let texted = false;
     if (body.text && smsConfigured()) {
       const [d] = await getDb().select({ phone: schema.drivers.phone, org: schema.organizations.name }).from(schema.drivers).innerJoin(schema.organizations, eq(schema.organizations.id, schema.drivers.organizationId)).where(and(eq(schema.drivers.id, id), eq(schema.drivers.organizationId, ctx.organizationId)));
-      if (d?.phone) texted = (await sendSms(d.phone, `${d.org} invited you to the RIO GPS driver app. Open this link on your phone to sign in: ${invite.url}`)).sent;
+      if (d?.phone) texted = (await sendSms(d.phone, `${d.org} invited you to the RIO GPS driver app. Open this link on your phone to sign in: ${invite.url} Reply STOP to opt out.`)).sent;
     }
     return NextResponse.json({ invite, texted, smsReady: smsConfigured() }, { status: 201 });
   } catch (err) {

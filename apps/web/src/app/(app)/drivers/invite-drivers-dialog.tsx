@@ -5,7 +5,7 @@ import { encode } from "uqr";
 import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants, IconButton } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Input, Select } from "@/components/ui/input";
+import { Checkbox, Input, Select } from "@/components/ui/input";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
@@ -52,11 +52,16 @@ export function InviteDriversDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<Sent[] | null>(null);
+  const [consent, setConsent] = useState(false);
   const filled = rows.filter((r) => r.name.trim() && r.phone.trim());
   const count = filled.length + (prefill?.length ?? 0);
   const free = vehicles.filter((v) => !v.driver);
 
   async function submit() {
+    if (smsReady && !consent) {
+      setError("Tick that the drivers agreed to receive a text, or use Share link instead.");
+      return;
+    }
     setBusy(true);
     setError(null);
     const out: Sent[] = [];
@@ -188,6 +193,15 @@ export function InviteDriversDialog({
                   <button type="button" onClick={() => setRows([...rows, blank()])} className="inline-flex w-fit cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-sm font-semibold text-primary">
                     <Plus className="size-4" aria-hidden="true" /> Add {rows.length || prefill?.length ? "another" : "a"} driver
                   </button>
+                  {smsReady && count > 0 && (
+                    <label className="mt-1 flex items-start gap-2 text-sm">
+                      <Checkbox checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5" />
+                      <span>
+                        {count === 1 ? "This driver" : "These drivers"} agreed to receive a text from us with their app link.
+                        <span className="block text-xs text-muted-foreground">One text per driver. Msg &amp; data rates may apply. They can reply STOP to opt out or HELP for help.</span>
+                      </span>
+                    </label>
+                  )}
                   {!smsReady && <p className="m-0 text-xs text-muted-foreground">Text messages aren&apos;t set up yet, so you&apos;ll get each driver&apos;s link to send by WhatsApp or your own phone.</p>}
                 </div>
               ) : (
