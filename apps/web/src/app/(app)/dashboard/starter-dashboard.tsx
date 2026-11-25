@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { organizationPlanAccess } from "@/lib/plans";
 import { organizationUsage } from "@/lib/entitlements";
 import { storeLinks } from "@/lib/app-releases";
+import { getPlatformSettings } from "@/lib/platform-settings";
 import { cn } from "@/lib/cn";
 import type { LoadDashboard } from "@/lib/load-dashboard";
 import { FleetGlance } from "./fleet-glance";
@@ -58,7 +59,7 @@ export async function StarterDashboard({
     storeLinks(),
     db.execute<{ n: number }>(sql`select count(*)::int as n from driver_app_status s join drivers d on d.id = s.driver_id
       where s.organization_id = ${ctx.organizationId} and d.status = 'active' and s.signed_in and coalesce(s.permission, '') <> 'off'
-        and s.location_enabled is not false and s.last_report_at > now() - interval '30 minutes'`)
+        and s.location_enabled is not false and s.last_report_at > now() - make_interval(mins => ${(await getPlatformSettings()).driverStaleMinutes})`)
   ]);
   const limits = access?.limits ?? {};
   const of = (n: number | undefined, noun: string) => (n === undefined ? noun : `of ${n} on your plan`);

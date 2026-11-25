@@ -1,3 +1,4 @@
+import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { AuthHeading } from "../auth-heading";
@@ -11,7 +12,7 @@ export default async function ResetPasswordPage({ searchParams }: { searchParams
   const valid = typeof token === "string" && /^[A-Za-z0-9_-]{16,200}$/.test(token) && !error;
   return (
     <>
-      <AuthHeading title="Set your password" description="Choose a password with at least 6 characters." />
+      <AuthHeading icon={ShieldCheck} tone="green" title="Set a new password" description="At least 10 characters. Use something you don't use anywhere else." />
       {valid ? (
         <ResetForm token={token} />
       ) : (

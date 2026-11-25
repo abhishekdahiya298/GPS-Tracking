@@ -1,4 +1,5 @@
 import { cleanFeatures, cleanLimits } from "@rio-gps/core";
+import { getPlatformSettings } from "./platform-settings";
 import { getDb, schema } from "@rio-gps/db";
 import { hashPassword } from "better-auth/crypto";
 import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
@@ -236,6 +237,7 @@ async function createCompany(input: CompanySignup, password: string): Promise<st
   const settings = await getSignupSettings();
   const roleSetting = settings.roles[input.role as SignupRole];
   const passwordHash = await hashPassword(password);
+  const defaults = await getPlatformSettings();
   const { orgId, planName } = await db.transaction(async (tx) => {
     const publicPlans = await tx.select().from(schema.plans).where(and(eq(schema.plans.visibility, "public"), eq(schema.plans.active, true))).orderBy(asc(schema.plans.sortOrder));
     const freePlan = publicPlans[0];
@@ -244,7 +246,7 @@ async function createCompany(input: CompanySignup, password: string): Promise<st
     if (!plan) throw new ForbiddenError("Sign-up isn't available right now. Contact RIO GPS.");
     const [org] = await tx
       .insert(schema.organizations)
-      .values({ name: input.company, slug: slugFrom(input.company), timeZone: input.timeZone, signupRole: input.role, signupPhone: input.phone, joinCode: joinCodeFrom(input.company), contactName: input.name, contactEmail: input.email, contactPhone: input.phone })
+      .values({ name: input.company, slug: slugFrom(input.company), timeZone: input.timeZone, unitSystem: input.country === "US" || defaults.defaultUnitSystem === "imperial" ? "imperial" : "metric", signupRole: input.role, signupPhone: input.phone, joinCode: joinCodeFrom(input.company), contactName: input.name, contactEmail: input.email, contactPhone: input.phone })
       .returning({ id: schema.organizations.id });
     await tx.insert(schema.gpsProviders).values({ organizationId: org!.id, kind: "traccar", name: "Traccar", apiBaseUrl: "http://traccar:8082" });
     const trialDays = roleSetting.trialDays;

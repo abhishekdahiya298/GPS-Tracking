@@ -29,7 +29,7 @@ type Step = { s: "role" } | { s: "details" } | { s: "code"; token: string; sentT
  * 6-digit code, sent to the email and (when texts work) the phone, typed once. The company opens
  * on the plan RIO chose for that role.
  */
-export function SignupFlow({ open, phoneCheck, emailCheck, initialRole, initialCode }: { open: Record<Role, boolean>; phoneCheck: boolean; emailCheck: boolean; initialRole: Role | null; initialCode: string }) {
+export function SignupFlow({ open, phoneCheck, emailCheck, initialRole, initialCode, defaults = { country: "CA", timeZone: "America/Toronto" } }: { open: Record<Role, boolean>; phoneCheck: boolean; emailCheck: boolean; initialRole: Role | null; initialCode: string; defaults?: { country: "CA" | "US"; timeZone: string } }) {
   const roles = ROLES.filter((r) => open[r.key]);
   const [role, setRole] = useState<Role>(initialRole && open[initialRole] ? initialRole : roles[0]!.key);
   const [step, setStep] = useState<Step>(initialRole && open[initialRole] ? { s: "details" } : { s: "role" });
@@ -292,7 +292,7 @@ export function SignupFlow({ open, phoneCheck, emailCheck, initialRole, initialC
           </div>
         </fieldset>
       )}
-      <RegionPicker tzRef={tzRef} />
+      <RegionPicker tzRef={tzRef} defaults={defaults} />
       <label className="flex items-start gap-2 text-xs text-muted-foreground">
         <Checkbox name="agree" required className="mt-px" />
         <span>
@@ -311,9 +311,9 @@ export function SignupFlow({ open, phoneCheck, emailCheck, initialRole, initialC
  * Country and time zone, filled from the browser. Shown as one line ("Canada · Toronto time")
  * with Change; the selects stay in the form while folded, so they are always sent.
  */
-function RegionPicker({ tzRef }: { tzRef: React.RefObject<HTMLSelectElement> }) {
+function RegionPicker({ tzRef, defaults }: { tzRef: React.RefObject<HTMLSelectElement>; defaults: { country: "CA" | "US"; timeZone: string } }) {
   const [openPick, setOpenPick] = useState(false);
-  const [summary, setSummary] = useState("Canada");
+  const [summary, setSummary] = useState(defaults.country === "US" ? "United States" : "Canada");
   const countryRef = useRef<HTMLSelectElement>(null);
   const refresh = () => {
     const c = countryRef.current?.selectedOptions[0]?.text ?? "";
@@ -339,13 +339,13 @@ function RegionPicker({ tzRef }: { tzRef: React.RefObject<HTMLSelectElement> }) 
       </div>
       <div className={cn("mt-2 grid gap-2 sm:grid-cols-2", !openPick && "hidden")}>
         <Field id="country" label="Country">
-          <Select id="country" name="country" defaultValue="CA" ref={countryRef} onChange={refresh}>
+          <Select id="country" name="country" defaultValue={defaults.country} ref={countryRef} onChange={refresh}>
             <option value="CA">Canada</option>
             <option value="US">United States</option>
           </Select>
         </Field>
         <Field id="timeZone" label="Time zone">
-          <TimeZoneSelect ref={tzRef} id="timeZone" name="timeZone" defaultValue="America/Toronto" onChange={refresh} />
+          <TimeZoneSelect ref={tzRef} id="timeZone" name="timeZone" defaultValue={defaults.timeZone} onChange={refresh} />
         </Field>
       </div>
     </div>

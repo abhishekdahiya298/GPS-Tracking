@@ -37,6 +37,17 @@ import type { AlertRuleDto } from "@/lib/alerts";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
 import { TYPE_LABEL } from "./alert-meta";
+import { Hexagon, LogOut as ExitIcon, PowerOff } from "lucide-react";
+
+/** Alert types as tiles (A23), each in its colour. */
+const RULE_TILES = [
+  { k: "speeding", Icon: Gauge, color: "#d81e2c" },
+  { k: "geofence_enter", Icon: Hexagon, color: "#6d28d9" },
+  { k: "geofence_exit", Icon: ExitIcon, color: "#7c3aed" },
+  { k: "ignition_on", Icon: Power, color: "#15803d" },
+  { k: "ignition_off", Icon: PowerOff, color: "#c2410c" },
+  { k: "device_offline", Icon: WifiOff, color: "#526079" }
+] as const;
 
 type Ref = { id: string; name: string };
 
@@ -442,6 +453,30 @@ function NewRuleDialog({
         description="Alerts fire when the condition starts, not repeatedly while it continues."
       >
         <form method="post" onSubmit={submit} className="grid gap-4">
+          <fieldset className="m-0 grid gap-1.5 border-0 p-0">
+            <legend className="mb-1.5 p-0 text-sm font-medium">Alert type</legend>
+            <div role="radiogroup" aria-label="Alert type" className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {RULE_TILES.map(({ k, Icon, color }) => {
+                const on = type === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setType(k)}
+                    className="grid cursor-pointer justify-items-center gap-1.5 rounded-xl border-2 bg-background px-1 py-2.5 text-[11.5px] font-semibold text-foreground"
+                    style={{ borderColor: on ? color : "var(--color-border)", background: on ? `color-mix(in srgb, ${color} 9%, var(--color-background))` : undefined }}
+                  >
+                    <span className="grid size-8 place-items-center rounded-lg text-white" style={{ background: color }}>
+                      <Icon className="size-4" aria-hidden="true" />
+                    </span>
+                    <span className="text-center leading-tight">{TYPE_LABEL[k]}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
           <Field id="ar-name" label="Name" required>
             <Input
               id="ar-name"
@@ -452,21 +487,6 @@ function NewRuleDialog({
             />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field id="ar-type" label="When">
-              <Select
-                id="ar-type"
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-              >
-                {Object.entries(TYPE_LABEL)
-                  .filter(([k]) => !k.startsWith("load_"))
-                  .map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v}
-                    </option>
-                  ))}
-              </Select>
-            </Field>
             <Field id="ar-vehicle" label="Vehicle">
               <Select id="ar-vehicle" name="vehicleId" defaultValue="">
                 <option value="">All vehicles</option>

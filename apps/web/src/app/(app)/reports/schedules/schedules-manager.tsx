@@ -53,11 +53,11 @@ export function SchedulesManager(props: { initial: ScheduleDto[]; members: Opt[]
     <>
       <PageHeader
         title="Report emails"
-        description="Trip summaries emailed automatically for the previous day or week: trips, distance, driving time and top speed per vehicle."
+        description="Reports sent to your inbox on a schedule. Trip summaries emailed automatically for the previous day or week: trips, distance, driving time and top speed per vehicle."
         breadcrumbs={[{ label: "Reports", href: "/reports" }, { label: "Email schedules" }]}
         actions={
           <Button onClick={() => setCreating(true)}>
-            <Plus /> New schedule
+            <Plus /> New report email
           </Button>
         }
       />
@@ -83,57 +83,81 @@ export function SchedulesManager(props: { initial: ScheduleDto[]; members: Opt[]
           />
         </Card>
       ) : (
-        <div className="grid gap-3">
-          {items.map((s) => (
-            <Card key={s.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="m-0 text-[15px] font-semibold">{s.name}</h2>
-                  <StatusBadge tone={s.active ? "success" : "neutral"} label={s.active ? "Active" : "Paused"} />
-                </div>
-                <p className="m-0 mt-1 text-sm text-foreground">
-                  {s.frequency === "daily" ? `Every day at ${hour(s.sendHour)}` : `Every ${DAYS[s.weekday]} at ${hour(s.sendHour)}`} <span className="text-muted-foreground">
-                    ({zoneLabel(s.timeZone)}, {zoneAbbr(s.timeZone)})
+        <Card className="overflow-hidden">
+          <div className="flex items-center gap-2.5 border-b border-border px-4 py-3">
+            <span className="grid size-8 place-items-center rounded-lg bg-[#efe7fd] text-[#6d28d9] dark:bg-white/10">
+              <CalendarClock className="size-4" aria-hidden="true" />
+            </span>
+            <h2 className="m-0 text-[15px] font-semibold text-[#0a2463] dark:text-foreground">Scheduled</h2>
+            <span className="text-xs text-muted-foreground">
+              {items.filter((i) => i.active).length} of {items.length} on
+            </span>
+          </div>
+          <ul className="m-0 grid list-none gap-2 p-3">
+            {items.map((s, idx) => {
+              const color = s.active ? ["#1d4ed8", "#b91c1c", "#c2410c", "#0f766e", "#6d28d9"][idx % 5]! : "#64748b";
+              return (
+                <li key={s.id} className="relative flex flex-col gap-3 overflow-hidden rounded-xl py-3 pl-4 pr-3 sm:flex-row sm:items-center" style={{ background: `linear-gradient(110deg, var(--color-background) 45%, color-mix(in srgb, ${color} 9%, var(--color-background)))`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 26%, transparent)` }}>
+                  <span aria-hidden="true" className="absolute inset-y-2.5 left-0 w-1 rounded-r" style={{ background: color }} />
+                  <span className="hidden size-9 shrink-0 place-items-center rounded-[11px] text-white sm:grid" style={{ background: `linear-gradient(150deg, ${color}cc, ${color})` }}>
+                    <Mail className="size-4" aria-hidden="true" />
                   </span>
-                </p>
-                <p className="m-0 mt-0.5 text-sm text-muted-foreground">
-                  {s.deviceIds ? s.deviceIds.map((id) => name(props.devices, id)).join(", ") : "All vehicles"} · to {s.recipientUserIds.map((id) => name(props.members, id)).join(", ")}
-                  {s.attachCsv ? " · CSV attached" : ""}
-                </p>
-                <p className="m-0 mt-1 text-xs text-muted-foreground">
-                  {s.lastSentAt ? `Last sent ${time.dateTime(s.lastSentAt)} ${time.abbr(s.lastSentAt)}${s.lastStatus ? ` (${s.lastStatus})` : ""}` : s.lastStatus ? `Last status: ${s.lastStatus}` : "Not sent yet"}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={busyId === s.id}
-                  disabled={!props.emailEnabled}
-                  onClick={() => act(s.id, async () => `Test for ${(await api<{ period: string }>(`/api/report-schedules/${s.id}/test`, { method: "POST" })).period} sent to your email.`)}
-                >
-                  <Send /> Send me a test
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button size="icon-sm" variant="ghost" aria-label={`More actions for ${s.name}`}>
-                      <MoreHorizontal />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="m-0 text-sm font-semibold">{s.name}</h3>
+                      {!s.active && <StatusBadge tone="neutral" label="Paused" />}
+                    </div>
+                    <p className="m-0 mt-0.5 truncate text-xs text-muted-foreground">
+                      {s.frequency === "daily" ? `Every day ${hour(s.sendHour)}` : `Every ${DAYS[s.weekday]} ${hour(s.sendHour)}`} {zoneAbbr(s.timeZone)} · {s.deviceIds ? s.deviceIds.map((id) => name(props.devices, id)).join(", ") : "All vehicles"} · to {s.recipientUserIds.map((id) => name(props.members, id)).join(", ")}
+                      {s.attachCsv ? " · CSV" : ""}
+                    </p>
+                    <p className="m-0 mt-0.5 text-[11px] text-muted-foreground" title={zoneLabel(s.timeZone)}>
+                      {s.lastSentAt ? `Last sent ${time.dateTime(s.lastSentAt)} ${time.abbr(s.lastSentAt)}${s.lastStatus ? ` (${s.lastStatus})` : ""}` : s.lastStatus ? `Last status: ${s.lastStatus}` : "Not sent yet"}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={s.active}
+                      aria-label={s.active ? `Pause ${s.name}` : `Turn on ${s.name}`}
+                      disabled={busyId === s.id}
+                      onClick={() => act(s.id, async () => (await api(`/api/report-schedules/${s.id}`, { method: "PATCH", json: { active: !s.active } }), s.active ? "Schedule paused." : "Schedule turned on."))}
+                      className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full border-0 transition-colors disabled:opacity-60 ${s.active ? "bg-primary" : "bg-muted-foreground/40"}`}
+                    >
+                      <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition-all ${s.active ? "left-[22px]" : "left-0.5"}`} />
+                    </button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      loading={busyId === s.id}
+                      disabled={!props.emailEnabled}
+                      onClick={() => act(s.id, async () => `Test for ${(await api<{ period: string }>(`/api/report-schedules/${s.id}/test`, { method: "POST" })).period} sent to your email.`)}
+                    >
+                      <Send /> Test
                     </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onSelect={() => act(s.id, async () => (await api(`/api/report-schedules/${s.id}`, { method: "PATCH", json: { active: !s.active } }), s.active ? "Schedule paused." : "Schedule resumed."))}>
-                      {s.active ? <Pause /> : <Play />} {s.active ? "Pause" : "Resume"}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem destructive onSelect={() => setDeleting(s)}>
-                      <Trash2 /> Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </Card>
-          ))}
-        </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="icon-sm" variant="ghost" aria-label={`More actions for ${s.name}`}>
+                          <MoreHorizontal />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem onSelect={() => act(s.id, async () => (await api(`/api/report-schedules/${s.id}`, { method: "PATCH", json: { active: !s.active } }), s.active ? "Schedule paused." : "Schedule resumed."))}>
+                          {s.active ? <Pause /> : <Play />} {s.active ? "Pause" : "Resume"}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem destructive onSelect={() => setDeleting(s)}>
+                          <Trash2 /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
       )}
 
       <p className="mt-4 text-xs text-muted-foreground">

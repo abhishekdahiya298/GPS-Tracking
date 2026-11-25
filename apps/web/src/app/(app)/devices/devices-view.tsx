@@ -41,7 +41,7 @@ const STATE: Record<DeviceState, { label: string; tone: StatusTone }> = {
 const label = (d: DeviceRow) => deviceDisplayName(d.name, d.model);
 const STATE_COLOR: Record<DeviceState, string> = { online: "#15803d", offline: "#64748b", never_seen: "#b45309", inactive: "#c2410c", retired: "#475569" };
 
-export function DevicesView({ data, query, can }: { data: Page<DeviceRow, DeviceState | "unassigned">; query: DeviceListQuery; can: Can }) {
+export function DevicesView({ data, query, can, supportEmail = "support@riogps.com" }: { data: Page<DeviceRow, DeviceState | "unassigned">; query: DeviceListQuery; can: Can; supportEmail?: string }) {
   const t = useTime();
   const { set, refresh, pending } = useListParams();
   const [renaming, setRenaming] = useState<DeviceRow | null>(null);
@@ -206,7 +206,7 @@ export function DevicesView({ data, query, can }: { data: Page<DeviceRow, Device
           }
         />
       </Card>
-      <p className="m-0 mt-3 text-xs text-muted-foreground">New trackers are registered to your account by RIO GPS. Need another one? <a href="mailto:support@riogps.com" className="text-primary">Contact support</a>.</p>
+      <p className="m-0 mt-3 text-xs text-muted-foreground">New trackers are registered to your account by RIO GPS. Need another one? <a href={`mailto:${supportEmail}`} className="text-primary">Contact support</a>.</p>
 
       {renaming && <RenameDialog device={renaming} onClose={() => setRenaming(null)} onSaved={refresh} />}
       {assignFor && <AssignDialog open onOpenChange={(o) => !o && setAssignFor(null)} mode="vehicle" fixedId={assignFor.id} title={`Assign ${label(assignFor)} to a vehicle`} onDone={refresh} />}

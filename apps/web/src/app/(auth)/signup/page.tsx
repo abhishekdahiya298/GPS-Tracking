@@ -5,7 +5,13 @@ import { getAuth } from "@/lib/auth";
 import { signupOptions } from "@/lib/signup";
 import { AuthHeading } from "../auth-heading";
 import { AuthTabs } from "../auth-tabs";
+import { getPlatformSettings } from "@/lib/platform-settings";
 import { SignupFlow } from "./signup-flow";
+
+async function signupDefaults() {
+  const p = await getPlatformSettings();
+  return { country: p.defaultCountry, timeZone: p.defaultTimeZone };
+}
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Create account · RIO GPS" };
@@ -32,7 +38,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
   return (
     <>
       <AuthTabs active="signup" />
-      <SignupFlow open={opts.open} phoneCheck={opts.phoneCheck} emailCheck={opts.emailCheck} initialRole={sp.role === "driver" || sp.code ? "driver" : null} initialCode={sp.code ?? ""} />
+      <SignupFlow open={opts.open} phoneCheck={opts.phoneCheck} emailCheck={opts.emailCheck} initialRole={sp.role === "driver" || sp.code ? "driver" : null} initialCode={sp.code ?? ""} defaults={await signupDefaults()} />
     </>
   );
 }

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { storeLinks } from "@/lib/app-releases";
 import { DriverView } from "./driver-view";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0a2463" };
 
 /** Public page (no session). All data comes from /api/driver/* with the token. */
-export default function DriverPage() {
-  return <DriverView />;
+export default async function DriverPage() {
+  return <DriverView stores={await storeLinks()} />;
 }
