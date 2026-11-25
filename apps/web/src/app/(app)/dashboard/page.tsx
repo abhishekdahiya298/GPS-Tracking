@@ -5,10 +5,7 @@ import Link from "next/link";
 import { CHART_RANGES, type ChartRange } from "@/lib/daily-stats";
 import { cache, Suspense } from "react";
 import { LocalTime } from "@/components/app/local-time";
-import { PageHeader } from "@/components/app/page-header";
-import { EmptyState } from "@/components/app/states";
 import { STATUS_THEME } from "@/components/app/status-chip";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { alertMeta } from "@/lib/alert-meta";
@@ -23,6 +20,7 @@ import { renewalCounts } from "@/lib/renewals";
 import { buildTripReport } from "@/lib/reports";
 import { requireTenantPage, getUnacknowledgedAlertCount } from "@/lib/request-context";
 import { FleetGlance } from "./fleet-glance";
+import { StarterDashboard } from "./starter-dashboard";
 import { greeting, Hero, QuickAction, Tile } from "./parts";
 import { DeliveriesCard, LoadAttentionCard, LoadTiles, LoadUsageCard, TodayStopsCard } from "./loads-panels";
 import { getLoadDashboard } from "@/lib/load-dashboard";
@@ -122,44 +120,12 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const count = (s: FleetState) => states.filter((x) => x.s === s).length;
   const firstName = (user.name || "").split(" ")[0];
 
-  if (devices.length === 0) {
+  // New companies, and plans without GPS trackers (Free Basic): the same layout with a checklist.
+  if (devices.length === 0 || ctx.lockedFeatures?.includes("gps_trackers")) {
     return (
       <>
-        <PageHeader title={firstName ? `Welcome, ${firstName}` : "Welcome"} description="Here's how to start tracking your fleet." />
-        <PlanStrip />
-        <Card>
-          <EmptyState
-            icon={Truck}
-            title={ctx.lockedFeatures?.includes("gps_trackers") ? "Get started" : "No vehicles are reporting yet"}
-            description={
-              ctx.lockedFeatures?.includes("gps_trackers")
-                ? "Add your trucks and drivers, then create a load: the driver gets a link and shares their location from their phone while on duty."
-                : "Add a vehicle, then assign a GPS device to it. Positions appear on the live map as soon as the device reports."
-            }
-            action={
-              <>
-                {can("vehicles.create") && (
-                  <Button asChild>
-                    <Link href="/vehicles">
-                      <Plus aria-hidden="true" /> Add vehicle
-                    </Link>
-                  </Button>
-                )}
-                {ctx.lockedFeatures?.includes("gps_trackers") && can("loads.write") && (
-                  <Button asChild variant="secondary">
-                    <Link href="/loads/new">Create a load</Link>
-                  </Button>
-                )}
-                {ctx.isSuperAdmin && !ctx.lockedFeatures?.includes("gps_trackers") && (
-                  <Button asChild variant="secondary">
-                    <Link href="/admin/customers">Register device</Link>
-                  </Button>
-                )}
-              </>
-            }
-          />
-        </Card>
-        {loadsSection}
+        <StarterDashboard ctx={ctx} hello={hello} orgName={rc.orgName} dateLabel={dateLabel} vehiclesOnMap={devices.filter((d) => d.location).length} movingNow={count("moving")} offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} loads={loadsDash} />
+        {loadsDash && loadsDash.active > 0 ? loadsSection : null}
       </>
     );
   }
