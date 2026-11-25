@@ -1,6 +1,6 @@
 "use client";
 import { isLoadEnded } from "@rio-gps/core/loads";
-import { CheckCircle2, Link2, MoreHorizontal, Pencil, Phone, Send, Share2, Trash2, Truck, XCircle } from "lucide-react";
+import { CalendarClock, CheckCircle2, Clock, Link2, MapPin, MoreHorizontal, Pencil, Phone, Route, Send, Share2, Trash2, Truck, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -207,6 +207,27 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
             : "The driver's page may be closed or their phone offline. Positions sent while offline arrive when they reconnect."}
         </Alert>
       )}
+
+      <section aria-label="Load at a glance" className="mb-4 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        {(
+          [
+            { label: "Remaining", value: load.eta ? fmtDistanceM(load.eta.distanceM, u.system === "imperial") : ended ? "Done" : "—", color: "#1d4ed8", Icon: Route },
+            { label: load.eta?.target === "pickup" ? "ETA to pickup" : "ETA", value: load.eta ? t.time(load.eta.at) : "—", color: load.eta?.late ? "#b91c1c" : "#15803d", Icon: Clock },
+            { label: "Deliver by", value: load.delivery.appointmentAt ? t.dateTime(load.delivery.appointmentAt) : "No appointment", color: "#6d28d9", Icon: CalendarClock },
+            { label: "Last location", value: load.lastPosition ? <RelativeTime iso={load.lastPosition.at} /> : "None yet", color: "#c2410c", Icon: MapPin }
+          ] as const
+        ).map(({ label, value, color, Icon }) => (
+          <div key={label} className="flex min-w-0 items-center gap-2.5 rounded-xl px-3 py-2.5" style={{ background: `linear-gradient(110deg, var(--color-background) 40%, color-mix(in srgb, ${color} 12%, var(--color-background)))`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${color} 25%, transparent)` }}>
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg text-white" style={{ background: color }}>
+              <Icon className="size-[18px]" aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <b className="block truncate text-[15px] tabular-nums">{value}</b>
+              <span className="block truncate text-[11.5px] text-muted-foreground">{label}</span>
+            </span>
+          </div>
+        ))}
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="h-[420px] overflow-hidden p-0 lg:h-[560px]">

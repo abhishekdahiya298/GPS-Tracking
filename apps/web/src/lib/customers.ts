@@ -257,6 +257,10 @@ export interface CustomerRow extends CustomerDto {
   statusReason: string | null;
   /** Demo / internal test account. */
   isDemo: boolean;
+  /** The customer's current plan (null before one is set). */
+  planName: string | null;
+  /** On a trial that ends at this time. */
+  trialEndsAt: string | null;
 }
 
 const likeP = (s: string) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -273,13 +277,16 @@ export async function listCustomersPage(
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
   const order = { name: sql`lower(name) ${dir}`, created: sql`created_at ${dir}`, devices: sql`devices ${dir}`, members: sql`members ${dir}` }[q.sort];
   const statusCounts = getDb().execute<{ status: OrganizationStatus; n: number }>(sql`select o.status, count(*)::int as n from organizations o where ${nd} group by o.status`);
-  const rows = await getDb().execute<{ id: string; name: string; slug: string; created_at: Date; devices: number; members: number; active_devices: number; total: number; status: OrganizationStatus; status_reason: string | null; is_demo: boolean }>(sql`
+  const rows = await getDb().execute<{ id: string; name: string; slug: string; created_at: Date; devices: number; members: number; active_devices: number; total: number; status: OrganizationStatus; status_reason: string | null; is_demo: boolean; plan_name: string | null; trial_ends_at: Date | null }>(sql`
     with f as (
       select o.id, o.name, o.slug, o.created_at, o.status, o.status_reason, o.is_demo,
         (select count(*)::int from gps_devices d where d.organization_id = o.id and d.kind = 'tracker') as devices,
         (select count(*)::int from gps_devices d where d.organization_id = o.id and d.kind = 'tracker' and d.last_seen_at > now() - interval '24 hours') as active_devices,
-        (select count(*)::int from memberships m join users u on u.id = m.user_id where m.organization_id = o.id and not u.is_super_admin) as members
-      from organizations o ${search}
+        (select count(*)::int from memberships m join users u on u.id = m.user_id where m.organization_id = o.id and not u.is_super_admin) as members,
+        sub.plan_name, sub.trial_ends_at
+      from organizations o
+      left join subscriptions sub on sub.organization_id = o.id and sub.ended_at is null
+      ${search}
     )
     select *, count(*) over()::int as total from f order by ${order}, id limit ${q.pageSize} offset ${(q.page - 1) * q.pageSize}`);
   const n = new Map((await statusCounts).map((c) => [c.status, c.n]));
@@ -297,7 +304,9 @@ export async function listCustomersPage(
       activeDevices: r.active_devices,
       status: r.status,
       statusReason: r.status_reason,
-      isDemo: Boolean(r.is_demo)
+      isDemo: Boolean(r.is_demo),
+      planName: r.plan_name ?? null,
+      trialEndsAt: r.trial_ends_at ? new Date(r.trial_ends_at).toISOString() : null
     })),
     total: rows.length ? Number(rows[0]!.total) : 0,
     page: q.page,

@@ -56,11 +56,13 @@ export const TILE_LOOK = {
   calm: "bg-[linear-gradient(135deg,#0a2463,#12357f)]",
   total: "bg-[linear-gradient(135deg,#1d4ed8,#12357f)]",
   waiting: "bg-[linear-gradient(135deg,#526079,#3b4558)]",
-  pickup: "bg-[linear-gradient(135deg,#5a1fc0,#4527b8)]"
+  pickup: "bg-[linear-gradient(135deg,#5a1fc0,#4527b8)]",
+  teal: "bg-[linear-gradient(135deg,#0e7490,#155e75)]",
+  purple: "bg-[linear-gradient(135deg,#6d28d9,#4c1d95)]"
 } as const;
 
-export function Tile({ label, value, total, icon: Icon, look, hint, href, className, totalNoun = "fleet" }: { label: string; value: number; total?: number; icon: typeof Truck; look: keyof typeof TILE_LOOK; hint?: string; href: string; className?: string; /** "34% of fleet" / "34% of active loads". */ totalNoun?: string }) {
-  const pct = total ? Math.round((value / total) * 100) : null;
+export function Tile({ label, value, total, icon: Icon, look, hint, href, className, totalNoun = "fleet" }: { label: string; value: number | string; total?: number; icon: typeof Truck; look: keyof typeof TILE_LOOK; hint?: string; href: string; className?: string; /** "34% of fleet" / "34% of active loads". */ totalNoun?: string }) {
+  const pct = total && typeof value === "number" ? Math.round((value / total) * 100) : null;
   return (
     <Link
       href={href}

@@ -5,7 +5,7 @@ import { getDb, schema } from "@rio-gps/db";
 import { and, eq, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
-import { signOutDriverEverywhere } from "./driver-app";
+import { appState, signOutDriverEverywhere, type DriverAppState } from "./driver-app";
 import { NotFoundError } from "./errors";
 import { likePattern, PAGE_SIZES } from "./fleet-list";
 
@@ -69,7 +69,7 @@ export const DriverInputSchema = z.object({
 export const DriverPatchSchema = DriverInputSchema.partial();
 export type DriverInput = z.infer<typeof DriverInputSchema>;
 
-export const DRIVER_FILTERS = ["all", "active", "driving", "assigned", "unassigned", "license", "inactive"] as const;
+export const DRIVER_FILTERS = ["all", "active", "driving", "assigned", "unassigned", "license", "inactive", "sharing", "location_off", "no_app"] as const;
 export const DriverListQuery = z.object({
   page: z.coerce.number().int().min(1).max(100_000).default(1),
   pageSize: z.coerce
@@ -96,6 +96,8 @@ export interface DriverRow {
   notes: string | null;
   assignedAt: string | null;
   vehicle: { id: string; name: string; type: string; licensePlate: string | null; deviceId: string | null; moving: boolean; speedKph: number | null; lastSeenAt: string | null } | null;
+  /** The RIO GPS app on the driver's phone (always on while signed in). */
+  app: { state: DriverAppState; batteryPct: number | null; charging: boolean | null; lastReportAt: string | null; phoneDeviceId: string | null; speedKph: number | null; inviteSentAt: string | null };
 }
 
 /** Licence expiring within 30 days (or already expired). */
@@ -111,6 +113,8 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
     left join vehicles v on v.id = d.vehicle_id and v.organization_id = d.organization_id
     left join device_assignments a on a.vehicle_id = v.id and a.unassigned_at is null and a.organization_id = d.organization_id
     left join current_locations cl on cl.device_id = a.device_id
+    left join driver_app_status s on s.driver_id = d.id
+    left join current_locations pl on pl.device_id = d.phone_device_id
     where d.organization_id = ${organizationId}${search}`;
   const filters: Record<(typeof DRIVER_FILTERS)[number], SQL> = {
     all: sql`true`,
@@ -119,7 +123,10 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
     assigned: sql`d.status = 'active' and d.vehicle_id is not null`,
     unassigned: sql`d.status = 'active' and d.vehicle_id is null`,
     license: licenseSoon,
-    inactive: sql`d.status = 'inactive'`
+    inactive: sql`d.status = 'inactive'`,
+    sharing: sql`d.status = 'active' and s.signed_in and coalesce(s.permission, '') <> 'off' and s.location_enabled is not false and s.last_report_at > now() - interval '30 minutes'`,
+    location_off: sql`d.status = 'active' and s.signed_in and (s.permission = 'off' or s.location_enabled = false)`,
+    no_app: sql`d.status = 'active' and (s.driver_id is null or not s.signed_in)`
   };
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
   const order = {
@@ -132,7 +139,11 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
   const [rows, counts] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select d.*, v.name as v_name, v.type as v_type, v.license_plate as v_plate, a.device_id as v_device,
-             cl.speed_kph as v_speed, cl.recorded_at as v_seen, count(*) over() as total
+             cl.speed_kph as v_speed, cl.recorded_at as v_seen,
+             s.signed_in as s_signed_in, s.permission as s_permission, s.location_enabled as s_loc, s.battery_pct as s_battery, s.charging as s_charging, s.last_report_at as s_report,
+             pl.speed_kph as p_speed,
+             (select max(i.created_at) from driver_invites i where i.driver_id = d.id) as s_invited,
+             count(*) over() as total
       ${base} and ${filters[q.state]}
       order by d.status asc, ${order}, d.id
       limit ${q.pageSize} offset ${(q.page - 1) * q.pageSize}`),
@@ -143,7 +154,10 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
         count(*) filter (where ${filters.assigned})::int as assigned,
         count(*) filter (where ${filters.unassigned})::int as unassigned,
         count(*) filter (where ${filters.license})::int as license,
-        count(*) filter (where ${filters.inactive})::int as inactive
+        count(*) filter (where ${filters.inactive})::int as inactive,
+        count(*) filter (where ${filters.sharing})::int as sharing,
+        count(*) filter (where ${filters.location_off})::int as location_off,
+        count(*) filter (where ${filters.no_app})::int as no_app
       ${base}`)
   ]);
   const now = Date.now();
@@ -171,13 +185,22 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
               lastSeenAt: seen ? seen.toISOString() : null,
               moving: Boolean(seen && now - seen.getTime() < 10 * 60_000 && Number(r.v_speed ?? 0) >= 5)
             }
-          : null
+          : null,
+        app: {
+          state: appState(r.s_signed_in == null ? null : { signedIn: Boolean(r.s_signed_in), permission: (r.s_permission as string | null) ?? null, locationEnabled: r.s_loc == null ? null : Boolean(r.s_loc), lastReportAt: r.s_report ? new Date(r.s_report as string) : null }, now),
+          batteryPct: r.s_battery == null ? null : Number(r.s_battery),
+          charging: r.s_charging == null ? null : Boolean(r.s_charging),
+          lastReportAt: r.s_report ? new Date(r.s_report as string).toISOString() : null,
+          phoneDeviceId: (r.phone_device_id as string | null) ?? null,
+          speedKph: r.p_speed == null ? null : Number(r.p_speed),
+          inviteSentAt: r.s_invited ? new Date(r.s_invited as string).toISOString() : null
+        }
       };
     }),
     total: Number(rows[0]?.total ?? 0),
     page: q.page,
     pageSize: q.pageSize,
-    counts: (counts[0] ?? { all: 0, active: 0, driving: 0, assigned: 0, unassigned: 0, license: 0, inactive: 0 }) as Record<(typeof DRIVER_FILTERS)[number], number>
+    counts: (counts[0] ?? { all: 0, active: 0, driving: 0, assigned: 0, unassigned: 0, license: 0, inactive: 0, sharing: 0, location_off: 0, no_app: 0 }) as Record<(typeof DRIVER_FILTERS)[number], number>
   };
 }
 

@@ -329,6 +329,10 @@ export class FleetLayer {
       m.loadImage(`/fleet-art/map/icons/${name}.png`)
         .then((res) => {
           if (!m.hasImage(name)) m.addImage(name, res.data, { pixelRatio: 3 });
+          // Redraw once the picture is in: a map whose vehicles are not moving (the dashboard
+          // card) would otherwise keep the drawn stand-in pins until the next position arrives.
+          this.structural = true;
+          this.schedule();
         })
         .catch((err) => console.error("map icon failed to load", name, err));
     }

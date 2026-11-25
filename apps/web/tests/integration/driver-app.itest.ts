@@ -6,6 +6,8 @@ import { createUserWithMembership } from "@/lib/admin-users";
 import { getAuth } from "@/lib/auth";
 import { createCustomer } from "@/lib/customers";
 import { listPlans } from "@/lib/plans";
+import { DriverListQuery, listDriversPage } from "@/lib/drivers";
+import { driversForMap } from "@/lib/driver-app";
 import { POST as invitePOST } from "@/app/api/drivers/[id]/app-invite/route";
 import { POST as companySignoutPOST } from "@/app/api/drivers/[id]/app-signout/route";
 import { GET as statusGET } from "@/app/api/drivers/app-status/route";
@@ -94,6 +96,12 @@ describe("driver app", () => {
     expect(n).toBe(0);
     const st = (await (await statusGET(web("GET", "/api/drivers/app-status"))).json()) as { drivers: { driverId: string; state: string; batteryPct: number }[] };
     expect(st.drivers.find((d) => d.driverId === driverId)).toMatchObject({ state: "sharing", batteryPct: 64 });
+    // Drivers page: "Sharing" filter and the row's battery; live map: the driver is on the truck's phone.
+    const page = await listDriversPage(orgId, DriverListQuery.parse({ state: "sharing" }));
+    expect(page.counts).toMatchObject({ sharing: 1, no_app: 0 });
+    expect(page.items[0]!.app).toMatchObject({ state: "sharing", batteryPct: 64 });
+    const [onMap] = await driversForMap(orgId);
+    expect(onMap).toMatchObject({ id: driverId, source: "phone", vehicle: { id: vehicleId } });
   });
 
   it("location off shows as location off", async () => {

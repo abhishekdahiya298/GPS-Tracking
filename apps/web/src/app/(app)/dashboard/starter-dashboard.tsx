@@ -41,7 +41,7 @@ export async function StarterDashboard({
 }) {
   const can = (p: Parameters<typeof contextHasPermission>[1]) => contextHasPermission(ctx, p);
   const db = getDb();
-  const [usage, access, [ever], drivers, [app], stores] = await Promise.all([
+  const [usage, access, [ever], drivers, [app], stores, appSharing] = await Promise.all([
     organizationUsage(ctx.organizationId),
     organizationPlanAccess(ctx.organizationId),
     db.execute<{ loads: number }>(sql`select count(*)::int as loads from loads where organization_id = ${ctx.organizationId}`),
@@ -55,12 +55,15 @@ export async function StarterDashboard({
           .limit(4)
       : Promise.resolve([]),
     db.execute<{ n: number }>(sql`select count(*)::int as n from push_devices where organization_id = ${ctx.organizationId}`),
-    storeLinks()
+    storeLinks(),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from driver_app_status s join drivers d on d.id = s.driver_id
+      where s.organization_id = ${ctx.organizationId} and d.status = 'active' and s.signed_in and coalesce(s.permission, '') <> 'off'
+        and s.location_enabled is not false and s.last_report_at > now() - interval '30 minutes'`)
   ]);
   const limits = access?.limits ?? {};
   const of = (n: number | undefined, noun: string) => (n === undefined ? noun : `of ${n} on your plan`);
-  // A driver "shares" while their load link is live (the driver app adds phones that share all the time).
-  const sharing = loads ? Math.max(0, loads.active - loads.counts.waiting - loads.attention.filter((a) => a.reason !== "late").length) : 0;
+  // Drivers whose RIO GPS app is signed in and sending location (always on, like Life360).
+  const sharing = Number(appSharing[0]?.n ?? 0);
 
   const steps = [
     { done: usage.vehicles > 0, label: "Add your first truck", hint: "Name, plate and VIN", href: "/vehicles?new=1", cta: "Add truck", show: can("vehicles.create") },
@@ -76,7 +79,7 @@ export async function StarterDashboard({
 
       <section aria-label="Your fleet at a glance" className="stagger-in mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <Tile label="Trucks" value={usage.vehicles} icon={Truck} look="total" hint={of(limits.vehicles, "Your fleet")} href="/vehicles" className="col-span-2 md:col-span-1" />
-        <Tile label="Drivers" value={usage.drivers} icon={Users} look="calm" hint={of(limits.drivers, "Active drivers")} href="/drivers" />
+        <Tile label="Drivers" value={usage.drivers} icon={Users} look="calm" hint={of(limits.drivers, "Active drivers")} href="/map?view=drivers" />
         <Tile label="Loads this month" value={usage.loadsPerMonth} icon={Package} look="pickup" hint={of(limits.loadsPerMonth, "Created this month")} href="/loads" />
         <Tile label="Moving now" value={movingNow} icon={Navigation} look="moving" hint={movingNow ? "On the road" : "Nothing moving"} href="/map" />
         <Tile label="Drivers sharing" value={sharing} icon={MapPin} look="offline" hint={sharing ? "Location from their phone" : "No one sharing now"} href="/drivers" />

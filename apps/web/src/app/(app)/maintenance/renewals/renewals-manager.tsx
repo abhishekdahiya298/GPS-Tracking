@@ -6,11 +6,11 @@
  */
 import { RENEWAL_TYPES, RENEWAL_TYPE_LABEL, renewalDueText, type RenewalType } from "@rio-gps/core/renewals";
 import { addDays } from "@rio-gps/core/timezones";
-import { CalendarClock, CalendarPlus, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarPlus, CheckCircle2, Clock, Layers, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
-import { SegmentedFilter } from "@/components/app/filter-bar";
+import { FilterTiles } from "@/components/app/list-kit";
 import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
 import { EmptyState } from "@/components/app/states";
@@ -108,19 +108,19 @@ export function RenewalsManager(props: { initial: RenewalDto[]; vehicles: Opt[];
         </Card>
       ) : (
         <>
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <SearchInput value={search} onChange={setSearch} placeholder="Search vehicle or renewal…" label="Search renewals" className="sm:w-64" debounceMs={100} />
-            <SegmentedFilter<Filter>
-              label="Filter by status"
-              value={filter}
-              onChange={setFilter}
-              options={[
-                { value: "all", label: "All", count: counts.all },
-                { value: "overdue", label: "Expired", count: counts.overdue },
-                { value: "due_soon", label: "Due soon", count: counts.due_soon },
-                { value: "ok", label: "OK", count: counts.ok }
-              ]}
-            />
+          <FilterTiles<Filter>
+            label="Filter by status"
+            value={filter}
+            onChange={setFilter}
+            options={[
+              { value: "all", label: "All", count: counts.all, icon: Layers, color: "#133a8f" },
+              { value: "overdue", label: "Expired", count: counts.overdue, icon: AlertTriangle, color: "#b91c1c" },
+              { value: "due_soon", label: "Due in 30 days", count: counts.due_soon, icon: Clock, color: "#c2410c" },
+              { value: "ok", label: "OK", count: counts.ok, icon: CheckCircle2, color: "#15803d" }
+            ]}
+          />
+          <div className="mb-3 flex">
+            <SearchInput value={search} onChange={setSearch} placeholder="Search vehicle or renewal…" label="Search renewals" className="sm:w-80" debounceMs={100} />
           </div>
           <Card>
             {shown.length === 0 ? (

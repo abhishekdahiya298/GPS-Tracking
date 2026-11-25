@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, ArrowRight, Boxes, Building2, CardSim, CheckCircle2, CircleOff, Cpu, Database, Inbox, Package, Plus, Radio, Server, Users } from "lucide-react";
+import { Activity, AlertTriangle, Boxes, Building2, CheckCircle2, CircleOff, Cpu, Database, Plus, Radio, ReceiptText, Server, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
@@ -12,6 +12,9 @@ import { getServerEnv } from "@/lib/env";
 import { HideDemoToggle } from "./_shared/hide-demo-toggle";
 import { ingestSnapshot } from "@/lib/ingest-stats";
 import { getLiveHub } from "@/lib/live-hub";
+import { Tile } from "@/app/(app)/dashboard/parts";
+import { money } from "@/lib/plan-format";
+import { periodOf, usageStatement } from "@/lib/plans";
 import { getPlatformOverview, listActivity, type AttentionItem } from "@/lib/platform";
 import { actionLabel } from "@/lib/platform-labels";
 import { getReadyRedisPublisher } from "@/lib/redis";
@@ -34,14 +37,15 @@ export default async function PlatformOverviewPage() {
   const now = new Date();
   const hideDemo = await hideDemoAccounts();
 
-  const [o, activity, redisOk, lastPosition] = await Promise.all([
+  const [o, activity, redisOk, lastPosition, revenue] = await Promise.all([
     getPlatformOverview(env.GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS, now, hideDemo),
     listActivity({ page: 1, pageSize: 25, search: "", kind: "all", who: "platform" }),
     timed(async () => (await (await getReadyRedisPublisher()).ping()) === "PONG", 2000),
     timed(async () => {
       const [r] = await getDb().execute<{ at: Date | null }>(sql`select max(received_at) as at from location_history where received_at > now() - interval '1 day'`);
       return r?.at ? new Date(r.at).toISOString() : null;
-    }, 3000)
+    }, 3000),
+    usageStatement(periodOf(now, "UTC"), undefined, now).catch(() => [])
   ]);
   // Sign-ins are noise here; they stay in the activity log.
   const recentActivity = activity.items.filter((a) => !a.action.startsWith("auth.")).slice(0, 8);
@@ -49,49 +53,43 @@ export default async function PlatformOverviewPage() {
   const live = getLiveHub().stats();
   const firstName = (rc.user.name || "").split(" ")[0];
   const onlinePct = o.trackers.total ? Math.round((o.trackers.online / o.trackers.total) * 100) : 0;
+  const silent = o.trackers.silent24h + o.trackers.never;
+  const simIssues = o.inventory.simsActiveUnused + o.inventory.simsDeployedNotActive;
+  const revenueCents = revenue.filter((l) => l.billed).reduce((t, l) => t + l.amounts.totalCents, 0);
   const positionsFresh = lastPosition ? now.getTime() - new Date(lastPosition).getTime() < 15 * 60_000 : false;
 
   return (
     <>
-      <header className="relative mb-5 overflow-hidden rounded-xl bg-[linear-gradient(120deg,#0a2463_0%,#12357f_55%,#1d4fb8_100%)] px-5 py-5 text-white shadow-card sm:px-7 sm:py-6">
-        <svg aria-hidden="true" viewBox="0 0 400 160" preserveAspectRatio="xMaxYMid slice" className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-1/2 sm:block">
-          <path d="M150 160 230 0h34l-80 160z" fill="#ffffff" opacity="0.07" />
-          <path d="M214 160 294 0h22l-80 160z" fill="#d81e2c" opacity="0.85" />
-          <path d="M258 160 338 0h34l-80 160z" fill="#ffffff" opacity="0.1" />
-        </svg>
-        <div className="relative flex flex-wrap items-end justify-between gap-4">
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[linear-gradient(150deg,#2456d6,#0a2463)] text-white shadow-card">
+            <ShieldCheck className="size-5" aria-hidden="true" />
+          </span>
           <div className="min-w-0">
-            <p className="m-0 text-[13px] font-medium text-white/75">RIO GPS platform console</p>
-            <h1 className="m-0 mt-1 text-2xl font-semibold tracking-tight sm:text-[28px] sm:leading-9">{firstName ? `Hello, ${firstName}` : "Platform overview"}</h1>
-            <p className="m-0 mt-1.5 text-sm text-white/85">
+            <h1 className="m-0 text-2xl font-semibold tracking-tight text-[#0a2463] dark:text-foreground">{firstName ? `Hello, ${firstName}` : "Platform overview"}</h1>
+            <p className="m-0 mt-0.5 text-sm text-muted-foreground">
               {o.customers.active} active customer{o.customers.active === 1 ? "" : "s"} · {o.trackers.online} of {o.trackers.total} trackers online
               {o.attention.length > 0 ? ` · ${o.attention.length} need${o.attention.length === 1 ? "s" : ""} a look` : ""}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <HideDemoToggle hidden={hideDemo} onDark />
-            <Link href="/admin/customers?new=1" className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-4 text-sm font-semibold text-[#0a2463] no-underline shadow-card hover:bg-white/90">
-              <Plus className="size-4" aria-hidden="true" /> New customer
-            </Link>
-          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <HideDemoToggle hidden={hideDemo} />
+          <Link href="/admin/customers?new=1" className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground no-underline shadow-card hover:bg-primary/90">
+            <Plus className="size-4" aria-hidden="true" /> New customer
+          </Link>
         </div>
       </header>
 
-      <section aria-label="Platform summary" className="stagger-in mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi href="/admin/customers" icon={Building2} label="Customers" value={o.customers.active} sub={`${o.customers.newLast30} new in 30 days${o.customers.suspended ? ` · ${o.customers.suspended} suspended` : ""}`} tone="navy" />
-        <Kpi href="/admin/trackers?state=online" icon={Radio} label="Trackers online" value={o.trackers.online} sub={`${onlinePct}% of ${o.trackers.total}`} tone="green" bar={onlinePct} />
-        <Kpi
-          href="/admin/trackers?state=silent"
-          icon={CircleOff}
-          label="Silent 24 h+"
-          value={o.trackers.silent24h + o.trackers.never}
-          sub={o.trackers.never ? `${o.trackers.never} never reported` : "Trackers not heard from"}
-          tone={o.trackers.silent24h + o.trackers.never > 0 ? "amber" : "slate"}
-        />
-        <Kpi href="/admin/customers?sort=members&direction=desc" icon={Users} label="Customer users" value={o.users.total} sub={`${o.users.signedInLast7} signed in this week`} tone="blue" />
+      <section aria-label="Platform summary" className="stagger-in mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <Tile href="/admin/customers" icon={Building2} look="total" label="Customers" value={o.customers.active} hint={`${o.customers.newLast30} new in 30 days${o.customers.suspended ? ` · ${o.customers.suspended} suspended` : ""}`} />
+        <Tile href="/admin/trackers?state=online" icon={Radio} look="moving" label="Trackers online" value={o.trackers.online} total={o.trackers.total} totalNoun="trackers" />
+        <Tile href="/admin/trackers?state=silent" icon={CircleOff} look={silent > 0 ? "idle" : "offline"} label="Silent 24 h+" value={silent} hint={o.trackers.never ? `${o.trackers.never} never reported` : silent ? "Not heard from" : "All reporting"} />
+        <Tile href="/admin/customers?sort=members&direction=desc" icon={Users} look="teal" label="Customer users" value={o.users.total} hint={`${o.users.signedInLast7} signed in this week`} />
+        <Tile href="/admin/billing" icon={ReceiptText} look="purple" label="This month (est.)" value={money(revenueCents)} hint="Usage & billing" className="col-span-2 md:col-span-1" />
       </section>
 
-      <div className="mb-5 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <IconTitle icon={AlertTriangle}>Needs attention</IconTitle>
@@ -104,72 +102,70 @@ export default async function PlatformOverviewPage() {
               <span className="grid size-12 place-items-center rounded-full bg-success-soft text-success">
                 <CheckCircle2 className="size-6" aria-hidden="true" />
               </span>
-              <p className="m-0 mt-3 font-semibold text-[#0a2463]">Every customer looks healthy</p>
+              <p className="m-0 mt-3 font-semibold text-[#0a2463] dark:text-foreground">Every customer looks healthy</p>
               <p className="m-0 mt-1 max-w-xs text-sm text-muted-foreground">Silent trackers, customers without trackers and customers nobody uses show up here.</p>
             </CardContent>
           ) : (
-            <ul className="m-0 list-none divide-y divide-border p-0">
-              {o.attention.map((a) => (
-                <li key={a.id}>
-                  <Link href={`/admin/customers/${a.id}`} className="flex items-center gap-3 px-4 py-3 text-foreground no-underline transition-colors hover:bg-primary-soft/40 sm:px-5">
-                    <AttentionIcon issue={a.issue} />
-                    <span className="min-w-0 flex-1 text-sm">
-                      <span className="block truncate font-medium">{a.name}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{a.detail}</span>
+            <ul className="m-0 grid list-none gap-2 p-3 pt-0">
+              {o.attention.slice(0, 6).map((a) => {
+                const look = ATTENTION[a.issue];
+                return (
+                  <li key={a.id} className="relative flex min-h-[60px] items-center gap-3 overflow-hidden rounded-xl border py-2.5 pl-4 pr-3" style={{ borderColor: `${look.color}30`, background: `linear-gradient(110deg, transparent 38%, ${look.color}12)` }}>
+                    <span aria-hidden="true" className="absolute inset-y-2.5 left-0 w-1 rounded-r" style={{ background: look.color }} />
+                    <span className="grid size-9 shrink-0 place-items-center rounded-[11px] text-white" style={{ background: `linear-gradient(150deg, ${look.color}cc, ${look.color})` }}>
+                      <look.Icon className="size-4" aria-hidden="true" />
                     </span>
-                    {a.trackers > 0 && (
-                      <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">
-                        {a.trackers - a.silent}/{a.trackers} reporting
+                    <Link href={`/admin/customers/${a.id}`} className="min-w-0 flex-1 text-foreground no-underline hover:underline">
+                      <span className="block truncate text-[13px] font-semibold">{a.name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        <b style={{ color: look.color }}>{look.tag}</b> · {a.detail}
                       </span>
-                    )}
-                    <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  </Link>
-                </li>
-              ))}
+                    </Link>
+                    <Link href={`/admin/customers/${a.id}${look.hash}`} className="inline-flex h-8 shrink-0 items-center rounded-md border border-border bg-background px-3 text-[13px] font-semibold text-foreground no-underline hover:border-primary/40">
+                      {look.action}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>
 
-        <div className="grid h-fit gap-4">
-          <Card>
-            <CardHeader>
-              <IconTitle icon={Server}>System health</IconTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <dl className="m-0 grid gap-2.5 text-sm">
-                <Health label="Database" ok value="Connected" icon={Database} />
-                <Health label="Live updates (Redis)" ok={redisOk === true} value={redisOk ? "Connected" : "Not reachable"} icon={Activity} />
-                <Health
-                  label="Latest tracker position"
-                  ok={positionsFresh}
-                  warn={!positionsFresh}
-                  value={lastPosition ? <RelativeTime iso={lastPosition} /> : "None in 24 h"}
-                  icon={Radio}
-                />
-                <Health label="Open live map streams" ok value={String(live.listeners)} icon={Users} />
-              </dl>
-              {Object.keys(ingest.totals).length > 0 && (
-                <p className="m-0 mt-3 text-xs text-muted-foreground">
-                  Since this server started (<RelativeTime iso={ingest.since} />): {ingest.totals.stored ?? 0} positions stored
-                  {ingest.totals.unknown_device ? `, ${ingest.totals.unknown_device} from unregistered trackers` : ""}
-                  {ingest.totals.store_failed ? `, ${ingest.totals.store_failed} failed` : ""}.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-          <div className="grid grid-cols-2 gap-3">
-            <MiniStat href="/admin/leads" icon={Inbox} label="New leads" value={o.newLeads} highlight={o.newLeads > 0} />
-            <MiniStat icon={Package} label="Loads in progress" value={o.loadsActive} />
-            <MiniStat href="/admin/trackers?state=stock" icon={Boxes} label="Trackers in stock" value={o.inventory.inStock} />
+        <Card className="h-fit">
+          <CardHeader>
+            <IconTitle icon={Server}>System health</IconTitle>
+          </CardHeader>
+          <CardContent className="grid gap-2 pt-0">
+            <Health label="Database" ok value="Connected" icon={Database} />
+            <Health label="Live updates" ok={redisOk === true} value={redisOk ? "Connected" : "Not reachable"} icon={Activity} />
+            <Health label="GPS server" ok={positionsFresh} warn={!positionsFresh} value={lastPosition ? <>Last position <RelativeTime iso={lastPosition} /></> : "None in 24 h"} icon={Radio} />
+            <Health label="Live map viewers" ok value={`${live.listeners} open now`} icon={Users} />
+            {Object.keys(ingest.totals).length > 0 && (
+              <p className="m-0 mt-1 text-xs text-muted-foreground">
+                Since this server started (<RelativeTime iso={ingest.since} />): {ingest.totals.stored ?? 0} positions stored
+                {ingest.totals.unknown_device ? `, ${ingest.totals.unknown_device} from unregistered trackers` : ""}
+                {ingest.totals.store_failed ? `, ${ingest.totals.store_failed} failed` : ""}.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="h-fit">
+          <CardHeader>
+            <IconTitle icon={Boxes}>Inventory</IconTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-2 gap-2.5 pt-0">
+            <MiniStat href="/admin/trackers?state=stock" label="Trackers in stock" value={o.inventory.inStock} color="#0369a1" />
             <MiniStat
-              href={o.inventory.simsActiveUnused + o.inventory.simsDeployedNotActive > 0 ? "/admin/sims?view=attention" : "/admin/trackers?state=nosim"}
-              icon={CardSim}
-              label={o.inventory.simsActiveUnused + o.inventory.simsDeployedNotActive > 0 ? "SIMs to fix" : "Trackers without SIM"}
-              value={o.inventory.simsActiveUnused + o.inventory.simsDeployedNotActive > 0 ? o.inventory.simsActiveUnused + o.inventory.simsDeployedNotActive : o.inventory.deployedNoSim}
-              highlight={o.inventory.simsActiveUnused + o.inventory.simsDeployedNotActive > 0}
+              href={simIssues > 0 ? "/admin/sims?view=attention" : "/admin/trackers?state=nosim"}
+              label={simIssues > 0 ? "SIMs to fix" : "Without SIM"}
+              value={simIssues > 0 ? simIssues : o.inventory.deployedNoSim}
+              color="#b91c1c"
             />
-          </div>
-        </div>
+            <MiniStat href="/admin/leads" label="New leads" value={o.newLeads} color="#6d28d9" />
+            <MiniStat label="Loads in progress" value={o.loadsActive} color="#15803d" />
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -245,43 +241,25 @@ export default async function PlatformOverviewPage() {
   );
 }
 
-const KPI_TONE = {
-  navy: "bg-[linear-gradient(135deg,#0a2463,#12357f)]",
-  green: "bg-[linear-gradient(135deg,#15803d,#166534)]",
-  amber: "bg-[linear-gradient(135deg,#b45309,#92400e)]",
-  slate: "bg-[linear-gradient(135deg,#526079,#3b4558)]",
-  blue: "bg-[linear-gradient(135deg,#0369a1,#075985)]"
-} as const;
+const ATTENTION: Record<AttentionItem["issue"], { color: string; tag: string; action: string; hash: string; Icon: typeof Cpu }> = {
+  no_trackers: { color: "#1d4ed8", tag: "Setup", action: "Add tracker", hash: "#trackers", Icon: Cpu },
+  all_silent: { color: "#c2410c", tag: "Trackers", action: "Review", hash: "#trackers", Icon: CircleOff },
+  some_silent: { color: "#c2410c", tag: "Trackers", action: "Review", hash: "#trackers", Icon: CircleOff },
+  never_signed_in: { color: "#7c3aed", tag: "Users", action: "Resend invite", hash: "#users", Icon: Users },
+  inactive_users: { color: "#7c3aed", tag: "Users", action: "Review", hash: "#users", Icon: Users },
+  suspended: { color: "#b91c1c", tag: "Account", action: "Review", hash: "", Icon: AlertTriangle }
+};
 
-function Kpi({ href, icon: Icon, label, value, sub, tone, bar }: { href: string; icon: typeof Cpu; label: string; value: number; sub: string; tone: keyof typeof KPI_TONE; bar?: number }) {
-  return (
-    <Link href={href} className={cn("group relative block overflow-hidden rounded-xl p-4 text-white no-underline shadow-card transition-transform duration-150 hover:-translate-y-0.5", KPI_TONE[tone])}>
-      <Icon aria-hidden="true" className="pointer-events-none absolute -bottom-3 -right-2 size-20 text-white/15 transition-transform duration-300 group-hover:scale-110" strokeWidth={1.5} />
-      <p className="m-0 text-xs font-semibold uppercase tracking-wide text-white/85">{label}</p>
-      <p className="m-0 mt-1.5 text-[34px] font-semibold leading-10 tabular-nums">{value}</p>
-      <p className="m-0 mt-1 min-h-4 truncate text-xs text-white/85">{sub}</p>
-      {bar !== undefined && (
-        <span aria-hidden="true" className="relative mt-2.5 block h-1 overflow-hidden rounded-full bg-white/25">
-          <span className="block h-full rounded-full bg-white" style={{ width: `${bar}%` }} />
-        </span>
-      )}
-    </Link>
-  );
-}
-
-function MiniStat({ href, icon: Icon, label, value, highlight }: { href?: string; icon: typeof Cpu; label: string; value: number; highlight?: boolean }) {
+function MiniStat({ href, label, value, color }: { href?: string; label: string; value: number; color: string }) {
   const body = (
     <>
-      <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", highlight ? "bg-danger-soft text-danger" : "bg-primary-soft text-primary")}>
-        <Icon className="size-5" aria-hidden="true" />
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-xs font-medium text-muted-foreground">{label}</span>
-        <span className="block text-xl font-semibold tabular-nums">{value}</span>
+      <span className="block text-xs font-medium leading-4 text-muted-foreground">{label}</span>
+      <span className="mt-1 block text-2xl font-bold tabular-nums" style={{ color }}>
+        {value}
       </span>
     </>
   );
-  const cls = "flex items-center gap-3 rounded-xl border border-border bg-background p-4 text-foreground no-underline shadow-card";
+  const cls = "block rounded-xl border border-border bg-background p-3 text-foreground no-underline";
   return href ? (
     <Link href={href} className={cn(cls, "hover:border-primary/40")}>
       {body}
@@ -292,33 +270,17 @@ function MiniStat({ href, icon: Icon, label, value, highlight }: { href?: string
 }
 
 function Health({ label, ok, warn, value, icon: Icon }: { label: string; ok: boolean; warn?: boolean; value: ReactNode; icon: typeof Cpu }) {
-  const tone = ok ? "success" : warn ? "warning" : "danger";
+  const color = ok ? "#15803d" : warn ? "#b45309" : "#b91c1c";
   return (
-    <div className="flex items-center justify-between gap-3">
-      <dt className="flex min-w-0 items-center gap-2 text-muted-foreground">
-        <Icon className="size-4 shrink-0" aria-hidden="true" />
-        <span className="truncate">{label}</span>
-      </dt>
-      <dd className="m-0 flex shrink-0 items-center gap-2 font-medium">
-        <span aria-hidden="true" className={cn("inline-block size-2 rounded-full", tone === "success" ? "bg-success" : tone === "warning" ? "bg-warning" : "bg-danger")} />
-        {value}
-      </dd>
+    <div className="relative flex items-center gap-3 overflow-hidden rounded-xl border py-2 pl-4 pr-3" style={{ borderColor: `${color}30`, background: `linear-gradient(110deg, transparent 38%, ${color}12)` }}>
+      <span aria-hidden="true" className="absolute inset-y-2 left-0 w-1 rounded-r" style={{ background: color }} />
+      <span className="grid size-9 shrink-0 place-items-center rounded-[11px] text-white" style={{ background: color }}>
+        {ok ? <CheckCircle2 className="size-4" aria-hidden="true" /> : <Icon className="size-4" aria-hidden="true" />}
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-[13px] font-semibold">{label}</span>
+        <span className="block truncate text-xs text-muted-foreground">{value}</span>
+      </span>
     </div>
-  );
-}
-
-function AttentionIcon({ issue }: { issue: AttentionItem["issue"] }) {
-  const look =
-    issue === "all_silent" || issue === "some_silent"
-      ? { cls: "bg-warning-soft text-warning", Icon: CircleOff }
-      : issue === "no_trackers"
-        ? { cls: "bg-info-soft text-info", Icon: Cpu }
-        : issue === "suspended"
-          ? { cls: "bg-danger-soft text-danger", Icon: AlertTriangle }
-          : { cls: "bg-muted text-muted-foreground", Icon: Users };
-  return (
-    <span className={cn("grid size-8 shrink-0 place-items-center rounded-full", look.cls)}>
-      <look.Icon className="size-4" aria-hidden="true" />
-    </span>
   );
 }
