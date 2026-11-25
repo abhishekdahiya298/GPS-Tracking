@@ -205,7 +205,8 @@ export interface DeviceDto {
   vehicle: { id: string; name: string; assignedAt: string } | null;
 }
 
-export async function listDevices(organizationId: string, opts: { includeImeiLast4?: boolean } = {}): Promise<DeviceDto[]> {
+/** Trackers and, unless `trackersOnly`, drivers' phones (reports use both; the GPS devices page only trackers). */
+export async function listDevices(organizationId: string, opts: { includeImeiLast4?: boolean; trackersOnly?: boolean } = {}): Promise<DeviceDto[]> {
   const rows = await getDb()
     .select({
       id: schema.gpsDevices.id,
@@ -228,7 +229,7 @@ export async function listDevices(organizationId: string, opts: { includeImeiLas
       )
     )
     .leftJoin(schema.vehicles, and(eq(schema.vehicles.id, schema.deviceAssignments.vehicleId), eq(schema.vehicles.organizationId, organizationId)))
-    .where(eq(schema.gpsDevices.organizationId, organizationId))
+    .where(and(eq(schema.gpsDevices.organizationId, organizationId), opts.trackersOnly ? eq(schema.gpsDevices.kind, "tracker") : undefined))
     .orderBy(asc(schema.gpsDevices.createdAt));
   return rows.map((r) => ({
     id: r.id,
@@ -258,7 +259,7 @@ export async function assignDevice(ctx: TenantContext, deviceId: string, vehicle
       const [device] = await tx
         .select({ id: schema.gpsDevices.id })
         .from(schema.gpsDevices)
-        .where(and(eq(schema.gpsDevices.id, deviceId), eq(schema.gpsDevices.organizationId, ctx.organizationId)))
+        .where(and(eq(schema.gpsDevices.id, deviceId), eq(schema.gpsDevices.organizationId, ctx.organizationId), eq(schema.gpsDevices.kind, "tracker")))
         .for("update");
       if (!device) throw new NotFoundError("Device not found");
       const [vehicle] = await tx

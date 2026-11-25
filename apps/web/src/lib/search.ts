@@ -47,7 +47,7 @@ export async function globalSearch(ctx: TenantContext, q: string): Promise<Searc
       db
         .execute<{ id: string; name: string | null; model: string | null }>(sql`
           select id, name, model from gps_devices
-          where organization_id = ${org} and (coalesce(name, '') ilike ${p} or coalesce(model, '') ilike ${p}${imeiMatch})
+          where organization_id = ${org} and kind = 'tracker' and (coalesce(name, '') ilike ${p} or coalesce(model, '') ilike ${p}${imeiMatch})
           order by lower(coalesce(name, model, '')) limit ${PER_GROUP}`)
         .then((rows) =>
           rows.map((r) => ({ group: "devices" as const, id: r.id, title: r.name ?? r.model ?? "Device", subtitle: r.name && r.model ? r.model : null, href: `/devices?${qs({ search: r.name ?? r.model ?? "" })}` }))

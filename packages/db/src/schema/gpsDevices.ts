@@ -31,6 +31,12 @@ export const gpsDevices = pgTable(
     /** Customer-facing label, e.g. "Truck 7 tracker" (optional). */
     name: text("name"),
     status: gpsDeviceStatusEnum("status").notNull().default("active"),
+    /**
+     * tracker = RIO hardware (inventory, SIMs, billing). phone = a driver's phone in the driver app:
+     * it reports through the same pipeline (history, trips, alerts, live map) but is never stock,
+     * never billed as a tracker and never shown on the GPS devices pages.
+     */
+    kind: text("kind").notNull().default("tracker"),
     /** Manufacturer serial, if it differs from the IMEI (platform only). */
     serialNumber: text("serial_number"),
     /** Platform notes, e.g. "returned with cracked case" (never shown to customers). */

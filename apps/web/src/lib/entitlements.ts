@@ -64,7 +64,7 @@ export async function organizationUsage(organizationId: string, db: Db | Tx = ge
       (select count(*)::int from vehicles where organization_id = o.id) as vehicles,
       (select count(*)::int from drivers where organization_id = o.id and status = 'active') as drivers,
       (select count(*)::int from memberships where organization_id = o.id) as members,
-      (select count(*)::int from gps_devices where organization_id = o.id and status <> 'retired') as trackers,
+      (select count(*)::int from gps_devices where organization_id = o.id and status <> 'retired' and kind = 'tracker') as trackers,
       (select count(*)::int from loads where organization_id = o.id
          and created_at >= (date_trunc('month', now() at time zone o.time_zone) at time zone o.time_zone)) as loads
     from organizations o where o.id = ${organizationId}::uuid`);

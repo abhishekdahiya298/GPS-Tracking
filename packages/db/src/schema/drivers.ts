@@ -1,13 +1,15 @@
 import { date, index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { organizations } from "./organizations";
+import { gpsDevices } from "./gpsDevices";
 import { vehicles } from "./vehicles";
 
 export const driverStatusEnum = pgEnum("driver_status", ["active", "inactive"]);
 
 /**
  * A driver of the organization. vehicleId is the vehicle they drive now (one driver per
- * vehicle at a time); null when not assigned. Drivers are records, not app logins.
+ * vehicle at a time); null when not assigned. A driver may sign in to the driver app; their phone
+ * then reports as `phoneDeviceId` (a gps_devices row of kind "phone").
  */
 export const drivers = pgTable(
   "drivers",
@@ -25,6 +27,7 @@ export const drivers = pgTable(
     assignedAt: timestamp("assigned_at", { withTimezone: true }),
     status: driverStatusEnum("status").notNull().default("active"),
     notes: text("notes"),
+    phoneDeviceId: uuid("phone_device_id").references(() => gpsDevices.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },

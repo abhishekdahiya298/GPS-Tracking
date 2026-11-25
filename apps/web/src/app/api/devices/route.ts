@@ -21,7 +21,7 @@ export async function GET(request: Request) {
       });
       return NextResponse.json(page, { headers: { "Cache-Control": "no-store" } });
     }
-    return NextResponse.json({ devices: await listDevices(ctx.organizationId, { includeImeiLast4: contextHasPermission(ctx, "devices.manage") }) }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ devices: await listDevices(ctx.organizationId, { includeImeiLast4: contextHasPermission(ctx, "devices.manage"), trackersOnly: true }) }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     return errorResponse(err, { route: "devices.list" });
   }

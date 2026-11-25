@@ -143,8 +143,8 @@ export default async function AuthLayout({ children }: { children: ReactNode }) 
       </aside>
 
       {/* Form column: scrolls on its own only if a small phone needs it, never the whole page */}
-      <div className="flex w-full flex-col overflow-y-auto px-5 py-8 lg:w-1/2 lg:flex-1">
-        <div className="m-auto w-full max-w-sm 2xl:max-w-md">
+      <div className="flex w-full flex-col overflow-y-auto px-5 py-6 lg:w-1/2 lg:flex-1">
+        <div className="m-auto w-full max-w-[440px] 2xl:max-w-[480px]">
           <div className="mb-8 flex justify-center lg:hidden">
             <BrandMark className="h-14" />
           </div>

@@ -231,7 +231,7 @@ export async function listDevicesPage(
     from gps_devices d
     left join device_assignments a on a.device_id = d.id and a.organization_id = ${organizationId} and a.unassigned_at is null
     left join vehicles v on v.id = a.vehicle_id and v.organization_id = ${organizationId}
-    where d.organization_id = ${organizationId}${search}`;
+    where d.organization_id = ${organizationId} and d.kind = 'tracker'${search}`;
   const stateFilter =
     q.state === "all" ? sql`true` : q.state === "unassigned" ? sql`vehicle_id is null` : q.state === "inactive" ? sql`state in ('inactive', 'retired')` : sql`state = ${q.state}`;
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;

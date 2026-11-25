@@ -1,14 +1,9 @@
-import { isOrganizationActive } from "@/lib/organization-status";
-import { locationChannel } from "@rio-gps/core";
 import { TraccarWebhookAuthError, TraccarWebhookPayloadError, parseWebhookPosition, verifyWebhookSecret } from "@rio-gps/traccar-client";
 import { NextResponse } from "next/server";
-import { evaluateAlertsForPosition } from "@/lib/alerts";
-import { updateLoadsForDevicePosition } from "@/lib/load-tracking";
 import { ingestPosition } from "@/lib/ingest";
+import { afterStoredPosition } from "@/lib/ingest-pipeline";
 import { countIngest } from "@/lib/ingest-stats";
-import { toLiveEvent } from "@/lib/locations";
 import { logger } from "@/lib/logger";
-import { getReadyRedisPublisher } from "@/lib/redis";
 
 /**
  * Ingest endpoint Traccar's `forward.url` posts to on every position update.
@@ -77,35 +72,6 @@ export async function POST(request: Request) {
     // Late backlog record: stored in history, but older than the current location.
     return NextResponse.json({ status: "stored", current: false }, { status: 202 });
   }
-  const device = { id: outcome.deviceId, organizationId: outcome.organizationId };
-
-  // PostgreSQL is the source of truth and the write above has committed. A Redis
-  // outage must not make Traccar retry (the data is already stored) — log it
-  // loudly instead; live clients resync from the REST API on reconnect.
-  try {
-    await (await getReadyRedisPublisher()).publish(
-      locationChannel(device.organizationId),
-      JSON.stringify(toLiveEvent(device.id, position))
-    );
-  } catch (err) {
-    countIngest("publish_failed");
-    logger.error("ingest.redis_publish_failed", { deviceId: device.id, organizationId: device.organizationId }, err);
-  }
-
-  // A suspended customer keeps its history (above) but gets no alerts or load updates.
-  if (!(await isOrganizationActive(device.organizationId))) return NextResponse.json({ status: "ok" });
-
-  // Alerts run after the position is committed and never fail the ingest.
-  await evaluateAlertsForPosition(device, {
-    latitude: position.latitude,
-    longitude: position.longitude,
-    speedKph: position.speedKph,
-    ignition: position.ignition,
-    recordedAt: position.recordedAt
-  });
-
-  // Loads followed by this tracker's vehicle (vehicle mode). Never fails the ingest.
-  await updateLoadsForDevicePosition(device, { latitude: position.latitude, longitude: position.longitude, accuracyM: null, speedKph: position.speedKph, at: position.recordedAt });
-
+  await afterStoredPosition({ id: outcome.deviceId, organizationId: outcome.organizationId }, position);
   return NextResponse.json({ status: "ok" });
 }

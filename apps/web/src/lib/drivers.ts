@@ -5,6 +5,7 @@ import { getDb, schema } from "@rio-gps/db";
 import { and, eq, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
+import { signOutDriverEverywhere } from "./driver-app";
 import { NotFoundError } from "./errors";
 import { likePattern, PAGE_SIZES } from "./fleet-list";
 
@@ -340,6 +341,8 @@ export async function updateDriver(ctx: TenantContext, id: string, patch: Partia
     return row!;
   });
   await writeAudit({ action: "driver.updated", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "driver", targetId: id, metadata: { fields: Object.keys(patch) }, ...meta });
+  // An inactive driver can't use the driver app: sharing stops on every phone.
+  if (patch.status === "inactive") await signOutDriverEverywhere(ctx.organizationId, id, ctx.userId);
   return d;
 }
 
@@ -347,8 +350,13 @@ export async function deleteDriver(ctx: TenantContext, id: string, meta: Meta) {
   const [d] = await getDb()
     .delete(schema.drivers)
     .where(and(eq(schema.drivers.id, id), eq(schema.drivers.organizationId, ctx.organizationId)))
-    .returning({ id: schema.drivers.id, name: schema.drivers.name });
+    .returning({ id: schema.drivers.id, name: schema.drivers.name, phoneDeviceId: schema.drivers.phoneDeviceId });
   if (!d) throw new NotFoundError("Driver not found");
+  // Their phone stops being a device (its history stays with the company).
+  if (d.phoneDeviceId) {
+    await getDb().update(schema.deviceAssignments).set({ unassignedAt: new Date() }).where(and(eq(schema.deviceAssignments.deviceId, d.phoneDeviceId), isNull(schema.deviceAssignments.unassignedAt)));
+    await getDb().update(schema.gpsDevices).set({ status: "retired", updatedAt: new Date() }).where(eq(schema.gpsDevices.id, d.phoneDeviceId));
+  }
   await writeAudit({ action: "driver.deleted", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "driver", targetId: id, metadata: { name: d.name }, ...meta });
 }
 
