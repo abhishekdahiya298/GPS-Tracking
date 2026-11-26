@@ -10,6 +10,8 @@ export interface TraccarDeviceSummary {
   uniqueId: string;
   name: string;
   status: string;
+  /** ISO time of the last message from the device (present on GET /api/devices). */
+  lastUpdate?: string | null;
 }
 
 export interface TraccarClientConfig {
@@ -39,7 +41,8 @@ export class TraccarRestClient {
   /** Looks up a device by its uniqueId (IMEI for Teltonika). */
   async findDeviceByUniqueId(uniqueId: string): Promise<TraccarDeviceSummary | null> {
     const response = await fetch(`${this.config.baseUrl}/api/devices?uniqueId=${encodeURIComponent(uniqueId)}`, {
-      headers: { Authorization: this.authHeader() }
+      headers: { Authorization: this.authHeader() },
+      signal: AbortSignal.timeout(10_000)
     });
     if (!response.ok) throw new Error(`Traccar API error: ${response.status} ${response.statusText}`);
     const devices = (await response.json()) as TraccarDeviceSummary[];
@@ -54,12 +57,30 @@ export class TraccarRestClient {
   async listPositions(deviceId: number, from: Date, to: Date): Promise<unknown[]> {
     const qs = new URLSearchParams({ deviceId: String(deviceId), from: from.toISOString(), to: to.toISOString() });
     const response = await fetch(`${this.config.baseUrl}/api/positions?${qs}`, {
-      headers: { Authorization: this.authHeader(), Accept: "application/json" }
+      headers: { Authorization: this.authHeader(), Accept: "application/json" },
+      signal: AbortSignal.timeout(15_000)
     });
     if (!response.ok) throw new Error(`Traccar API error: ${response.status} ${response.statusText}`);
     const body = (await response.json()) as unknown;
     if (!Array.isArray(body)) throw new Error("Traccar API returned a non-array positions body");
     return body;
+  }
+
+  /**
+   * Sends a raw text command (Teltonika SMS/GPRS syntax, e.g. "getgps") to the device over its
+   * open data connection (Codec 12). Traccar answers 200 when it was written to the connection
+   * and 202 when the device is offline and the command was queued for its next connection.
+   * The device's reply arrives later as a position with a `result` attribute.
+   */
+  async sendCommand(deviceId: number, data: string): Promise<"sent" | "queued"> {
+    const response = await fetch(`${this.config.baseUrl}/api/commands/send`, {
+      method: "POST",
+      headers: { Authorization: this.authHeader(), "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ deviceId, type: "custom", attributes: { data } }),
+      signal: AbortSignal.timeout(10_000)
+    });
+    if (!response.ok) throw new Error(`Traccar API error: ${response.status} ${response.statusText}`);
+    return response.status === 202 ? "queued" : "sent";
   }
 
   /**
