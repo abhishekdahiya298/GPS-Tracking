@@ -6,6 +6,7 @@ import { phonePermission, sendReport, startTracking, stopTracking } from "./trac
 
 const ME_KEY = "rio.driver-me";
 const SETUP_KEY = "rio.driver-setup-done";
+export const NEW_KEY = "rio.driver-new";
 
 type State = { status: "loading" } | { status: "none" } | { status: "ended"; company: string | null } | { status: "signedIn"; me: DriverMe; setupDone: boolean };
 
@@ -13,7 +14,7 @@ interface DriverSessionValue {
   state: State;
   signInWithInvite(token: string): Promise<void>;
   startPhone(phone: string): Promise<PhoneStart>;
-  verifyPhone(phone: string, code: string): Promise<void>;
+  verifyPhone(phone: string, code: string, name?: string): Promise<void>;
   /** After D2/D2B/D2C: remember set-up is done and start sharing. */
   finishSetup(): Promise<void>;
   refresh(): Promise<void>;
@@ -95,8 +96,10 @@ export function DriverSessionProvider({ children }: { children: ReactNode }) {
         await enter();
       },
       startPhone: (phone) => driver.startPhone(phone),
-      async verifyPhone(phone, code) {
-        await driver.verifyPhone(phone, code);
+      async verifyPhone(phone, code, name) {
+        const r = await driver.verifyPhone(phone, code, name);
+        // A brand-new account sees "You're in" (D1C) before the set-up steps.
+        if (r.created) await SecureStore.setItemAsync(NEW_KEY, "1").catch(() => undefined);
         await SecureStore.deleteItemAsync(SETUP_KEY).catch(() => undefined);
         await enter();
       },

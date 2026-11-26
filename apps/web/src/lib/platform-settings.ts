@@ -19,6 +19,11 @@ export const PlatformSettingsSchema = z.object({
   driverInviteDays: z.coerce.number().int().min(1).max(30).default(7),
   /** Phone positions less accurate than this are dropped (metres). */
   driverMaxAccuracyM: z.coerce.number().int().min(20).max(2000).default(200),
+  /**
+   * Test numbers for the driver app, one per line or comma: sign-in codes for these show in the app
+   * instead of a text (for testing and store review until texts work). Never real drivers' numbers.
+   */
+  driverTestNumbers: z.string().trim().max(2000).default(""),
   defaultCountry: z.enum(["CA", "US"]).default("CA"),
   defaultTimeZone: z.string().trim().min(1).max(64).default("America/Toronto"),
   defaultUnitSystem: z.enum(["imperial", "metric"]).default("imperial")

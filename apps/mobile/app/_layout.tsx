@@ -66,6 +66,7 @@ function Screens() {
     const data = (tapped.notification.request.content.data ?? {}) as Record<string, unknown>;
     if (driverIn) {
       if (data.type === "driver_request" || data.type === "load_request") router.navigate("/today");
+      else if (data.type === "driver_removed") router.navigate({ pathname: "/driver/removed", params: { company: String(data.company ?? "") } });
       else if (data.type === "location_request") router.navigate({ pathname: "/driver/request", params: { from: String(data.from ?? ""), message: String(data.message ?? ""), at: String(data.at ?? "") } });
       else void driver.refresh();
     } else if (signedIn) {
@@ -81,6 +82,10 @@ function Screens() {
     const sub = Notifications.addNotificationReceivedListener((n) => {
       const data = (n.request.content.data ?? {}) as Record<string, unknown>;
       if (data.type === "driver_signed_out") void driver.refresh();
+      else if (data.type === "driver_removed") {
+        void driver.refresh();
+        router.navigate({ pathname: "/driver/removed", params: { company: String(data.company ?? "") } });
+      }
     });
     return () => sub.remove();
   }, [driverIn]);
@@ -107,6 +112,7 @@ function Screens() {
         <Stack.Screen name="driver/record" options={{ ...pushed, title: "Companies" }} />
         <Stack.Screen name="driver/profile" options={{ ...pushed, title: "Edit profile" }} />
         <Stack.Screen name="driver/reports" options={{ ...pushed, title: "My reports" }} />
+        <Stack.Screen name="driver/removed" options={{ presentation: "modal" }} />
       </Stack.Protected>
       <Stack.Protected guard={driverIn && !setupDone}>
         <Stack.Screen name="driver/setup" />

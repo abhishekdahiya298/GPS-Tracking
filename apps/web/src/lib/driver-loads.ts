@@ -40,6 +40,18 @@ export function _resetDriversOrgCacheForTests() {
   driversOrgCache = null;
 }
 
+/** A driver's own account with no company yet (hidden home row). Returns the driver row id. */
+export async function createSelfDriver(phone: string, name: string): Promise<string> {
+  const db = getDb();
+  const [have] = await db.select({ id: schema.drivers.id }).from(schema.drivers).where(and(eq(schema.drivers.phone, phone), eq(schema.drivers.appLink, "self"), eq(schema.drivers.status, "active")));
+  if (have) {
+    await db.update(schema.drivers).set({ name, updatedAt: new Date() }).where(eq(schema.drivers.id, have.id));
+    return have.id;
+  }
+  const [row] = await db.insert(schema.drivers).values({ organizationId: await driversOrgId(), name, phone, appLink: "self", appLinkAt: new Date() }).returning({ id: schema.drivers.id });
+  return row!.id;
+}
+
 /**
  * Before a load goes to a phone number: how the driver gets it.
  * - Has the app open somewhere: a notification (and the request waits in the app).
