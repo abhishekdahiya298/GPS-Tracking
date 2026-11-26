@@ -67,7 +67,7 @@ export async function listCustomers(): Promise<CustomerDto[]> {
     select o.id, o.name, o.slug, o.created_at,
       (select count(*)::int from gps_devices d where d.organization_id = o.id and d.kind = 'tracker') as devices,
       (select count(*)::int from memberships m join users u on u.id = m.user_id where m.organization_id = o.id and not u.is_super_admin) as members
-    from organizations o order by o.name`);
+    from organizations o where o.slug <> 'rio-gps-drivers' order by o.name`);
   return rows.map((r) => ({ id: r.id, name: r.name, slug: r.slug, createdAt: new Date(r.created_at).toISOString(), devices: r.devices, members: r.members }));
 }
 
@@ -271,7 +271,8 @@ export async function listCustomersPage(
   hideDemo = false
 ): Promise<{ items: CustomerRow[]; total: number; page: number; pageSize: number; counts: Record<"current" | "suspended" | "archived" | "all", number> }> {
   // "Hide demo accounts" leaves demo / test customers out of the list and the counts.
-  const nd = hideDemo ? sql`not o.is_demo` : sql`true`;
+  // The hidden home of independent drivers (driver app) is not a customer.
+  const nd = hideDemo ? sql`not o.is_demo and o.slug <> 'rio-gps-drivers'` : sql`o.slug <> 'rio-gps-drivers'`;
   const viewWhere = sql`${nd} and ${{ current: sql`o.status <> 'archived'`, suspended: sql`o.status = 'suspended'`, archived: sql`o.status = 'archived'`, all: sql`true` }[q.view]}`;
   const search = q.search ? sql`where (o.name ilike ${likeP(q.search)} or o.slug ilike ${likeP(q.search)}) and ${viewWhere}` : sql`where ${viewWhere}`;
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;

@@ -41,7 +41,7 @@ export default function DriverAccount() {
           </View>
           <View style={styles.flex}>
             <Text style={styles.name}>{me.driver.name}</Text>
-            <Text style={styles.sub}>{data.companies.length > 1 ? `Driver · ${data.companies.length} companies` : `Driver · ${me.company.name}`}</Text>
+            <Text style={styles.sub}>{data.companies.length > 1 ? `Driver · ${data.companies.length} companies` : me.link === "self" && !data.companies.length ? "Independent driver" : `Driver · ${data.companies[0]?.company.name ?? me.company.name}`}</Text>
             {me.driver.phone ? <Text style={styles.sub}>{me.driver.phone}</Text> : null}
           </View>
           <Pill text={sharing ? "Sharing" : "Off"} color={sharing ? "#136c35" : "#ad1f1f"} soft={sharing ? "#c8e8d2" : "#f6cdcd"} />
@@ -59,7 +59,7 @@ export default function DriverAccount() {
             </View>
             <View style={styles.fact}>
               <Text style={styles.factValue} numberOfLines={1}>
-                {(me.companiesSharing ?? 1) > 1 ? `${me.companiesSharing} companies` : me.company.name}
+                {me.companiesSharing === 0 ? "Only loads you accept" : (me.companiesSharing ?? 1) > 1 ? `${me.companiesSharing} companies` : me.company.name}
               </Text>
               <Text style={styles.factLabel}>Who sees it</Text>
             </View>
@@ -76,7 +76,7 @@ export default function DriverAccount() {
             color="#6d28d9"
             soft="#e6dcfb"
             title="Companies I work for"
-            detail={data.requests.length ? `${data.requests.length} waiting for your answer` : data.companies.length ? data.companies.map((c) => c.company.name).join(", ") : me.company.name}
+            detail={data.requests.length ? `${data.requests.length} waiting for your answer` : data.companies.length ? data.companies.map((c) => c.company.name).join(", ") : me.link === "self" ? "None yet" : me.company.name}
             onPress={() => router.push("/driver/record")}
           />
         </Group>

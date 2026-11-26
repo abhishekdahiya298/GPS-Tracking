@@ -295,18 +295,18 @@ export function ShareDriverLink({ link, share }: { link: string; share: DriverSh
         )}
       </div>
       {phone && <p className="m-0 text-xs text-muted-foreground">Opens with {phone} and the message filled in. Text messages open the Messages app on a phone, or on a computer linked to one.</p>}
-      <CopyLink link={link} label="Driver link" />
+      <CopyLink link={link} label="RIO GPS app link for the driver" />
     </div>
   );
 }
 
 /** What happened to the text message, in one line. */
 export function SmsOutcome({ sms, smsAvailable }: { sms: SmsResult | null; smsAvailable: boolean }) {
-  if (sms?.sent) return <Alert tone="success" title="Invite texted to the driver.">They tap the link and accept to start sharing their location.</Alert>;
+  if (sms?.sent) return <Alert tone="success" title="Texted to the driver.">They get the RIO GPS app and accept the load there.</Alert>;
   if (sms && !sms.sent) return <Alert tone="warning" title="The text was not sent.">{sms.message}</Alert>;
   return (
-    <Alert tone="info" title="Send this link to the driver.">
-      {smsAvailable ? "You chose not to text it automatically." : "Send it from your own WhatsApp or phone with the buttons below."} Tracking starts when the driver opens it and taps Share.
+    <Alert tone="info" title="Send the app link to the driver.">
+      {smsAvailable ? "You chose not to text it automatically." : "Send it from your own WhatsApp or phone with the buttons below."} The driver installs RIO GPS, the load is waiting there, and tracking starts when they tap Accept.
     </Alert>
   );
 }
@@ -324,7 +324,7 @@ export function LoadForm({ initial, smsAvailable, vehicles, fleet = true, notice
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stopErrors, setStopErrors] = useState<{ pickup: string | null; delivery: string | null }>({ pickup: null, delivery: null });
-  const [created, setCreated] = useState<{ id: string; reference: string; driverLink: string | null; sms: SmsResult | null; share: DriverShare | null } | null>(null);
+  const [created, setCreated] = useState<{ id: string; reference: string; driverLink: string | null; sms: SmsResult | null; share: DriverShare | null; hasApp?: boolean } | null>(null);
 
   const stopBody = (s: StopState) => ({
     name: s.name.trim() || null,
@@ -371,7 +371,7 @@ export function LoadForm({ initial, smsAvailable, vehicles, fleet = true, notice
         router.push(`/loads/${initial.id}`);
         router.refresh();
       } else {
-        const r = await api<{ id: string; driverLink: string | null; sms: SmsResult | null; share: DriverShare | null }>("/api/loads", { method: "POST", json: { ...body, trackingMode: mode, sendInvite, driverConsent } });
+        const r = await api<{ id: string; driverLink: string | null; sms: SmsResult | null; share: DriverShare | null; hasApp?: boolean }>("/api/loads", { method: "POST", json: { ...body, trackingMode: mode, sendInvite, driverConsent } });
         setCreated({ ...r, reference: body.reference });
         window.scrollTo({ top: 0 });
       }
@@ -389,13 +389,17 @@ export function LoadForm({ initial, smsAvailable, vehicles, fleet = true, notice
           <div>
             <CardTitle>Load {created.reference} created</CardTitle>
             <CardDescription>
-              {created.driverLink ? <>The driver&apos;s link is shown only now. You can make a new one later from the load page.</> : <>Tracking with {vehicles.find((v) => v.id === vehicleId)?.name ?? "the vehicle"}&apos;s tracker has started.</>}
+              {created.driverLink ? <>The load is waiting in the driver&apos;s RIO GPS app. Tracking starts when they tap Accept.</> : <>Tracking with {vehicles.find((v) => v.id === vehicleId)?.name ?? "the vehicle"}&apos;s tracker has started.</>}
             </CardDescription>
           </div>
         </CardHeader>
         {created.driverLink && (
           <CardContent className="grid gap-3">
-            <SmsOutcome sms={created.sms} smsAvailable={smsAvailable} />
+            {created.hasApp ? (
+              <Alert tone="success" title="The driver has the RIO GPS app.">We sent them a notification. You can also send the link below if they don&apos;t see it.</Alert>
+            ) : (
+              <SmsOutcome sms={created.sms} smsAvailable={smsAvailable} />
+            )}
             <ShareDriverLink link={created.driverLink} share={created.share} />
           </CardContent>
         )}
@@ -424,7 +428,7 @@ export function LoadForm({ initial, smsAvailable, vehicles, fleet = true, notice
             <legend className="mb-1 p-0 text-sm font-medium">Track with</legend>
             <div className="flex flex-wrap gap-2" role="radiogroup">
               {([
-                ["phone", "Driver's phone", "The driver gets a link and accepts."],
+                ["phone", "Driver's phone", "The load goes to the driver's RIO GPS app; they accept."],
                 ["vehicle", "One of our vehicles", vehicles.length ? "Its RIO tracker reports the location." : "No vehicles with a tracker yet."]
               ] as const).map(([value, label, hint]) => (
                 <label
@@ -462,7 +466,7 @@ export function LoadForm({ initial, smsAvailable, vehicles, fleet = true, notice
           <Field id="driverName" label="Driver name">
             <Input id="driverName" name="driverName" maxLength={80} defaultValue={initial?.driverName ?? ""} autoComplete="off" />
           </Field>
-          <Field id="driverPhone" label="Driver mobile" required={mode === "phone"} description={mode === "phone" ? "The tracking link goes to this number." : "Optional, so your team can call the driver."}>
+          <Field id="driverPhone" label="Driver mobile" required={mode === "phone"} description={mode === "phone" ? "The load goes to this number in the RIO GPS app." : "Optional, so your team can call the driver."}>
             <Input id="driverPhone" name="driverPhone" type="tel" required={mode === "phone"} maxLength={30} defaultValue={initial?.driverPhone ?? ""} placeholder="(416) 555-0123" autoComplete="off" />
           </Field>
           <Field id="notes" label="Notes" className="sm:col-span-2" description="Only your team sees notes.">
@@ -490,14 +494,14 @@ export function LoadForm({ initial, smsAvailable, vehicles, fleet = true, notice
             <div className="grid gap-2">
               <label className="flex items-center gap-2 text-sm">
                 <Checkbox checked={sendInvite} disabled={!smsAvailable} onChange={(e) => setSendInvite(e.target.checked)} />
-                {smsAvailable ? "Text the tracking link to the driver automatically" : "You'll send the link by WhatsApp or text after creating the load"}
+                {smsAvailable ? "Also text the driver a link to the app" : "Drivers with the app get a notification. Others: send the app link by WhatsApp after creating the load"}
               </label>
               {smsAvailable && sendInvite && (
                 <label className="flex items-start gap-2 text-sm">
                   <Checkbox required checked={driverConsent} onChange={(e) => setDriverConsent(e.target.checked)} className="mt-0.5" />
                   <span>
                     The driver agreed to receive a text from us about this load.
-                    <span className="block text-xs text-muted-foreground">One text with the tracking link. They can reply STOP to opt out.</span>
+                    <span className="block text-xs text-muted-foreground">One text with a link to the RIO GPS app. They can reply STOP to opt out.</span>
                   </span>
                 </label>
               )}

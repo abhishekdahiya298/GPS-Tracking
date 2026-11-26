@@ -13,7 +13,7 @@ import { GET as vehiclesGET } from "@/app/api/vehicles/route";
 import { POST as createLoadPOST } from "@/app/api/loads/route";
 import { DELETE as loadDELETE, PATCH as loadPATCH } from "@/app/api/loads/[id]/route";
 import { POST as statusPOST } from "@/app/api/loads/[id]/status/route";
-import { POST as driverActionPOST } from "@/app/api/driver/action/route";
+import { driverPhone } from "./driver-app-client";
 import { GET as billingCsvGET } from "@/app/api/admin/billing/route";
 import { POST as customerPlanPOST } from "@/app/api/admin/customers/[id]/plan/route";
 
@@ -37,8 +37,6 @@ async function signIn(email: string) {
 const req = (method: string, path: string, who: string, body?: unknown) =>
   new Request(`${BASE}${path}`, { method, headers: { cookie: cookies[who]!, "content-type": "application/json", origin: BASE }, body: body === undefined ? undefined : JSON.stringify(body) });
 const p = (id: string) => ({ params: Promise.resolve({ id }) });
-const pub = (path: string, body: unknown) =>
-  new Request(`${BASE}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `203.0.113.${ipN++}`, "user-agent": "DriverPhone/1.0" }, body: JSON.stringify(body) });
 
 let platformId = "";
 let brokerId = "";
@@ -49,9 +47,13 @@ async function createLoad(who: string, reference: string) {
   const res = await createLoadPOST(req("POST", "/api/loads", who, newLoad(reference)));
   expect(res.status).toBe(201);
   const json = (await res.json()) as { id: string; driverLink: string };
-  return { id: json.id, token: json.driverLink.split("#")[1]! };
+  // The driver's phone signs in to the RIO GPS app with the first app link it gets.
+  if (!phone.signedIn && json.driverLink.includes("?t=")) await phone.signIn(json.driverLink);
+  return { id: json.id, token: json.id };
 }
-const accept = (token: string) => driverActionPOST(pub("/api/driver/action", { token, action: "accept" }));
+const phone = driverPhone();
+/** The driver accepts the load in the app. */
+const accept = (loadId: string) => phone.answer(loadId, "accept");
 
 beforeAll(async () => {
   const db = getDb();

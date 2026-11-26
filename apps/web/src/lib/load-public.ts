@@ -1,32 +1,27 @@
 import { isOrganizationActive } from "./organization-status";
 import type { UnitSystem } from "@rio-gps/core";
-import { estimateLoadEta, isLoadEnded, isLoadTracking, nextLoadStatus, type LoadEventType, type LoadStatus } from "@rio-gps/core/loads";
+import { estimateLoadEta, isLoadTracking, type LoadStatus } from "@rio-gps/core/loads";
 import type { TimeFormat } from "@rio-gps/core/timezones";
 import { getDb, schema } from "@rio-gps/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, type SQL } from "drizzle-orm";
 import { z } from "zod";
-import { ValidationError } from "./errors";
-import { recordBillableLoad } from "./plans";
 import { hashLoadToken, LoadTokenSchema } from "./loads";
 import { alertsForEvents, applyLoadPositions, raiseLoadAlerts, type AppliedPositions } from "./load-tracking";
 
 /**
  * The two public (no sign-in) sides of a load:
  *
- * DRIVER (/d#token): sees who is asking and for which load, accepts or declines, sends
- * positions while the page is open, and can stop sharing at any time. Positions are accepted
- * only between accepting and the load ending, and only while sharing is on.
+ * DRIVER: no browser page any more (driver-first). Loads go to the RIO GPS driver app; the
+ * app's positions for an accepted load come in through recordAppLoadPositions. Positions are
+ * accepted only between accepting and the load ending, and only while sharing is on.
  *
  * SHIPPER (/track#token): read-only status, ETA and last position. Never the driver's name or
  * phone, the carrier, notes, history or anything else of the broker's.
  *
  * Unknown, malformed and revoked tokens all get null (callers answer them identically).
  */
-type Meta = { ipAddress: string | null; userAgent: string | null };
 
-/** How often the driver page sends a position (seconds); returned to the client. */
-export const DRIVER_PING_INTERVAL_SECONDS = 120;
-/** Positions in one request (the page queues while offline and sends them together). */
+/** Positions applied to a load from one app report. */
 const MAX_BATCH = 100;
 const CLOCK_SLACK_MS = 2 * 60_000;
 
@@ -37,90 +32,7 @@ interface OrgDisplay {
   timeFormat: TimeFormat;
 }
 
-const shortStop = (name: string | null, address: string) => ({ name, address });
 
-async function rowByDriverToken(token: string) {
-  if (!LoadTokenSchema.safeParse(token).success) return null;
-  const [r] = await getDb()
-    .select({ load: schema.loads, org: { name: schema.organizations.name, unitSystem: schema.organizations.unitSystem, timeZone: schema.organizations.timeZone, timeFormat: schema.organizations.timeFormat } })
-    .from(schema.loads)
-    .innerJoin(schema.organizations, and(eq(schema.organizations.id, schema.loads.organizationId), eq(schema.organizations.status, "active")))
-    .where(and(eq(schema.loads.driverTokenHash, hashLoadToken(token)), eq(schema.loads.trackingMode, "phone")));
-  return r ?? null;
-}
-
-export interface DriverView extends OrgDisplay {
-  reference: string;
-  driverName: string | null;
-  status: LoadStatus;
-  /** invite: not answered yet; sharing: accepted and on; paused: accepted, driver stopped; ended. */
-  phase: "invite" | "sharing" | "paused" | "ended";
-  pickup: { name: string | null; address: string; appointmentAt: string | null };
-  delivery: { name: string | null; address: string; appointmentAt: string | null };
-  pingIntervalSeconds: number;
-}
-
-function driverPhase(l: typeof schema.loads.$inferSelect): DriverView["phase"] {
-  if (isLoadEnded(l.status)) return "ended";
-  if (l.status === "invited") return "invite";
-  return l.sharingStoppedAt ? "paused" : "sharing";
-}
-
-export async function viewAsDriver(token: string): Promise<DriverView | null> {
-  const r = await rowByDriverToken(token);
-  if (!r) return null;
-  const l = r.load;
-  return {
-    organizationName: r.org.name,
-    unitSystem: r.org.unitSystem,
-    timeZone: r.org.timeZone,
-    timeFormat: r.org.timeFormat,
-    reference: l.reference,
-    driverName: l.driverName,
-    status: l.status,
-    phase: driverPhase(l),
-    pickup: { ...shortStop(l.pickupName, l.pickupAddress), appointmentAt: l.pickupAppointmentAt?.toISOString() ?? null },
-    delivery: { ...shortStop(l.deliveryName, l.deliveryAddress), appointmentAt: l.deliveryAppointmentAt?.toISOString() ?? null },
-    pingIntervalSeconds: DRIVER_PING_INTERVAL_SECONDS
-  };
-}
-
-export const DriverActionSchema = z.object({ token: z.string(), action: z.enum(["accept", "decline", "stop"]) });
-
-/**
- * accept: consent (first time) or resume after a pause. decline: before accepting, ends the load
- * request. stop: pause sharing after accepting (the broker sees "driver stopped sharing").
- * Returns the new view, or null for a token that is not valid.
- */
-export async function driverAction(token: string, action: "accept" | "decline" | "stop", meta: Meta, now = new Date()): Promise<DriverView | null> {
-  const r = await rowByDriverToken(token);
-  if (!r) return null;
-  const l = r.load;
-  const db = getDb();
-  const event = (type: LoadEventType) => db.insert(schema.loadEvents).values({ organizationId: l.organizationId, loadId: l.id, type, at: now });
-  if (isLoadEnded(l.status)) return viewAsDriver(token);
-
-  if (action === "accept") {
-    if (l.status === "invited") {
-      await db.update(schema.loads).set({ status: "tracking", acceptedAt: now, consentUserAgent: meta.userAgent?.slice(0, 300) ?? null, sharingStoppedAt: null, updatedAt: now }).where(eq(schema.loads.id, l.id));
-      await event("accepted");
-      // Tracking starts now: this is when a load counts toward the customer's monthly usage.
-      await recordBillableLoad(db, l, now);
-    } else if (l.sharingStoppedAt) {
-      await db.update(schema.loads).set({ sharingStoppedAt: null, updatedAt: now }).where(eq(schema.loads.id, l.id));
-      await event("sharing_resumed");
-    }
-  } else if (action === "decline") {
-    if (l.status !== "invited") throw new ValidationError("You already accepted this load. Use Stop sharing instead.");
-    await db.update(schema.loads).set({ status: "declined", endedAt: now, updatedAt: now }).where(eq(schema.loads.id, l.id));
-    await event("declined");
-  } else if (isLoadTracking(l.status) && !l.sharingStoppedAt) {
-    await db.update(schema.loads).set({ sharingStoppedAt: now, updatedAt: now }).where(eq(schema.loads.id, l.id));
-    await event("sharing_stopped");
-    await raiseLoadAlerts(l, [{ type: "load_paused", at: now, latitude: l.lastLat, longitude: l.lastLon }]);
-  }
-  return viewAsDriver(token);
-}
 
 const PositionSchema = z.object({
   latitude: z.number().min(-90).max(90),
@@ -131,28 +43,32 @@ const PositionSchema = z.object({
   /** When the phone took the fix (ISO). */
   recordedAt: z.string().datetime({ offset: true })
 });
-export const DriverPingSchema = z.object({ token: z.string(), positions: z.array(PositionSchema).min(1).max(MAX_BATCH), source: z.enum(["web", "app"]).default("web") });
+type PingInput = { positions: z.infer<typeof PositionSchema>[]; source: "web" | "app" };
 
-export type PingResult = { accepted: number; phase: DriverView["phase"]; status: LoadStatus; pingIntervalSeconds: number };
+export type PingResult = { accepted: number; status: LoadStatus };
 
 /**
- * Stores positions and moves the status forward. Positions from before the driver accepted,
- * from more than 24 hours ago or from the future are dropped. Repeats are ignored.
- * The load row is locked for the update, so two requests cannot both advance the status.
+ * Stores positions from the driver app for a load the driver accepted and moves the status forward.
+ * Positions from before acceptance, from more than 24 hours ago or from the future are dropped.
+ * Repeats are ignored. The load row is locked, so two requests cannot both advance the status.
  */
-export async function recordDriverPositions(token: string, input: z.infer<typeof DriverPingSchema>, now = new Date()): Promise<PingResult | null> {
-  if (!LoadTokenSchema.safeParse(token).success) return null;
+export async function recordAppLoadPositions(loadId: string, positions: z.infer<typeof PositionSchema>[], now = new Date()): Promise<PingResult | null> {
+  if (!positions.length) return null;
+  return recordPhoneLoadPositions(eq(schema.loads.id, loadId), { positions: positions.slice(-MAX_BATCH), source: "app" }, now);
+}
+
+async function recordPhoneLoadPositions(match: SQL, input: PingInput, now: Date): Promise<PingResult | null> {
   let alertsAfter: { load: typeof schema.loads.$inferSelect; events: AppliedPositions["events"] } | null = null;
   const out = await getDb().transaction(async (tx) => {
     const [l] = await tx
       .select()
       .from(schema.loads)
-      .where(and(eq(schema.loads.driverTokenHash, hashLoadToken(token)), eq(schema.loads.trackingMode, "phone")))
+      .where(and(match, eq(schema.loads.trackingMode, "phone")))
       .for("update");
     // Suspended or archived customer: the link answers like an unknown one.
     if (!l || !(await isOrganizationActive(l.organizationId))) return null;
-    const result = (accepted: number, status: LoadStatus, phase: DriverView["phase"]): PingResult => ({ accepted, status, phase, pingIntervalSeconds: DRIVER_PING_INTERVAL_SECONDS });
-    if (!isLoadTracking(l.status) || l.sharingStoppedAt || !l.acceptedAt) return result(0, l.status, driverPhase(l));
+    const result = (accepted: number, status: LoadStatus): PingResult => ({ accepted, status });
+    if (!isLoadTracking(l.status) || l.sharingStoppedAt || !l.acceptedAt) return result(0, l.status);
 
     // Two minutes of slack either side for phones whose clock is a little off.
     const earliest = Math.max(l.acceptedAt.getTime() - CLOCK_SLACK_MS, now.getTime() - 24 * 3_600_000);
@@ -161,7 +77,7 @@ export async function recordDriverPositions(token: string, input: z.infer<typeof
       .map((p) => ({ ...p, at: new Date(p.recordedAt) }))
       .filter((p) => p.at.getTime() >= earliest && p.at.getTime() <= latest)
       .sort((a, b) => a.at.getTime() - b.at.getTime());
-    if (positions.length === 0) return result(0, l.status, "sharing");
+    if (positions.length === 0) return result(0, l.status);
 
     const inserted = await tx
       .insert(schema.loadPings)
@@ -192,7 +108,7 @@ export async function recordDriverPositions(token: string, input: z.infer<typeof
     );
     const status = applied.status;
     alertsAfter = { load: l, events: applied.events };
-    return result(inserted.length, status, isLoadEnded(status) ? "ended" : "sharing");
+    return result(inserted.length, status);
   });
   // After commit: arrivals and automatic delivery become alerts.
   const after = alertsAfter as { load: typeof schema.loads.$inferSelect; events: AppliedPositions["events"] } | null;

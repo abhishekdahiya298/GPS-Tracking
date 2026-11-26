@@ -72,7 +72,13 @@ export interface DriverLoad {
   delivery: { name: string | null; address: string; lat: number; lon: number; appointmentAt: string | null };
   deliveredAt: string | null;
   /** The company the load came from (older servers leave it out). */
-  from?: { id: string; name: string };
+  from?: { id: string; name: string; phone?: string | null };
+  /** own: from a company the driver works for; outside: accepted from someone else (they see this load only). */
+  kind?: "own" | "outside";
+  /** The phone tracks this load (not a truck's tracker). */
+  byPhone?: boolean;
+  /** The driver stopped sharing for this load. */
+  paused?: boolean;
 }
 
 /** The load the driver is working on now: on the road first, then the next pickup. */

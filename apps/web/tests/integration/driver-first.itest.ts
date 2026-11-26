@@ -7,6 +7,9 @@ import { createDriver } from "@/lib/drivers";
 import { createDriverInvite } from "@/lib/driver-app";
 import { requestDriverAgain } from "@/lib/driver-links";
 import { listPlans } from "@/lib/plans";
+import { createLoad, LoadInputSchema } from "@/lib/loads";
+import { GET as requestsAllGET } from "@/app/api/driver-app/requests/route";
+import { POST as loadAnswerPOST } from "@/app/api/driver-app/loads/[id]/route";
 import { POST as redeemPOST } from "@/app/api/driver-app/invite/route";
 import { GET as meGET, PATCH as mePATCH } from "@/app/api/driver-app/me/route";
 import { GET as requestsGET } from "@/app/api/driver-app/requests/route";
@@ -105,6 +108,31 @@ describe("driver-first links", () => {
     await ins(orgB, "B-1");
     const { loads } = (await (await loadsGET(app("GET", "/api/driver-app/loads"))).json()) as { loads: { reference: string; from: { name: string } }[] };
     expect(loads.map((l) => `${l.reference}:${l.from.name}`).sort()).toEqual(["A-1:Alpha Carriers", "B-1:Bravo Logistics"]);
+  });
+
+  it("a broker's load to the driver's number is a request; accepting tells the driver's companies", async () => {
+    const plans = Object.fromEntries((await listPlans()).map((p) => [p.name, p.id]));
+    const orgC = (await createCustomer(rootId, { name: "Charlie Brokers", slug: "charlie-brokers", timeZone: "America/Toronto", unitSystem: "imperial", planId: plans["Loads Starter"] ?? plans["Free Basic"], admin: { email: "c@first.test", name: "C" } }, meta)).organizationId;
+    const stop = (lat: number) => ({ name: null, address: "Somewhere", latitude: lat, longitude: -79.4, radiusM: 500, appointmentAt: null });
+    const created = await createLoad(ctx(orgC), LoadInputSchema.parse({ reference: "C-1", driverPhone: PHONE, driverName: "Sam", pickup: stop(43.7), delivery: stop(45.5) }), meta);
+    expect(created.hasApp).toBe(true);
+    const r = (await (await requestsAllGET(app("GET", "/api/driver-app/requests"))).json()) as { loads: { id: string; from: { name: string } }[] };
+    expect(r.loads).toEqual([expect.objectContaining({ id: created.id, from: expect.objectContaining({ name: "Charlie Brokers" }) })]);
+    // Not in the loads list until accepted.
+    const before = (await (await loadsGET(app("GET", "/api/driver-app/loads"))).json()) as { loads: { id: string }[] };
+    expect(before.loads.map((l) => l.id)).not.toContain(created.id);
+    const ok = await loadAnswerPOST(app("POST", `/api/driver-app/loads/${created.id}`, { action: "accept" }), params(created.id));
+    expect(ok.status).toBe(200);
+    const after = (await ok.json()) as { loads: { id: string; kind: string; from: { name: string } }[]; requests: unknown[] };
+    expect(after.requests).toHaveLength(0);
+    expect(after.loads.find((l) => l.id === created.id)).toMatchObject({ kind: "outside", from: { name: "Charlie Brokers" } });
+    const told = await getDb().execute<{ org: string }>(sql`select organization_id as org from audit_logs where action = 'driver.accepted_outside_load'`);
+    expect(told.map((t) => t.org).sort()).toEqual([orgA, orgB].sort());
+    // The broker gets the load's positions (from Accept on), not the driver's history.
+    await reportPOST(app("POST", "/api/driver-app/report", { points: [{ latitude: 43.8, longitude: -79.4, speedKph: 60, accuracyM: 8, recordedAt: new Date().toISOString() }], permission: "always", locationEnabled: true }));
+    const [pings] = await getDb().execute<{ n: number }>(sql`select count(*)::int as n from load_pings where load_id = ${created.id}`);
+    expect(Number(pings!.n)).toBe(1);
+    expect(await pointsFor(orgC)).toBe(0);
   });
 
   it("the driver edits their profile once for every company", async () => {

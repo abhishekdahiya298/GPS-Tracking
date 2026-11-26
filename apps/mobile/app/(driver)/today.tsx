@@ -3,7 +3,7 @@ import * as Battery from "expo-battery";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
-import type { DriverRequest } from "@/driver/api";
+import type { DriverRequest, LoadAnswer, LoadRequest } from "@/driver/api";
 import { useDriverData } from "@/driver/DriverData";
 import { useDriverSession } from "@/driver/DriverSession";
 import { ago, currentLoad, greeting } from "@/driver/model";
@@ -61,6 +61,9 @@ export default function Today() {
         {data.requests.map((r) => (
           <RequestCard key={r.id} r={r} onAnswer={data.respond} />
         ))}
+        {data.loadRequests.map((r) => (
+          <LoadRequestCard key={r.id} r={r} onAnswer={data.answerLoad} />
+        ))}
 
         {off ? (
           <View style={[styles.alert, styles.alertRed]}>
@@ -98,7 +101,7 @@ export default function Today() {
               <View style={styles.flex}>
                 <Text style={styles.heroTitle}>You&apos;re on the map</Text>
                 <Text style={styles.heroSub}>
-                  {me.companiesSharing === 0 ? "No company sees you until you accept" : `Sharing with ${(me.companiesSharing ?? 1) > 1 ? `${me.companiesSharing} companies` : me.company.name}`}
+                  {me.companiesSharing === 0 ? (open.some((l) => l.kind === "outside" && !l.paused) ? `Sharing for ${open.filter((l) => l.kind === "outside" && !l.paused).length === 1 ? "1 load" : `${open.filter((l) => l.kind === "outside" && !l.paused).length} loads`} you accepted` : "No company sees you until you accept") : `Sharing with ${(me.companiesSharing ?? 1) > 1 ? `${me.companiesSharing} companies` : me.company.name}`}
                   {battery != null ? ` · battery ${battery}%` : ""}
                 </Text>
               </View>
@@ -116,7 +119,7 @@ export default function Today() {
         )}
 
         {now ? (
-          <LoadCard load={now} dispatchPhone={me.company.phone} onPress={() => router.push("/loads")} />
+          <LoadCard load={now} dispatchPhone={now.from?.phone ?? me.company.phone} onPress={() => router.push("/loads")} />
         ) : data.loads ? (
           <View style={styles.empty}>
             <View style={styles.emptyIcon}>
@@ -183,6 +186,67 @@ function RequestCard({ r, onAnswer }: { r: DriverRequest; onAnswer: (id: string,
   );
 }
 
+const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : null);
+
+/** A load sent to the driver's number by a company they don't work for: Accept to share for this load only. */
+function LoadRequestCard({ r, onAnswer }: { r: LoadRequest; onAnswer: (id: string, action: LoadAnswer) => Promise<void> }) {
+  const [busy, setBusy] = useState<"accept" | "decline" | null>(null);
+  const answer = async (action: "accept" | "decline") => {
+    setBusy(action);
+    try {
+      await onAnswer(r.id, action);
+    } catch (err) {
+      Alert.alert("Couldn't send that", err instanceof Error ? err.message : "Try again in a moment.");
+    } finally {
+      setBusy(null);
+    }
+  };
+  const confirmDecline = () =>
+    Alert.alert(`Decline load ${r.reference}?`, `${r.from.name} is told you declined.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Decline", style: "destructive", onPress: () => void answer("decline") }
+    ]);
+  return (
+    <View style={styles.req}>
+      <View style={[styles.edge, { backgroundColor: "#a3470a" }]} />
+      <View style={styles.alertTop}>
+        <View style={[styles.alertIcon, { backgroundColor: "#fcd9b2" }]}>
+          <Ionicons name="cube-outline" size={24} color="#a3470a" />
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.reqKicker}>NEW LOAD · FROM {r.from.name.toUpperCase()}</Text>
+          <Text style={styles.reqTitle}>Load {r.reference}</Text>
+        </View>
+      </View>
+      <View style={styles.route}>
+        <View style={styles.routeRow}>
+          <View style={[styles.dot, { backgroundColor: "#136c35" }]} />
+          <View style={styles.flex}>
+            <Text style={styles.routeName} numberOfLines={1}>{r.pickup.name ?? r.pickup.address}</Text>
+            {r.pickup.appointmentAt ? <Text style={styles.routeSub}>Pickup {when(r.pickup.appointmentAt)}</Text> : r.pickup.name ? <Text style={styles.routeSub} numberOfLines={1}>{r.pickup.address}</Text> : null}
+          </View>
+        </View>
+        <View style={styles.routeRow}>
+          <View style={[styles.dot, { backgroundColor: "#d81e2c" }]} />
+          <View style={styles.flex}>
+            <Text style={styles.routeName} numberOfLines={1}>{r.delivery.name ?? r.delivery.address}</Text>
+            {r.delivery.appointmentAt ? <Text style={styles.routeSub}>Delivery {when(r.delivery.appointmentAt)}</Text> : r.delivery.name ? <Text style={styles.routeSub} numberOfLines={1}>{r.delivery.address}</Text> : null}
+          </View>
+        </View>
+      </View>
+      <Text style={styles.reqText}>If you accept, {r.from.name} sees your location for this load only, until it&apos;s delivered. You can stop sharing any time.</Text>
+      <View style={styles.reqBtns}>
+        <Pressable onPress={confirmDecline} disabled={!!busy} style={[styles.reqBtn, styles.reqNo]} accessibilityRole="button" accessibilityLabel={`Decline load ${r.reference}`}>
+          {busy === "decline" ? <ActivityIndicator color={colors.foreground} /> : <Text style={styles.reqNoText}>Decline</Text>}
+        </Pressable>
+        <Pressable onPress={() => void answer("accept")} disabled={!!busy} style={[styles.reqBtn, styles.reqYes]} accessibilityRole="button" accessibilityLabel={`Accept load ${r.reference}`}>
+          {busy === "accept" ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.greenText}>Accept load</Text>}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function Fact({ value, label }: { value: string; label: string }) {
   return (
     <View style={styles.fact}>
@@ -221,6 +285,12 @@ const styles = themed(() => ({
   greenText: { fontSize: 15, fontWeight: "700", color: "#ffffff" },
   req: { position: "relative", gap: space.md, padding: 16, paddingLeft: 20, borderRadius: 20, overflow: "hidden", borderWidth: 1.5, borderColor: colors.primary, backgroundColor: colors.background, ...elevation.md },
   reqTitle: { fontSize: 17, fontWeight: "700", color: colors.foreground },
+  reqKicker: { fontSize: 11, fontWeight: "800", letterSpacing: 0.5, color: "#a3470a" },
+  route: { gap: 10, padding: 12, borderRadius: 14, backgroundColor: colors.canvas },
+  routeRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  dot: { width: 10, height: 10, borderRadius: 5, marginTop: 5 },
+  routeName: { fontSize: 14.5, fontWeight: "600", color: colors.foreground },
+  routeSub: { fontSize: 12.5, color: colors.mutedForeground },
   reqText: { fontSize: 14, lineHeight: 20, color: colors.foreground },
   reqBtns: { flexDirection: "row", gap: space.sm },
   reqBtn: { flex: 1, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },

@@ -65,7 +65,7 @@ function Screens() {
     if (!tapped) return;
     const data = (tapped.notification.request.content.data ?? {}) as Record<string, unknown>;
     if (driverIn) {
-      if (data.type === "driver_request") router.navigate("/today");
+      if (data.type === "driver_request" || data.type === "load_request") router.navigate("/today");
       else if (data.type === "location_request") router.navigate({ pathname: "/driver/request", params: { from: String(data.from ?? ""), message: String(data.message ?? ""), at: String(data.at ?? "") } });
       else void driver.refresh();
     } else if (signedIn) {

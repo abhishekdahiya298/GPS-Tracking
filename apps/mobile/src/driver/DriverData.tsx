@@ -4,7 +4,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppState, Linking, Platform } from "react-native";
-import { driver, type DriverCompany, type DriverRequest } from "./api";
+import { driver, type DriverCompany, type DriverRequest, type LoadAnswer, type LoadRequest } from "./api";
 import { useDriverSession } from "./DriverSession";
 import type { DriverLoad, Permission } from "./model";
 import { phonePermission, sendReport, startTracking } from "./tracking";
@@ -20,6 +20,9 @@ interface DriverData {
   /** Companies the driver works for. */
   companies: DriverCompany[];
   respond(id: string, accept: boolean): Promise<void>;
+  /** Loads sent to the driver's number by other companies, waiting for Accept / Decline. */
+  loadRequests: LoadRequest[];
+  answerLoad(id: string, action: LoadAnswer): Promise<void>;
   refresh(): Promise<void>;
   /** Opens the phone's settings for this app, to turn location on or to Always. */
   openLocationSettings(): void;
@@ -34,6 +37,7 @@ export function DriverDataProvider({ children }: { children: ReactNode }) {
   const [perm, setPerm] = useState<{ permission: Permission; locationEnabled: boolean }>({ permission: "always", locationEnabled: true });
   const [lastSentAt, setLastSentAt] = useState<string | null>(null);
   const [links, setLinks] = useState<{ requests: DriverRequest[]; companies: DriverCompany[] }>({ requests: [], companies: [] });
+  const [loadRequests, setLoadRequests] = useState<LoadRequest[]>([]);
   const company = session.state.status === "signedIn" ? session.state.me.company.name : "";
 
   const refresh = useCallback(async () => {
@@ -50,7 +54,10 @@ export function DriverDataProvider({ children }: { children: ReactNode }) {
     // Older servers don't have requests yet: keep the screen as it was.
     driver
       .requests()
-      .then(setLinks)
+      .then((r) => {
+        setLinks({ requests: r.requests, companies: r.companies });
+        setLoadRequests(r.loads ?? []);
+      })
       .catch(() => undefined);
     void session.refresh();
   }, [company]);
@@ -78,13 +85,21 @@ export function DriverDataProvider({ children }: { children: ReactNode }) {
         setLinks(await driver.respond(id, accept));
         void refresh();
       },
+      loadRequests,
+      answerLoad: async (id, action) => {
+        const r = await driver.answerLoad(id, action);
+        setLoads(r.loads);
+        setLoadRequests(r.requests);
+        // Accepting starts sharing for that load at once.
+        if (action === "accept" || action === "resume") void sendReport();
+      },
       refresh,
       openLocationSettings: () => {
         if (Platform.OS === "android" && !perm.locationEnabled) void Linking.sendIntent("android.settings.LOCATION_SOURCE_SETTINGS").catch(() => Linking.openSettings());
         else void Linking.openSettings();
       }
     }),
-    [loads, loadsError, perm, lastSentAt, links, refresh]
+    [loads, loadsError, perm, lastSentAt, links, loadRequests, refresh]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
