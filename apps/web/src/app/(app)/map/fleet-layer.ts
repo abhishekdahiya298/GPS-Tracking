@@ -594,7 +594,9 @@ export class FleetLayer {
       if (p.state === "moving") {
         const prev = this.points.get(p.id);
         const tail = this.trails.get(p.id) ?? (prev ? [prev.lngLat] : []);
-        tail.push(p.lngLat);
+        // A "seen" ping (reported, no new fix) repeats the same position: no trail point for it.
+        const last = tail[tail.length - 1];
+        if (!last || last[0] !== p.lngLat[0] || last[1] !== p.lngLat[1]) tail.push(p.lngLat);
         this.trails.set(p.id, tail.slice(-TRAIL_POINTS));
       } else this.trails.delete(p.id);
       this.trailsDirty = true;
