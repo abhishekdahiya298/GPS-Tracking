@@ -27,6 +27,7 @@ import { viewAs } from "../_shared/view-as";
 import { StatusDialog, type StatusAction } from "../_shared/status-dialog";
 import { CUSTOMER_STATUS } from "../_shared/status-meta";
 import { RelativeTime } from "@/components/app/local-time";
+import { DemoDataButton } from "./demo-data-button";
 import { useTime } from "@/components/app/time-context";
 
 const ROLE_LABEL: Record<string, string> = { ORG_ADMIN: "Org Admin", FLEET_MANAGER: "Fleet Manager", DISPATCHER: "Dispatcher", VIEWER: "Viewer" };
@@ -62,6 +63,7 @@ export function CustomerDetailView({ c, billing }: { c: CustomerDetail; billing:
             <Button variant="secondary" onClick={() => setEditing(true)}>
               <Pencil /> Edit details
             </Button>
+            {c.isDemo && !archived && <DemoDataButton onDone={refresh} />}
             {!archived && (
               <>
                 <Button variant="secondary" onClick={() => setBulk(true)}>
