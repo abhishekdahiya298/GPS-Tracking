@@ -58,6 +58,21 @@ Every tracker RIO owns is one row in `gps_devices`; `organization_id` null means
 
 Platform pages show the full IMEI (staff match it against labels); customers' own pages still show only the last 4 digits. Daily summaries are keyed by organization too, so a tracker moved mid-day keeps one row per customer.
 
+## Tracker diagnostics
+
+Trackers → the stethoscope button on a row opens `/admin/trackers/<id>` (super admins only).
+
+- **Verdict and health cards:** a plain-language summary covering connection (last report), GPS (fix and satellites), vehicle power, internal battery and cell signal. They are computed by `src/lib/tracker-diagnostics-model.ts` (pure, unit tested).
+- **Timeline:** one block per hour for 6, 24 or 72 hours. Green means reports with GPS, amber means reports without GPS, grey means silent. Below it are charts of the best satellites per hour and the lowest vehicle and battery voltage per hour.
+- **Recent reports:** the raw reports from Traccar, including no-fix ones that RIO never stores as positions.
+- **Ask the tracker:** read-only Teltonika commands sent through Traccar (`getgps`, `getinfo`, `getstatus`, `battery`, `getver`, `getio`). Replies arrive as a `result` attribute on a Traccar position, and the page polls for a minute after each send.
+  - Commands are limited to this allowlist, so there is nothing that restarts or reconfigures the tracker.
+  - At most 10 commands per tracker per minute.
+  - Each send is audited as `device.command_sent`.
+  - An offline tracker gets the command queued by Traccar until it reconnects.
+
+Load: it reads Traccar's REST API only when the page asks, for at most 72 hours and 5,000 reports, with 10–15 s timeouts. It never touches the live path (webhook → ingest → Redis → maps).
+
 ## SIM cards
 
 `sim_cards`: ICCID (unique), phone number, carrier, plan, APN, status (`inventory` = not activated, `active`, `suspended`, `cancelled`), monthly cost, notes, and the tracker it is in (one SIM per tracker).

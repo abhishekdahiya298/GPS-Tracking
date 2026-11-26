@@ -1,6 +1,6 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Archive, ArchiveRestore, ArrowRightLeft, Boxes, Building2, CardSim, CircleOff, Cpu, FlaskConical, ListPlus, MoreHorizontal, Pencil, Plus, Radio, Undo2, Warehouse, type LucideIcon } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowRightLeft, Boxes, Building2, CardSim, CircleOff, Cpu, FlaskConical, ListPlus, MoreHorizontal, Pencil, Plus, Radio, Stethoscope, Undo2, Warehouse, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -156,6 +156,7 @@ export function TrackersView({ data, query, onlineSeconds, hideDemo }: { data: D
           return (
             <RowActions
               actions={[
+                { icon: Stethoscope, label: "Diagnostics", href: `/admin/trackers/${t.id}`, color: "#0f766e" },
                 { icon: Building2, label: "Assign to a customer", onClick: act("assign"), hidden: !!t.customer || t.status === "retired" },
                 { icon: ArrowRightLeft, label: "Move to another customer", onClick: act("move"), hidden: !t.customer },
                 { icon: Undo2, label: "Return to RIO stock", onClick: act("return"), hidden: !t.customer },

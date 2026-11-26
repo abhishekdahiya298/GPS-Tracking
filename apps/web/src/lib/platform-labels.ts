@@ -14,6 +14,7 @@ export const ACTION_LABEL: Record<string, string> = {
   "device.retired": "Retired tracker",
   "device.unretired": "Put tracker back in stock",
   "device.inventory_updated": "Edited tracker details",
+  "device.command_sent": "Sent tracker command",
   "sim.added": "Added SIM",
   "sim.updated": "Edited SIM",
   "sim.activated": "Activated SIM",
