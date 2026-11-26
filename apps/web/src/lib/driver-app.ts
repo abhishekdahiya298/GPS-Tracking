@@ -123,9 +123,11 @@ export async function redeemDriverInvite(token: string, info: DeviceInfo, ip: st
   return startSession(inv.driverId, info);
 }
 
-/** Phone sign-in, step 1: texts a code when the number belongs to an active driver. */
-export async function startDriverPhoneSignIn(phoneRaw: string, ip: string | null): Promise<{ sentTo: string | null }> {
-  if (!smsConfigured()) throw new ValidationError("Signing in by text isn't available yet. Open the invite link your company sent you.");
+/**
+ * Phone sign-in, step 1: sends a code to an active driver with this number, by text when texts work,
+ * otherwise to the email the company has for them. `sentTo` says where it went (masked).
+ */
+export async function startDriverPhoneSignIn(phoneRaw: string, ip: string | null): Promise<{ sentTo: string | null; channel: "sms" | "email" | null }> {
   await assertRateLimit("driver-app-phone", ip ?? "unknown", 10, 3600, "Too many tries. Try again later.");
   const phone = normalizePhone(phoneRaw);
   if (!phone) throw new ValidationError("Enter your mobile number, like (905) 555-0121.");
@@ -133,10 +135,13 @@ export async function startDriverPhoneSignIn(phoneRaw: string, ip: string | null
   // Same answer whether or not the number is known, so the screen can't be used to find drivers.
   if (!d) {
     logger.info("driver_app.phone_unknown", {});
-    return { sentTo: null };
+    return { sentTo: null, channel: null };
   }
-  const sent = await sendDriverSignInCode(phone);
-  return { sentTo: sent.phone };
+  if (!smsConfigured() && !d.email) {
+    throw new ValidationError("We can't send you a code yet. Ask your company to add your email in RIO GPS, or to send you the app link.");
+  }
+  const sent = await sendDriverSignInCode(phone, { email: d.email, name: d.name });
+  return sent.phone ? { sentTo: sent.phone, channel: "sms" } : { sentTo: sent.email, channel: "email" };
 }
 
 /** Phone sign-in, step 2: the right code signs the driver in. */
@@ -151,7 +156,7 @@ export async function verifyDriverPhoneSignIn(phoneRaw: string, code: string, in
 
 function activeDriversByPhone(phone: string) {
   return getDb()
-    .select({ id: schema.drivers.id })
+    .select({ id: schema.drivers.id, email: schema.drivers.email, name: schema.drivers.name })
     .from(schema.drivers)
     .innerJoin(schema.organizations, eq(schema.organizations.id, schema.drivers.organizationId))
     .where(and(eq(schema.drivers.phone, phone), eq(schema.drivers.status, "active"), eq(schema.organizations.status, "active")))

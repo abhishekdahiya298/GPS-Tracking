@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { driver, driverTokens, onDriverSignedOut, type DriverMe } from "./api";
+import { driver, driverTokens, onDriverSignedOut, type DriverMe, type PhoneStart } from "./api";
 import { registerDriverPush } from "./push";
 import { phonePermission, sendReport, startTracking, stopTracking } from "./tracking";
 
@@ -12,7 +12,7 @@ type State = { status: "loading" } | { status: "none" } | { status: "ended"; com
 interface DriverSessionValue {
   state: State;
   signInWithInvite(token: string): Promise<void>;
-  startPhone(phone: string): Promise<{ sentTo: string | null }>;
+  startPhone(phone: string): Promise<PhoneStart>;
   verifyPhone(phone: string, code: string): Promise<void>;
   /** After D2/D2B/D2C: remember set-up is done and start sharing. */
   finishSetup(): Promise<void>;

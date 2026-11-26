@@ -11,7 +11,7 @@ import { useDriverSession } from "@/driver/DriverSession";
 import { inviteToken } from "@/driver/model";
 import { colors, space, themed } from "@/theme";
 
-type Mode = { m: "phone" } | { m: "code"; phone: string; sentTo: string | null } | { m: "invite"; token: string } | { m: "join" } | { m: "joinCode"; token: string; company: string } | { m: "joined"; company: string } | { m: "paste" };
+type Mode = { m: "phone" } | { m: "code"; phone: string; sentTo: string | null; channel: "sms" | "email" | null } | { m: "invite"; token: string } | { m: "join" } | { m: "joinCode"; token: string; company: string } | { m: "joined"; company: string } | { m: "paste" };
 
 const say = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
@@ -120,7 +120,7 @@ export default function DriverSignIn() {
 
   if (mode.m === "code") {
     return (
-      <AuthShell back title="Check your texts" tagline={`We sent a 6-digit code to ${mode.sentTo ?? mode.phone}.`} footer="Codes expire after 10 minutes">
+      <AuthShell back title={mode.channel === "email" ? "Check your email" : "Check your texts"} tagline={mode.sentTo ? `We sent a 6-digit code to ${mode.sentTo}.` : "If this number is on RIO GPS, we sent a 6-digit code."} footer="Codes expire after 10 minutes">
         <Field label="Enter the code" icon="keypad-outline" value={code} onChangeText={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" textContentType="oneTimeCode" autoComplete="one-time-code" autoFocus maxLength={6} />
         {error && <ErrorNote text={error} />}
         <Button title="Verify and continue" icon="arrow-forward" onPress={() => run(async () => session.verifyPhone(mode.phone, code).catch((e) => setError(say(e, "That code didn't work."))))} loading={busy} />
@@ -200,7 +200,7 @@ export default function DriverSignIn() {
       <Text style={styles.muted}>Use the number your company added for you.</Text>
       {error && <ErrorNote text={error} />}
       <Button
-        title="Text me a code"
+        title="Send me a code"
         icon="chatbubble-outline"
         onPress={() =>
           run(async () => {
@@ -208,9 +208,9 @@ export default function DriverSignIn() {
             try {
               const r = await session.startPhone(phone.trim());
               setCode("");
-              setMode({ m: "code", phone: phone.trim(), sentTo: r.sentTo });
+              setMode({ m: "code", phone: phone.trim(), sentTo: r.sentTo, channel: r.channel ?? null });
             } catch (e) {
-              setError(`${say(e, "Couldn't send a code.")} You can also ask your company for an invite link.`);
+              setError(`${say(e, "Couldn't send a code.")} You can also ask your company to send you the app link.`);
             }
           })
         }

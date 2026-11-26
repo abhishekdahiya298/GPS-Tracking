@@ -8,7 +8,7 @@ import { NO_STORE } from "../../_shared";
 
 export const dynamic = "force-dynamic";
 
-/** POST (driver app): { phone } → a text code when the number is an active driver's. */
+/** POST (driver app): { phone } → a code by text, or by email until texts work, when the number is an active driver's. */
 export async function POST(request: Request) {
   try {
     const body = parseOrThrow(z.object({ phone: z.string().max(40) }), await readJson(request));

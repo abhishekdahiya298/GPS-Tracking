@@ -59,10 +59,13 @@ async function keep(reply: SessionReply): Promise<SessionReply> {
   return reply;
 }
 
+/** Where the sign-in code went: a text (sms), the email the company has (email), or nowhere known (null). */
+export type PhoneStart = { sentTo: string | null; channel?: "sms" | "email" | null };
+
 export const driver = {
   peekInvite: (t: string) => driverApi.send<InvitePeek>("driver-app/invite", { query: { t }, anonymous: true }).then((r) => r.data),
   redeemInvite: async (t: string) => keep((await driverApi.send<SessionReply>("driver-app/invite", { method: "POST", anonymous: true, body: { token: t, device: device() } })).data),
-  startPhone: (phone: string) => driverApi.send<{ sentTo: string | null }>("driver-app/phone/start", { method: "POST", anonymous: true, body: { phone } }).then((r) => r.data),
+  startPhone: (phone: string) => driverApi.send<PhoneStart>("driver-app/phone/start", { method: "POST", anonymous: true, body: { phone } }).then((r) => r.data),
   verifyPhone: async (phone: string, code: string) => keep((await driverApi.send<SessionReply>("driver-app/phone/verify", { method: "POST", anonymous: true, body: { phone, code, device: device() } })).data),
   me: () => driverApi.get<DriverMe>("driver-app/me"),
   loads: () => driverApi.get<{ loads: DriverLoad[] }>("driver-app/loads").then((r) => r.loads),

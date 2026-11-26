@@ -99,9 +99,12 @@ async function sendCode(phoneE164: string, purpose: "signup" | "driver_join" | "
   return { email: emailSent && to.email ? maskEmail(to.email) : null, phone: smsSent ? mask(phoneE164) : null };
 }
 
-/** Driver app sign-in: a code by text to a driver's phone. */
-export async function sendDriverSignInCode(phoneE164: string): Promise<SentTo> {
-  return sendCode(phoneE164, "driver_signin");
+/**
+ * Driver app sign-in code: by text when texts work, and by email to the driver's address on file
+ * (the only way until the SMS number is approved).
+ */
+export async function sendDriverSignInCode(phoneE164: string, to: { email?: string | null; name?: string } = {}): Promise<SentTo> {
+  return sendCode(phoneE164, "driver_signin", { email: to.email ?? undefined, name: to.name, sms: smsConfigured() });
 }
 export async function checkDriverSignInCode(phoneE164: string, code: string): Promise<void> {
   return checkCode(phoneE164, code);
