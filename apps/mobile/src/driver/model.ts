@@ -71,6 +71,8 @@ export interface DriverLoad {
   pickup: { name: string | null; address: string; lat: number; lon: number; appointmentAt: string | null };
   delivery: { name: string | null; address: string; lat: number; lon: number; appointmentAt: string | null };
   deliveredAt: string | null;
+  /** The company the load came from (older servers leave it out). */
+  from?: { id: string; name: string };
 }
 
 /** The load the driver is working on now: on the road first, then the next pickup. */
@@ -121,4 +123,12 @@ export function inviteToken(input: string): string | null {
   const m = /[?&]t=([A-Za-z0-9_-]{16,128})/.exec(s);
   if (m) return m[1]!;
   return /^[A-Za-z0-9_-]{16,128}$/.test(s) ? s : null;
+}
+
+/** "3 h 20 min" from minutes. */
+export function hoursMinutes(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = Math.round(min % 60);
+  if (!h) return `${m} min`;
+  return m ? `${h} h ${m} min` : `${h} h`;
 }

@@ -1,13 +1,15 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { BadgeAlert, Car, History, IdCard, Layers, Map as MapIcon, MapPinOff, Navigation, Pencil, Phone, Plus, Send, Smartphone, SmartphoneNfc, Trash2, UserCheck, UserMinus, UserPlus, UserX, Users } from "lucide-react";
+import { BadgeAlert, Car, ChevronDown, Download, History, IdCard, Layers, LocateFixed, Map as MapIcon, MapPinOff, Navigation, Package, Pencil, Phone, Plus, RefreshCw, Send, Smartphone, SmartphoneNfc, Trash2, UserCheck, UserMinus, UserPlus, UserX, Users, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AssignLoadDialog } from "./assign-load-dialog";
 import { AppStateChip, Battery } from "./driver-app-bits";
 import { InviteDriversDialog } from "./invite-drivers-dialog";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
-import { ACTION_COLOR, FilterTiles, RowActions } from "@/components/app/list-kit";
+import { FilterTiles } from "@/components/app/list-kit";
 import { RelativeTime } from "@/components/app/local-time";
 import { PageHeader } from "@/components/app/page-header";
 import { SearchInput } from "@/components/app/search-input";
@@ -31,7 +33,20 @@ import { cn } from "@/lib/cn";
 import { Input, Select } from "@/components/ui/input";
 
 type Data = { items: DriverRow[]; total: number; page: number; pageSize: number; counts: Record<DriverListQuery["state"], number> };
-type Can = { create: boolean; update: boolean; remove: boolean; map: boolean };
+type Can = { create: boolean; update: boolean; remove: boolean; map: boolean; loads: boolean };
+
+const LINK_CHIP: Record<string, { label: string; cls: string; title: string }> = {
+  pending: { label: "Request pending", cls: "bg-warning-soft text-warning", title: "Waiting for the driver to accept in the RIO GPS app" },
+  declined: { label: "Declined", cls: "bg-danger-soft text-danger", title: "The driver declined. You can ask again." },
+  left: { label: "Left", cls: "bg-muted text-muted-foreground", title: "The driver stopped working with you in the app. You can ask again." }
+};
+const LOAD_STATUS: Record<string, string> = { invited: "Waiting", tracking: "Tracking", at_pickup: "At pickup", in_transit: "In transit", at_delivery: "At delivery" };
+
+function toCsv(rows: DriverRow[]): string {
+  const esc = (v: string | null | undefined) => `"${(v ?? "").replace(/"/g, '""')}"`;
+  const head = ["Name", "Phone", "Email", "Status", "In app", "Vehicle", "Load", "Licence", "Licence expires"];
+  return [head.join(","), ...rows.map((d) => [d.name, d.phone, d.email, d.status, d.link.state === "active" ? d.app.state : d.link.state, d.vehicle?.name, d.load?.reference, d.licenseNumber, d.licenseExpiresOn].map(esc).join(","))].join("\n");
+}
 
 const AVATAR = ["#1d4ed8", "#0f766e", "#6d28d9", "#b45309", "#be185d", "#0369a1", "#15803d", "#c2410c"];
 const initials = (n: string) =>
@@ -68,6 +83,64 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
   const [deleting, setDeleting] = useState<DriverRow | null>(null);
   const [freeing, setFreeing] = useState<DriverRow | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [assigning, setAssigning] = useState<DriverRow | null>(null);
+  const [bulkRemove, setBulkRemove] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const picked = data.items.filter((d) => checked.has(d.id));
+  const toggle = (id: string) =>
+    setChecked((cur) => {
+      const n = new Set(cur);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const allOnPage = data.items.length > 0 && data.items.every((d) => checked.has(d.id));
+
+  async function askAgain(d: DriverRow) {
+    try {
+      await api(`/api/drivers/${d.id}/request`, { method: "POST" });
+      toast.success(`Asked ${d.name} again. They'll see it in the RIO GPS app.`);
+      refresh();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+  async function askLocation(d: DriverRow) {
+    try {
+      await api(`/api/drivers/${d.id}/ask-location`, { method: "POST", json: {} });
+      toast.success(`Asked ${d.name} to turn on location`);
+      refresh();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+  async function runBulk(label: string, list: DriverRow[], fn: (d: DriverRow) => Promise<unknown>) {
+    setBulkBusy(true);
+    let ok = 0;
+    const failed: string[] = [];
+    for (const d of list) {
+      try {
+        await fn(d);
+        ok++;
+      } catch {
+        failed.push(d.name);
+      }
+    }
+    setBulkBusy(false);
+    if (ok) toast.success(`${label}: ${ok} driver${ok === 1 ? "" : "s"}`);
+    if (failed.length) toast.error(`Couldn't do it for ${failed.slice(0, 3).join(", ")}${failed.length > 3 ? ` and ${failed.length - 3} more` : ""}`);
+    setChecked(new Set());
+    refresh();
+  }
+  function exportCsv(list: DriverRow[]) {
+    const blob = new Blob([toCsv(list)], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `drivers-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
   const selected = data.items.find((d) => d.id === selectedId) ?? null;
   const [density, setDensity] = useDensity("drivers");
   const time = useTime();
@@ -77,9 +150,25 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
   const columns = useMemo<ColumnDef<DriverRow, unknown>[]>(
     () => [
       {
+        id: "pick",
+        header: () => (
+          <input
+            type="checkbox"
+            aria-label="Select all drivers on this page"
+            className="size-4 accent-[var(--primary)]"
+            checked={allOnPage}
+            onChange={() => setChecked(allOnPage ? new Set() : new Set(data.items.map((d) => d.id)))}
+          />
+        ),
+        meta: { width: "40px" } satisfies ColumnMeta,
+        cell: ({ row: { original: d } }) => (
+          <input type="checkbox" aria-label={`Select ${d.name}`} className="size-4 accent-[var(--primary)]" checked={checked.has(d.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggle(d.id)} />
+        )
+      },
+      {
         id: "name",
         header: "Driver",
-        meta: { sortKey: "name", width: "26%" } satisfies ColumnMeta,
+        meta: { sortKey: "name", width: "24%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => (
           <div className={cn("flex min-w-0 items-center gap-3", d.status === "inactive" && "opacity-60")}>
             <span className="relative shrink-0">
@@ -90,6 +179,11 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
               <p className="m-0 flex items-center gap-1.5 truncate font-semibold text-foreground">
                 {d.name}
                 {d.status === "inactive" && <span className="inline-flex h-[18px] items-center rounded-full bg-muted px-1.5 text-[10.5px] font-bold text-muted-foreground">Inactive</span>}
+                {d.status === "active" && LINK_CHIP[d.link.state] && (
+                  <span title={LINK_CHIP[d.link.state]!.title} className={cn("inline-flex h-[18px] shrink-0 items-center rounded-full px-1.5 text-[10.5px] font-bold", LINK_CHIP[d.link.state]!.cls)}>
+                    {LINK_CHIP[d.link.state]!.label}
+                  </span>
+                )}
               </p>
               <p className="m-0 flex items-center gap-1 truncate text-xs text-muted-foreground">
                 {d.phone ? (
@@ -108,7 +202,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {
         id: "vehicle",
         header: "Vehicle now",
-        meta: { sortKey: "vehicle", width: "24%" } satisfies ColumnMeta,
+        meta: { sortKey: "vehicle", width: "20%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) =>
           d.vehicle ? (
             <Link href={`/vehicles/${d.vehicle.id}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-2.5 text-foreground no-underline hover:underline" title={VEHICLE_TYPE_LABEL[asVehicleType(d.vehicle.type)]}>
@@ -139,9 +233,10 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {
         id: "now",
         header: "Now",
-        meta: { width: "19%" } satisfies ColumnMeta,
+        meta: { width: "17%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => {
           if (d.status === "inactive") return <span className="text-xs text-muted-foreground">Off</span>;
+          if (d.link.state !== "active") return <span className="text-xs text-muted-foreground">{d.link.state === "pending" ? "Not sharing until they accept" : "Not sharing with you"}</span>;
           const app = (
             <span className="flex items-center gap-1.5">
               <AppStateChip state={d.app.state} className="h-5 px-1.5 text-[11px]" />
@@ -152,16 +247,44 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
           if (!d.vehicle?.deviceId && d.app.state === "sharing" && (d.app.speedKph ?? 0) >= 5) return <span className="grid gap-1"><StatusChip status="moving" label={`Driving · ${u.fmtSpeed(d.app.speedKph ?? 0)}`} />{app}</span>;
           return (
             <span className="grid gap-1">
-              {d.vehicle?.deviceId ? <StatusChip status="stopped" label="Not driving" /> : !d.vehicle ? <span className="text-xs text-muted-foreground">No load · no truck</span> : null}
+              {d.vehicle?.deviceId ? <StatusChip status="stopped" label="Not driving" /> : null}
               {app}
             </span>
           );
         }
       },
       {
+        id: "load",
+        header: "Load",
+        meta: { width: "14%" } satisfies ColumnMeta,
+        cell: ({ row: { original: d } }) =>
+          d.load ? (
+            <Link href={`/loads/${d.load.id}`} onClick={(e) => e.stopPropagation()} className="grid min-w-0 text-foreground no-underline hover:underline">
+              <span className="flex items-center gap-1.5 truncate font-semibold">
+                <Package className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                {d.load.reference}
+              </span>
+              <span className="truncate text-xs text-muted-foreground">{LOAD_STATUS[d.load.status] ?? d.load.status}</span>
+            </Link>
+          ) : d.status === "active" && can.loads ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={(e) => {
+                e.stopPropagation();
+                setAssigning(d);
+              }}
+            >
+              <Package /> Assign load
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">No load</span>
+          )
+      },
+      {
         id: "license",
         header: "Licence",
-        meta: { sortKey: "license", hideable: true, label: "Licence", width: "13%" } satisfies ColumnMeta,
+        meta: { sortKey: "license", hideable: true, label: "Licence", width: "11%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => {
           const days = licenseDays(d.licenseExpiresOn);
           if (days == null) return <span className="text-xs text-muted-foreground">{d.licenseNumber ?? "—"}</span>;
@@ -181,42 +304,100 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       },
       {
         id: "actions",
-        header: () => <span className="sr-only">Actions</span>,
-        meta: { className: "whitespace-nowrap text-right", width: "18%" } satisfies ColumnMeta,
-        cell: ({ row: { original: d } }) => (
-          <RowActions
-            actions={[
-              { icon: MapIcon, label: `Show ${d.name} on the map`, color: ACTION_COLOR.map, href: d.vehicle?.deviceId ? `/map?focus=${d.vehicle.deviceId}` : d.app.phoneDeviceId ? `/map?focus=${d.app.phoneDeviceId}` : undefined, hidden: !can.map || !(d.vehicle?.deviceId || (d.app.phoneDeviceId && d.app.state !== "no_app")) },
-              { icon: Send, label: "Send app invite", color: "#c2410c", onClick: () => setInvite({ prefill: [{ id: d.id, name: d.name, phone: d.phone }] }), hidden: !can.create || d.status !== "active" || (d.app.state !== "no_app" && d.app.state !== "signed_out") },
-              {
-                icon: History,
-                label: "Today's trips",
-                color: ACTION_COLOR.history,
-                href: d.vehicle?.deviceId ? `/map?device=${d.vehicle.deviceId}&from=${encodeURIComponent(new Date(new Date().setHours(0, 0, 0, 0)).toISOString())}` : undefined,
-                hidden: !can.map || !d.vehicle?.deviceId
-              },
-              { icon: Pencil, label: "Edit driver", color: ACTION_COLOR.edit, onClick: () => setForm({ driver: d }), hidden: !can.update },
-              { icon: UserMinus, label: "Take off vehicle", color: ACTION_COLOR.unlink, onClick: () => setFreeing(d), hidden: !can.update || !d.vehicle },
-              { icon: Trash2, label: "Delete driver", tone: "danger", onClick: () => setDeleting(d), hidden: !can.remove }
-            ]}
-          />
-        )
+        header: () => <span className="sr-only">Manage</span>,
+        meta: { className: "whitespace-nowrap text-right", width: "110px" } satisfies ColumnMeta,
+        cell: ({ row: { original: d } }) => {
+          const mapId = d.vehicle?.deviceId ?? (d.app.phoneDeviceId && d.app.state !== "no_app" ? d.app.phoneDeviceId : null);
+          const linkOpen = d.link.state === "active";
+          return (
+            <span onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="sm" variant="secondary" aria-label={`Manage ${d.name}`}>
+                    Manage <ChevronDown aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="min-w-[220px]">
+                  <DropdownMenuLabel>{d.name}</DropdownMenuLabel>
+                  {can.map && mapId && linkOpen && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/map?focus=${mapId}`}>
+                        <MapIcon aria-hidden="true" /> Show on map
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {can.map && d.vehicle?.deviceId && (
+                    <DropdownMenuItem asChild>
+                      <Link href={`/map?device=${d.vehicle.deviceId}&from=${encodeURIComponent(new Date(new Date().setHours(0, 0, 0, 0)).toISOString())}`}>
+                        <History aria-hidden="true" /> Today&apos;s trips
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {can.loads && d.status === "active" && (
+                    <DropdownMenuItem onSelect={() => setAssigning(d)}>
+                      <Package aria-hidden="true" /> {d.load ? "Assign another load" : "Assign load"}
+                    </DropdownMenuItem>
+                  )}
+                  {can.update && d.status === "active" && linkOpen && d.app.state !== "no_app" && d.app.state !== "signed_out" && (
+                    <DropdownMenuItem onSelect={() => askLocation(d)}>
+                      <LocateFixed aria-hidden="true" /> Ask for location
+                    </DropdownMenuItem>
+                  )}
+                  {can.update && d.status === "active" && d.phone && (d.link.state === "declined" || d.link.state === "left" || d.link.state === "pending") && (
+                    <DropdownMenuItem onSelect={() => askAgain(d)}>
+                      <RefreshCw aria-hidden="true" /> {d.link.state === "pending" ? "Remind to accept" : "Ask again"}
+                    </DropdownMenuItem>
+                  )}
+                  {can.create && d.status === "active" && (d.app.state === "no_app" || d.app.state === "signed_out") && (
+                    <DropdownMenuItem onSelect={() => setInvite({ prefill: [{ id: d.id, name: d.name, phone: d.phone }] })}>
+                      <Send aria-hidden="true" /> Send app link
+                    </DropdownMenuItem>
+                  )}
+                  {can.update && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onSelect={() => setForm({ driver: d })}>
+                        <Pencil aria-hidden="true" /> Edit driver
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setForm({ driver: d })}>
+                        <Car aria-hidden="true" /> {d.vehicle ? "Change vehicle" : "Assign vehicle"}
+                      </DropdownMenuItem>
+                      {d.vehicle && (
+                        <DropdownMenuItem onSelect={() => setFreeing(d)}>
+                          <UserMinus aria-hidden="true" /> Take off vehicle
+                        </DropdownMenuItem>
+                      )}
+                    </>
+                  )}
+                  {can.remove && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem destructive onSelect={() => setDeleting(d)}>
+                        <Trash2 aria-hidden="true" /> Remove from company
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </span>
+          );
+        }
       }
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [can, u, time]
+    [can, u, time, checked, allOnPage, data.items]
   );
 
   return (
     <>
       <PageHeader
         title="Drivers"
-        description={`${c.active ?? 0} active · ${c.sharing ?? 0} sharing location${c.location_off ? ` · ${c.location_off} location off` : ""}${c.no_app ? ` · ${c.no_app} not in the app` : ""}`}
+        description={`${c.active ?? 0} active · ${c.sharing ?? 0} sharing location${c.location_off ? ` · ${c.location_off} location off` : ""}${c.pending ? ` · ${c.pending} waiting to accept` : ""}${c.no_app ? ` · ${c.no_app} not in the app` : ""}`}
         actions={
           can.create && (
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" onClick={() => setInvite({})}>
-                <UserPlus /> Invite drivers
+                <UserPlus /> Add by phone
               </Button>
               <Button onClick={() => setForm({ driver: null })}>
                 <Plus /> Add driver
@@ -235,6 +416,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
           { value: "active", label: "Active", count: c.active ?? 0, icon: UserCheck, color: "#15803d" },
           { value: "sharing", label: "Sharing", count: c.sharing ?? 0, icon: SmartphoneNfc, color: "#0369a1" },
           { value: "location_off", label: "Location off", count: c.location_off ?? 0, icon: MapPinOff, color: "#b91c1c" },
+          { value: "pending", label: "Waiting to accept", count: c.pending ?? 0, icon: UserPlus, color: "#b45309" },
           { value: "no_app", label: "No app yet", count: c.no_app ?? 0, icon: Smartphone, color: "#c2410c" },
           { value: "driving", label: "Driving now", count: c.driving ?? 0, icon: Navigation, color: "#15803d" },
           { value: "unassigned", label: "No vehicle", count: c.unassigned ?? 0, icon: Users, color: "#b45309" },
@@ -242,6 +424,33 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
           { value: "inactive", label: "Inactive", count: c.inactive ?? 0, icon: UserX, color: "#475569" }
         ]}
       />
+      {picked.length > 0 && (
+        <div role="toolbar" aria-label="Selected drivers" className="sticky top-16 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 shadow-sm">
+          <span className="text-sm font-semibold text-foreground">{picked.length} selected</span>
+          <span className="flex-1" />
+          {can.update && (
+            <Button size="sm" variant="secondary" loading={bulkBusy} onClick={() => runBulk("Asked for location", picked.filter((d) => d.status === "active" && d.link.state === "active"), (d) => api(`/api/drivers/${d.id}/ask-location`, { method: "POST", json: {} }))}>
+              <LocateFixed /> Ask for location
+            </Button>
+          )}
+          {can.update && picked.some((d) => d.link.state !== "active" && d.phone) && (
+            <Button size="sm" variant="secondary" loading={bulkBusy} onClick={() => runBulk("Asked again", picked.filter((d) => d.link.state !== "active" && d.phone), (d) => api(`/api/drivers/${d.id}/request`, { method: "POST" }))}>
+              <RefreshCw /> Ask again
+            </Button>
+          )}
+          <Button size="sm" variant="secondary" onClick={() => exportCsv(picked)}>
+            <Download /> Export
+          </Button>
+          {can.remove && (
+            <Button size="sm" variant="secondary" className="text-danger" onClick={() => setBulkRemove(true)}>
+              <Trash2 /> Remove
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" aria-label="Clear selection" onClick={() => setChecked(new Set())}>
+            <X />
+          </Button>
+        </div>
+      )}
       <Card className="min-w-0">
         <DataTable
           columns={columns}
@@ -259,7 +468,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
           rowLabel={(d) => `Open ${d.name}'s record`}
           loading={pending}
           layout="fixed"
-          minWidth={980}
+          minWidth={1080}
           density={density}
           toolbar={
             <>
@@ -304,6 +513,19 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
           <DriverRecordPanel driver={selected} canUpdate={can.update} onEdit={() => setForm({ driver: selected })} onInvite={can.create ? () => setInvite({ prefill: [{ id: selected.id, name: selected.name, phone: selected.phone }] }) : undefined} onClose={() => setSelectedId(null)} onChanged={refresh} />
         </div>
       )}
+      {assigning && <AssignLoadDialog driver={assigning} onClose={() => setAssigning(null)} onDone={refresh} />}
+      <ConfirmDialog
+        open={bulkRemove}
+        onOpenChange={setBulkRemove}
+        title={`Remove ${picked.length} driver${picked.length === 1 ? "" : "s"} from your company?`}
+        description="They stop sharing their location with you. Their past trips stay with their vehicles. To keep their record, set them to Inactive instead."
+        confirmLabel="Remove"
+        destructive
+        onConfirm={async () => {
+          setBulkRemove(false);
+          await runBulk("Removed", picked, (d) => api(`/api/drivers/${d.id}`, { method: "DELETE" }));
+        }}
+      />
       {form && <DriverFormDialog open onOpenChange={(o) => !o && setForm(null)} driver={form.driver} vehicles={vehicles} onSaved={refresh} />}
       <ConfirmDialog
         open={!!freeing}
@@ -325,14 +547,14 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
-        title={`Delete ${deleting?.name ?? "driver"}?`}
-        description="Removes the driver record. To keep their history, edit them and set them to Inactive instead."
-        confirmLabel="Delete driver"
+        title={`Remove ${deleting?.name ?? "driver"} from your company?`}
+        description="They stop sharing their location with you and the record is removed. To keep their history, edit them and set them to Inactive instead."
+        confirmLabel="Remove driver"
         destructive
         onConfirm={async () => {
           try {
             await api(`/api/drivers/${deleting!.id}`, { method: "DELETE" });
-            toast.success("Driver deleted");
+            toast.success("Driver removed");
             setDeleting(null);
             refresh();
           } catch (err) {

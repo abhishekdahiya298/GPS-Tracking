@@ -120,6 +120,8 @@ export async function redeemDriverInvite(token: string, info: DeviceInfo, ip: st
   const [inv] = await db.select().from(schema.driverInvites).where(eq(schema.driverInvites.tokenHash, sha(token)));
   if (!inv || inv.usedAt || inv.expiresAt < new Date()) throw new ValidationError("This invite link has expired or was already used. Ask your company for a new one.");
   await db.update(schema.driverInvites).set({ usedAt: new Date() }).where(eq(schema.driverInvites.id, inv.id));
+  // Opening the company's personal link is the driver saying yes to that company.
+  await db.update(schema.drivers).set({ appLink: "active", appLinkAt: new Date() }).where(and(eq(schema.drivers.id, inv.driverId), sql`${schema.drivers.appLink} <> 'active'`));
   return startSession(inv.driverId, info);
 }
 
@@ -159,8 +161,8 @@ function activeDriversByPhone(phone: string) {
     .select({ id: schema.drivers.id, email: schema.drivers.email, name: schema.drivers.name })
     .from(schema.drivers)
     .innerJoin(schema.organizations, eq(schema.organizations.id, schema.drivers.organizationId))
-    .where(and(eq(schema.drivers.phone, phone), eq(schema.drivers.status, "active"), eq(schema.organizations.status, "active")))
-    .orderBy(desc(schema.drivers.updatedAt))
+    .where(and(eq(schema.drivers.phone, phone), eq(schema.drivers.status, "active"), eq(schema.organizations.status, "active"), inArray(schema.drivers.appLink, ["active", "pending"])))
+    .orderBy(sql`(${schema.drivers.appLink} = 'active') desc`, desc(schema.drivers.updatedAt))
     .limit(1);
 }
 
@@ -291,13 +293,39 @@ export type DriverReport = z.infer<typeof DriverReportSchema>;
  */
 export async function recordDriverReport(auth: DriverAuth, report: DriverReport, now = new Date()): Promise<{ stored: number }> {
   const db = getDb();
-  const [driver] = await db.select({ id: schema.drivers.id, phoneDeviceId: schema.drivers.phoneDeviceId, vehicleId: schema.drivers.vehicleId, name: schema.drivers.name }).from(schema.drivers).where(eq(schema.drivers.id, auth.driverId));
-  if (!driver) throw new UnauthorizedError("Your sign-in has ended. Sign in again.");
-  const deviceId = driver.phoneDeviceId ?? (await db.transaction((tx) => ensurePhoneDevice(tx, driver.id, auth.organizationId, driver.name)));
-  await syncPhoneAssignment(auth.organizationId, deviceId, driver.vehicleId, now);
-
+  const [me] = await db.select({ id: schema.drivers.id }).from(schema.drivers).where(eq(schema.drivers.id, auth.driverId));
+  if (!me) throw new UnauthorizedError("Your sign-in has ended. Sign in again.");
   const { driverMaxAccuracyM: maxAccuracyM } = await getPlatformSettings();
   const points = [...report.points].filter((p) => p.recordedAt.getTime() <= now.getTime() + 120_000 && (p.accuracyM ?? 0) <= maxAccuracyM).sort((a, b) => a.recordedAt.getTime() - b.recordedAt.getTime());
+  // Driver-first: one phone, every company the driver said yes to. A company that only asked
+  // (pending), was declined or was left gets nothing.
+  let stored = 0;
+  for (const driver of await sharingTargets(auth.driverId)) {
+    stored = Math.max(stored, await storeFor(driver, points, report, now));
+  }
+  return { stored };
+}
+
+type Target = { id: string; organizationId: string; phoneDeviceId: string | null; vehicleId: string | null; name: string };
+
+/** The driver rows (one per company) that receive this phone's location. */
+export async function sharingTargets(driverId: string): Promise<Target[]> {
+  const db = getDb();
+  const cols = { id: schema.drivers.id, organizationId: schema.drivers.organizationId, phoneDeviceId: schema.drivers.phoneDeviceId, vehicleId: schema.drivers.vehicleId, name: schema.drivers.name, phone: schema.drivers.phone };
+  const [d] = await db.select(cols).from(schema.drivers).where(eq(schema.drivers.id, driverId));
+  if (!d) return [];
+  const rows = await db
+    .select(cols)
+    .from(schema.drivers)
+    .innerJoin(schema.organizations, eq(schema.organizations.id, schema.drivers.organizationId))
+    .where(and(d.phone ? eq(schema.drivers.phone, d.phone) : eq(schema.drivers.id, d.id), eq(schema.drivers.status, "active"), eq(schema.organizations.status, "active"), eq(schema.drivers.appLink, "active")));
+  return rows.map(({ phone: _p, ...r }) => r);
+}
+
+async function storeFor(driver: Target, points: DriverReport["points"], report: DriverReport, now: Date): Promise<number> {
+  const db = getDb();
+  const deviceId = driver.phoneDeviceId ?? (await db.transaction((tx) => ensurePhoneDevice(tx, driver.id, driver.organizationId, driver.name)));
+  await syncPhoneAssignment(driver.organizationId, deviceId, driver.vehicleId, now);
   let stored = 0;
   let lastFix: Date | null = null;
   for (const p of points) {
@@ -325,7 +353,7 @@ export async function recordDriverReport(auth: DriverAuth, report: DriverReport,
     .insert(schema.driverAppStatus)
     .values({
       driverId: driver.id,
-      organizationId: auth.organizationId,
+      organizationId: driver.organizationId,
       signedIn: true,
       batteryPct: report.battery?.pct ?? null,
       charging: report.battery?.charging ?? null,
@@ -350,7 +378,7 @@ export async function recordDriverReport(auth: DriverAuth, report: DriverReport,
         ...(lastFix ? { lastFixAt: sql`greatest(${schema.driverAppStatus.lastFixAt}, ${lastFix.toISOString()}::timestamptz)` } : {})
       }
     });
-  return { stored };
+  return stored;
 }
 
 /**
@@ -384,7 +412,13 @@ async function syncPhoneAssignment(organizationId: string, phoneDeviceId: string
 // ---------- what the driver app shows ----------
 
 export interface DriverMeDto {
-  driver: { id: string; name: string; phone: string | null };
+  driver: { id: string; name: string; phone: string | null; email: string | null; licenseNumber: string | null; licenseExpiresOn: string | null };
+  /** This company's link to the driver: pending until the driver accepts. */
+  link: "pending" | "active" | "declined" | "left";
+  /** Companies waiting for the driver to accept. */
+  pendingRequests: number;
+  /** Companies that see the driver's location now. */
+  companiesSharing: number;
   company: { id: string; name: string; phone: string | null };
   vehicle: { id: string; name: string; licensePlate: string | null } | null;
   sharing: { always: true; note: string };
@@ -406,17 +440,31 @@ async function recentLocationRequest(driverId: string): Promise<{ at: string; fr
 export async function driverMe(auth: DriverAuth): Promise<DriverMeDto> {
   const db = getDb();
   const [r] = await db
-    .select({ id: schema.drivers.id, name: schema.drivers.name, phone: schema.drivers.phone, orgId: schema.organizations.id, orgName: schema.organizations.name, orgPhone: schema.organizations.contactPhone, vId: schema.vehicles.id, vName: schema.vehicles.name, vPlate: schema.vehicles.licensePlate })
+    .select({ id: schema.drivers.id, name: schema.drivers.name, phone: schema.drivers.phone, email: schema.drivers.email, lic: schema.drivers.licenseNumber, licExp: schema.drivers.licenseExpiresOn, link: schema.drivers.appLink, orgId: schema.organizations.id, orgName: schema.organizations.name, orgPhone: schema.organizations.contactPhone, vId: schema.vehicles.id, vName: schema.vehicles.name, vPlate: schema.vehicles.licensePlate })
     .from(schema.drivers)
     .innerJoin(schema.organizations, eq(schema.organizations.id, schema.drivers.organizationId))
     .leftJoin(schema.vehicles, eq(schema.vehicles.id, schema.drivers.vehicleId))
     .where(eq(schema.drivers.id, auth.driverId));
   if (!r) throw new UnauthorizedError("Your sign-in has ended. Sign in again.");
+  let pendingRequests = 0;
+  let companiesSharing = r.link === "active" ? 1 : 0;
+  if (r.phone) {
+    const [c] = await db
+      .select({ pending: sql<number>`count(*) filter (where ${schema.drivers.appLink} = 'pending')::int`, sharing: sql<number>`count(*) filter (where ${schema.drivers.appLink} = 'active')::int` })
+      .from(schema.drivers)
+      .innerJoin(schema.organizations, eq(schema.organizations.id, schema.drivers.organizationId))
+      .where(and(eq(schema.drivers.phone, r.phone), eq(schema.drivers.status, "active"), eq(schema.organizations.status, "active")));
+    pendingRequests = Number(c?.pending ?? 0);
+    companiesSharing = Number(c?.sharing ?? 0);
+  }
   return {
-    driver: { id: r.id, name: r.name, phone: r.phone },
+    driver: { id: r.id, name: r.name, phone: r.phone, email: r.email, licenseNumber: r.lic, licenseExpiresOn: r.licExp ? String(r.licExp).slice(0, 10) : null },
+    link: r.link as DriverMeDto["link"],
+    pendingRequests,
+    companiesSharing,
     company: { id: r.orgId, name: r.orgName, phone: r.orgPhone },
     vehicle: r.vId ? { id: r.vId, name: r.vName!, licensePlate: r.vPlate } : null,
-    sharing: { always: true, note: `${r.orgName} sees your location while you're signed in.` },
+    sharing: { always: true, note: companiesSharing > 1 ? `${companiesSharing} companies see your location while you're signed in.` : companiesSharing === 1 ? `${r.link === "active" ? r.orgName : "One company"} sees your location while you're signed in.` : "No company sees your location yet." },
     locationRequest: await recentLocationRequest(auth.driverId)
   };
 }
@@ -563,35 +611,49 @@ export interface DriverLoadDto {
   pickup: { name: string | null; address: string; lat: number; lon: number; appointmentAt: string | null };
   delivery: { name: string | null; address: string; lat: number; lon: number; appointmentAt: string | null };
   deliveredAt: string | null;
+  /** The company the load came from ("From" on the card). */
+  from: { id: string; name: string };
 }
 
 /**
- * Loads for this driver: on their truck, or sent to their phone number. Open loads plus those
- * delivered in the last 24 hours, soonest pickup first.
+ * Loads for this driver from every company they work for (accepted): on their truck there, or
+ * sent to their phone number. Open loads plus those delivered in the last 24 hours, soonest pickup first.
  */
 export async function driverLoads(auth: DriverAuth): Promise<DriverLoadDto[]> {
   const db = getDb();
-  const [d] = await db.select({ vehicleId: schema.drivers.vehicleId, phone: schema.drivers.phone }).from(schema.drivers).where(eq(schema.drivers.id, auth.driverId));
+  const [d] = await db.select({ id: schema.drivers.id, vehicleId: schema.drivers.vehicleId, phone: schema.drivers.phone, organizationId: schema.drivers.organizationId }).from(schema.drivers).where(eq(schema.drivers.id, auth.driverId));
   if (!d) throw new UnauthorizedError("Your sign-in has ended. Sign in again.");
   const phone = d.phone ? normalizePhone(d.phone) : null;
-  const rows = await db.execute<{ id: string; reference: string; status: string; notes: string | null; pickup_name: string | null; pickup_address: string; pickup_lat: number; pickup_lon: number; pickup_appointment_at: Date | null; delivery_name: string | null; delivery_address: string; delivery_lat: number; delivery_lon: number; delivery_appointment_at: Date | null; delivered_at: Date | null }>(sql`
-    select id, reference, status, notes, pickup_name, pickup_address, pickup_lat, pickup_lon, pickup_appointment_at,
-           delivery_name, delivery_address, delivery_lat, delivery_lon, delivery_appointment_at, ended_at as delivered_at
-    from loads
-    where organization_id = ${auth.organizationId}
-      and (${d.vehicleId ? sql`vehicle_id = ${d.vehicleId}` : sql`false`} or ${phone ? sql`driver_phone = ${phone}` : sql`false`})
-      and status not in ('cancelled', 'declined')
-      and (status <> 'delivered' or ended_at > now() - interval '24 hours')
-    order by (status = 'delivered'), coalesce(pickup_appointment_at, created_at)
-    limit 50`);
+  const linked = await sharingTargets(auth.driverId);
+  // The signed-in company always counts (a driver who hasn't accepted yet still sees its loads).
+  const scopes = linked.some((t) => t.id === d.id) ? linked : [{ id: d.id, organizationId: d.organizationId, vehicleId: d.vehicleId }, ...linked];
+  const out: (DriverLoadDto & { sortAt: number })[] = [];
   const iso = (v: Date | string | null) => (v ? new Date(v).toISOString() : null);
-  return rows.map((r) => ({
-    id: r.id,
-    reference: r.reference,
-    status: r.status,
-    notes: r.notes,
-    pickup: { name: r.pickup_name, address: r.pickup_address, lat: Number(r.pickup_lat), lon: Number(r.pickup_lon), appointmentAt: iso(r.pickup_appointment_at) },
-    delivery: { name: r.delivery_name, address: r.delivery_address, lat: Number(r.delivery_lat), lon: Number(r.delivery_lon), appointmentAt: iso(r.delivery_appointment_at) },
-    deliveredAt: iso(r.delivered_at)
-  }));
+  for (const sc of scopes) {
+    const rows = await db.execute<{ id: string; reference: string; status: string; notes: string | null; pickup_name: string | null; pickup_address: string; pickup_lat: number; pickup_lon: number; pickup_appointment_at: Date | null; delivery_name: string | null; delivery_address: string; delivery_lat: number; delivery_lon: number; delivery_appointment_at: Date | null; delivered_at: Date | null; created_at: Date; org_name: string }>(sql`
+      select l.id, l.reference, l.status, l.notes, l.pickup_name, l.pickup_address, l.pickup_lat, l.pickup_lon, l.pickup_appointment_at,
+             l.delivery_name, l.delivery_address, l.delivery_lat, l.delivery_lon, l.delivery_appointment_at, l.ended_at as delivered_at, l.created_at, o.name as org_name
+      from loads l join organizations o on o.id = l.organization_id
+      where l.organization_id = ${sc.organizationId}
+        and (${sc.vehicleId ? sql`l.vehicle_id = ${sc.vehicleId}` : sql`false`} or ${phone ? sql`l.driver_phone = ${phone}` : sql`false`})
+        and l.status not in ('cancelled', 'declined')
+        and (l.status <> 'delivered' or l.ended_at > now() - interval '24 hours')
+      limit 50`);
+    for (const r of rows)
+      out.push({
+        id: r.id,
+        reference: r.reference,
+        status: r.status,
+        notes: r.notes,
+        pickup: { name: r.pickup_name, address: r.pickup_address, lat: Number(r.pickup_lat), lon: Number(r.pickup_lon), appointmentAt: iso(r.pickup_appointment_at) },
+        delivery: { name: r.delivery_name, address: r.delivery_address, lat: Number(r.delivery_lat), lon: Number(r.delivery_lon), appointmentAt: iso(r.delivery_appointment_at) },
+        deliveredAt: iso(r.delivered_at),
+        from: { id: sc.organizationId, name: r.org_name },
+        sortAt: new Date(r.pickup_appointment_at ?? r.created_at).getTime() + (r.status === "delivered" ? 1e15 : 0)
+      });
+  }
+  return out
+    .sort((a, b) => a.sortAt - b.sortAt)
+    .slice(0, 50)
+    .map(({ sortAt: _s, ...l }) => l);
 }

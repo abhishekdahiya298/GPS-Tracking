@@ -246,6 +246,13 @@
       "when": 1795625739924,
       "tag": "0034_driver_push",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1795691679302,
+      "tag": "0035_driver_app_link",
+      "breakpoints": true
     }
   ]
 }

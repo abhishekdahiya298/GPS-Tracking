@@ -79,6 +79,11 @@ export function LoadCard({ load, expanded, onPress, dispatchPhone }: { load: Dri
           <Text style={styles.route} numberOfLines={1}>
             {placeName(load.pickup)} → {placeName(load.delivery)}
           </Text>
+          {load.from ? (
+            <Text style={styles.from} numberOfLines={1}>
+              From {load.from.name}
+            </Text>
+          ) : null}
         </View>
       </View>
       {next ? (
@@ -170,6 +175,7 @@ const styles = themed(() => ({
   loadTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space.sm },
   loadRef: { fontSize: 17, fontWeight: "700", color: colors.foreground },
   route: { fontSize: 13, color: colors.mutedForeground, marginTop: 2 },
+  from: { fontSize: 12, fontWeight: "600", color: colors.primary, marginTop: 2 },
   next: { flexDirection: "row", gap: space.sm, padding: 12, borderRadius: radius.lg, backgroundColor: colors.muted },
   nextLabel: { fontSize: 11, fontWeight: "800", letterSpacing: 0.5, color: colors.mutedForeground },
   nextName: { fontSize: 15, fontWeight: "700", color: colors.foreground },
