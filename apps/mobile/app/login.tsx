@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { codeFailure, signInMessage, type CodeKind } from "@/auth/service";
 import { useSession } from "@/auth/SessionProvider";
-import { AuthShell, AuthTabs, LinkCard } from "@/components/AuthShell";
+import { ArrowButton, AuthShell, OutlineButton, RoleSwitch } from "@/components/AuthShell";
 import { Button, ErrorNote, Field } from "@/components/ui";
 import { colors, space, themed } from "@/theme";
 
@@ -107,13 +107,9 @@ export default function LoginScreen() {
   }
 
   return (
-    <AuthShell
-      title="Welcome back"
-      tagline="Sign in to see your fleet."
-      cardKey="password"
-      below={<LinkCard icon="car-outline" color="#a3470a" soft="#fcd9b2" title="Driver?" detail="Sign in with your phone or invite link" onPress={() => router.push("/driver")} />}
-    >
-      <AuthTabs active="signin" />
+    <AuthShell title="Welcome" accent="back" tagline="Sign in to see your trucks, drivers and loads." cardKey="password" back={router.canGoBack()}>
+      <RoleSwitch active="fleet" onChange={() => router.replace("/driver")} />
+      <Text style={styles.h1}>Sign in to RIO GPS</Text>
       <Field
         label="Email"
         icon="mail-outline"
@@ -145,7 +141,13 @@ export default function LoginScreen() {
         <Text style={styles.forgotText}>Forgot password?</Text>
       </Pressable>
       {error && <ErrorNote text={error} />}
-      <Button title="Sign in" onPress={onSignIn} loading={busy} icon="arrow-forward" />
+      <ArrowButton title="Sign in" onPress={onSignIn} loading={busy} />
+      <View style={styles.divider}>
+        <View style={styles.line} />
+        <Text style={styles.dividerText}>New to RIO GPS?</Text>
+        <View style={styles.line} />
+      </View>
+      <OutlineButton title="Create free account" icon="sparkles-outline" badge="No card" onPress={() => router.push("/signup")} />
     </AuthShell>
   );
 }
@@ -154,5 +156,9 @@ const styles = themed(() => ({
   forgot: { alignSelf: "flex-end", minHeight: 24, justifyContent: "center", marginTop: -space.xs },
   forgotText: { fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.primary },
   code: { letterSpacing: 4, fontSize: 20 },
+  h1: { fontSize: 18, fontWeight: "800", textAlign: "center", color: colors.foreground },
+  divider: { flexDirection: "row", alignItems: "center", gap: space.sm },
+  line: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { fontSize: 13, fontWeight: "600", color: colors.mutedForeground },
   links: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", marginTop: -space.sm }
 }));

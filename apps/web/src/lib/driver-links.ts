@@ -1,6 +1,6 @@
 import { addDays, canonicalTimeZone, dateFormatter } from "@rio-gps/core/timezones";
 import { getDb, schema } from "@rio-gps/db";
-import { and, eq, gte, inArray, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
 import type { DriverAuth } from "./driver-app";
@@ -281,4 +281,36 @@ export async function notifyDriverRequest(organizationId: string, phone: string 
     logger.error("driver_links.notify_failed", { organizationId }, err);
     return 0;
   }
+}
+
+/**
+ * A company made its driver inactive or removed them. The driver keeps their own account and
+ * record: each phone signed in through that company moves to another company the driver works
+ * for, or to their own account, and gets a notice. The company stops getting the location.
+ */
+export async function releaseDriverFromCompany(organizationId: string, driverId: string): Promise<number> {
+  const db = getDb();
+  const [d] = await db.select({ id: schema.drivers.id, phone: schema.drivers.phone, name: schema.drivers.name, orgName: schema.organizations.name }).from(schema.drivers).innerJoin(schema.organizations, eq(schema.organizations.id, schema.drivers.organizationId)).where(and(eq(schema.drivers.id, driverId), eq(schema.drivers.organizationId, organizationId)));
+  if (!d) return 0;
+  const sessions = await db.select({ id: schema.driverAppSessions.id, pushToken: schema.driverAppSessions.pushToken }).from(schema.driverAppSessions).where(and(eq(schema.driverAppSessions.driverId, d.id), isNull(schema.driverAppSessions.revokedAt)));
+  if (!sessions.length) return 0;
+  if (!d.phone) {
+    await db.update(schema.driverAppSessions).set({ revokedAt: new Date() }).where(inArray(schema.driverAppSessions.id, sessions.map((s) => s.id)));
+    return 0;
+  }
+  const [other] = await db
+    .select({ id: schema.drivers.id, organizationId: schema.drivers.organizationId })
+    .from(schema.drivers)
+    .innerJoin(schema.organizations, eq(schema.organizations.id, schema.drivers.organizationId))
+    .where(and(eq(schema.drivers.phone, d.phone), eq(schema.drivers.status, "active"), eq(schema.organizations.status, "active"), eq(schema.drivers.appLink, "active"), sql`${schema.drivers.id} <> ${d.id}`))
+    .limit(1);
+  const { createSelfDriver, driversOrgId } = await import("./driver-loads");
+  const target = other ?? { id: await createSelfDriver(d.phone, d.name), organizationId: await driversOrgId() };
+  await db.update(schema.driverAppSessions).set({ driverId: target.id, organizationId: target.organizationId }).where(inArray(schema.driverAppSessions.id, sessions.map((s) => s.id)));
+  await db.update(schema.driverAppStatus).set({ signedIn: false, updatedAt: new Date() }).where(eq(schema.driverAppStatus.driverId, d.id));
+  const tokens = [...new Set(sessions.map((s) => s.pushToken).filter((t): t is string => Boolean(t)))];
+  if (tokens.length)
+    await sendPushMessages(tokens.map((to) => ({ to, title: `${d.orgName} removed you`, body: "They no longer see your location. Your account and record stay with you.", data: { type: "driver_removed", company: d.orgName }, sound: "default" as const, channelId: "alerts" }))).catch(() => undefined);
+  await writeAudit({ action: "driver.released", actorUserId: null, organizationId, targetType: "driver", targetId: d.id, metadata: { movedTo: other ? "company" : "own_account" }, ipAddress: null, userAgent: null });
+  return sessions.length;
 }

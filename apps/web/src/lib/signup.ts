@@ -106,6 +106,17 @@ async function sendCode(phoneE164: string, purpose: "signup" | "driver_join" | "
 export async function sendDriverSignInCode(phoneE164: string, to: { email?: string | null; name?: string } = {}): Promise<SentTo> {
   return sendCode(phoneE164, "driver_signin", { email: to.email ?? undefined, name: to.name, sms: smsConfigured() });
 }
+/** Driver test numbers (demo range or the platform's test list): the code is returned, not sent. */
+export async function issueDriverTestCode(phoneE164: string): Promise<string> {
+  await assertRateLimit("phone-code", phoneE164, 20, 3600, "Too many codes for this number. Try again in an hour.");
+  const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+  await getDb().insert(schema.phoneCodes).values({ phone: phoneE164, purpose: "driver_test", codeHash: hashCode(phoneE164, code), expiresAt: new Date(Date.now() + CODE_TTL_MS) });
+  return code;
+}
+/** A new driver's code by text (only when texts work). */
+export async function sendDriverSignupCode(phoneE164: string): Promise<SentTo> {
+  return sendCode(phoneE164, "driver_signin", { sms: true });
+}
 export async function checkDriverSignInCode(phoneE164: string, code: string): Promise<void> {
   return checkCode(phoneE164, code);
 }

@@ -55,7 +55,7 @@ export default function SignupCode() {
   }
 
   return (
-    <AuthShell back title="Check your inbox" tagline="One code, sent to your email and your phone." footer="Codes expire after 10 minutes">
+    <AuthShell back title="Check your" accent="inbox" tagline="One code, sent to your email and your phone.">
       <View style={styles.sent}>
         {sentTo.email ? <Sent icon="mail-outline" text={sentTo.email} /> : null}
         {sentTo.phone ? <Sent icon="chatbubble-outline" text={sentTo.phone} /> : null}

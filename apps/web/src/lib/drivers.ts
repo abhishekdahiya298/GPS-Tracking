@@ -1,12 +1,12 @@
 import { assertCanAdd } from "./entitlements";
 import type { TenantContext } from "@rio-gps/core";
 import { normalizePhone, PHONE_HINT } from "./phone";
-import { notifyDriverRequest } from "./driver-links";
+import { notifyDriverRequest, releaseDriverFromCompany } from "./driver-links";
 import { getDb, schema } from "@rio-gps/db";
 import { and, eq, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
-import { appState, signOutDriverEverywhere, type DriverAppState } from "./driver-app";
+import { appState, type DriverAppState } from "./driver-app";
 import { NotFoundError } from "./errors";
 import { getPlatformSettings } from "./platform-settings";
 import { likePattern, PAGE_SIZES } from "./fleet-list";
@@ -392,11 +392,13 @@ export async function updateDriver(ctx: TenantContext, id: string, patch: Partia
   await writeAudit({ action: "driver.updated", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "driver", targetId: id, metadata: { fields: Object.keys(patch) }, ...meta });
   if (patch.phone && d.appLink === "pending") await notifyDriverRequest(ctx.organizationId, d.phone);
   // An inactive driver can't use the driver app: sharing stops on every phone.
-  if (patch.status === "inactive") await signOutDriverEverywhere(ctx.organizationId, id, ctx.userId);
+  // The driver keeps their own account: their phone moves to another company or their own account.
+  if (patch.status === "inactive") await releaseDriverFromCompany(ctx.organizationId, id);
   return d;
 }
 
 export async function deleteDriver(ctx: TenantContext, id: string, meta: Meta) {
+  await releaseDriverFromCompany(ctx.organizationId, id);
   const [d] = await getDb()
     .delete(schema.drivers)
     .where(and(eq(schema.drivers.id, id), eq(schema.drivers.organizationId, ctx.organizationId)))

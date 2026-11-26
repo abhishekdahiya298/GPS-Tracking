@@ -1,9 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
-import { Linking, Platform, ScrollView, Text, View } from "react-native";
+import * as SecureStore from "expo-secure-store";
+import { useEffect, useState } from "react";
+import { Linking, Platform, ScrollView, Share, Text, View } from "react-native";
+import { ArrowButton, AuthShell, DRIVER_TONE, Note, OutlineButton } from "@/components/AuthShell";
+import { PopIn } from "@/components/motion";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui";
-import { useDriverSession } from "@/driver/DriverSession";
+import { NEW_KEY, useDriverSession } from "@/driver/DriverSession";
 import { registerDriverPush } from "@/driver/push";
 import { askLocation } from "@/driver/tracking";
 import { colors, elevation, space, themed } from "@/theme";
@@ -57,10 +60,46 @@ export default function DriverSetup() {
   const insets = useSafeAreaInsets();
   const { finishSetup, state } = useDriverSession();
   const [step, setStep] = useState<Step>("location");
+  // A brand-new account first sees "You're in" (D1C).
+  const [hello, setHello] = useState<boolean | null>(null);
+  useEffect(() => {
+    void SecureStore.getItemAsync(NEW_KEY)
+      .then((v) => setHello(v === "1"))
+      .catch(() => setHello(false));
+  }, []);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const c = COPY[step];
-  const company = state.status === "signedIn" ? state.me.company.name : "Your company";
+  const me = state.status === "signedIn" ? state.me : null;
+  const company = me?.link === "self" ? "Only companies you accept" : (me?.company.name ?? "Your company");
+  if (hello === null) return <View style={styles.screen} />;
+  if (hello && me) {
+    const first = me.driver.name.split(/\s+/)[0] ?? me.driver.name;
+    return (
+      <AuthShell photo="driver" title="You're in," accent={first} tagline="Your free driver account is ready." footer={null}>
+        <Text style={styles.kicker}>YOUR DRIVER NUMBER</Text>
+        <PopIn>
+          <View style={styles.number}>
+            <View style={styles.numberIcon}>
+              <Ionicons name="call" size={20} color="#ffffff" />
+            </View>
+            <Text style={styles.numberText}>{me.driver.phone}</Text>
+          </View>
+        </PopIn>
+        <Text style={styles.lead}>Give this number to your carrier or broker. Their request shows on Today, and you choose Accept or Decline.</Text>
+        <ArrowButton
+          tone={DRIVER_TONE}
+          title="Set up my phone"
+          onPress={() => {
+            void SecureStore.deleteItemAsync(NEW_KEY).catch(() => undefined);
+            setHello(false);
+          }}
+        />
+        <OutlineButton title="Share my number" icon="share-social-outline" onPress={() => void Share.share({ message: `Add me as a driver in RIO GPS: ${me.driver.phone}` })} />
+        <Note tone={DRIVER_TONE} text="Nothing is shared until you accept a request." />
+      </AuthShell>
+    );
+  }
 
   async function next(skip: boolean) {
     if (busy) return;
@@ -133,6 +172,10 @@ export default function DriverSetup() {
 }
 
 const styles = themed(() => ({
+  kicker: { fontSize: 11.5, fontWeight: "700", letterSpacing: 0.6, color: colors.mutedForeground },
+  number: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderRadius: 16, backgroundColor: DRIVER_TONE.soft, borderWidth: 1.5, borderColor: DRIVER_TONE.border },
+  numberIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: DRIVER_TONE.main, alignItems: "center", justifyContent: "center" },
+  numberText: { fontSize: 20, fontWeight: "800", color: colors.foreground },
   screen: { flex: 1, backgroundColor: colors.canvas },
   flex: { flex: 1 },
   header: { textAlign: "center", fontSize: 17, fontWeight: "600", color: colors.foreground, paddingVertical: 14 },

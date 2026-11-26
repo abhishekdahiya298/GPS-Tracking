@@ -7,7 +7,7 @@ import { TimeZoneSelect } from "@/components/app/time-zone-select";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input, Select } from "@/components/ui/input";
+import { Input, Select, Textarea } from "@/components/ui/input";
 import { Field } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
@@ -83,6 +83,9 @@ export function PlatformSettingsView({ initial }: { initial: PlatformSettings })
           </Field>
           <Field id="driverMaxAccuracyM" label="Drop phone positions less accurate than (m)" description="Rough guesses (Wi-Fi or cell towers) are left off the map.">
             <Input id="driverMaxAccuracyM" name="driverMaxAccuracyM" type="number" min={20} max={2000} required defaultValue={initial.driverMaxAccuracyM} />
+          </Field>
+          <Field id="driverTestNumbers" label="Test driver numbers" description="The app fills in the sign-in code for these numbers (testing and store review). One per line. Demo numbers 555-0100 to 555-0199 always work. Never add a real driver's number.">
+            <Textarea id="driverTestNumbers" name="driverTestNumbers" rows={3} maxLength={2000} defaultValue={initial.driverTestNumbers} placeholder={"+1 416 555 0142"} />
           </Field>
         </Section>
         <Section icon={Building2} color="#6d28d9" title="New companies" hint="What a company starts with when it signs up. Each company can change its own later.">

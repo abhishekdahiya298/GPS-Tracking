@@ -11,11 +11,11 @@ import { afterStoredPosition } from "./ingest-pipeline";
 import { logger } from "./logger";
 import { normalizePhone } from "./phone";
 import { assertRateLimit } from "./rate-limit";
-import { checkDriverSignInCode, sendDriverSignInCode } from "./signup";
+import { checkDriverSignInCode, issueDriverTestCode, sendDriverSignInCode, sendDriverSignupCode } from "./signup";
 import { getPlatformSettings } from "./platform-settings";
 import { sendPushMessages } from "./push";
 import { smsConfigured } from "./sms";
-import { feedingLoadIds, ownOrgIds, startOwnLoads } from "./driver-loads";
+import { createSelfDriver, feedingLoadIds, ownOrgIds, startOwnLoads } from "./driver-loads";
 import { recordAppLoadPositions } from "./load-public";
 
 /**
@@ -134,35 +134,62 @@ export async function redeemDriverInvite(token: string, info: DeviceInfo, ip: st
   return startSession(inv.driverId, info);
 }
 
+export type PhoneStartDto = {
+  sentTo: string | null;
+  channel: "sms" | "email" | "test" | null;
+  /** No account for this number yet: the app asks for the driver's name, then makes the account. */
+  newDriver: boolean;
+  /** Test numbers only (demo range or the platform's test list): the code, for the app to fill in. */
+  testCode?: string;
+};
+
+/** Demo numbers +1 xxx 555-01xx, or a number on the platform's test list. */
+export async function isTestDriverNumber(phone: string): Promise<boolean> {
+  if (/^\+1\d{3}55501\d{2}$/.test(phone)) return true;
+  const list = (await getPlatformSettings()).driverTestNumbers
+    .split(/[\n,;]+/)
+    .map((x) => normalizePhone(x.trim()))
+    .filter(Boolean);
+  return list.includes(phone);
+}
+
 /**
- * Phone sign-in, step 1: sends a code to an active driver with this number, by text when texts work,
- * otherwise to the email the company has for them. `sentTo` says where it went (masked).
+ * Phone sign-in or sign-up, step 1. Anyone can be a driver with their mobile number (no company
+ * needed). The code goes by text when texts work; for a driver a company already has, by email
+ * until then; for test numbers it comes back to the app.
  */
-export async function startDriverPhoneSignIn(phoneRaw: string, ip: string | null): Promise<{ sentTo: string | null; channel: "sms" | "email" | null }> {
+export async function startDriverPhoneSignIn(phoneRaw: string, ip: string | null): Promise<PhoneStartDto> {
   await assertRateLimit("driver-app-phone", ip ?? "unknown", 10, 3600, "Too many tries. Try again later.");
   const phone = normalizePhone(phoneRaw);
   if (!phone) throw new ValidationError("Enter your mobile number, like (905) 555-0121.");
   const [d] = await activeDriversByPhone(phone);
-  // Same answer whether or not the number is known, so the screen can't be used to find drivers.
+  if (await isTestDriverNumber(phone)) {
+    return { sentTo: null, channel: "test", newDriver: !d, testCode: await issueDriverTestCode(phone) };
+  }
   if (!d) {
-    logger.info("driver_app.phone_unknown", {});
-    return { sentTo: null, channel: null };
+    if (!smsConfigured()) throw new ValidationError("Text codes are coming soon, so new numbers can't sign up yet. If a company you drive for uses RIO GPS, ask them to add you with your email, or to send you their RIO GPS link.");
+    const sent = await sendDriverSignupCode(phone);
+    return { sentTo: sent.phone, channel: "sms", newDriver: true };
   }
   if (!smsConfigured() && !d.email) {
     throw new ValidationError("We can't send you a code yet. Ask your company to add your email in RIO GPS, or to send you the app link.");
   }
   const sent = await sendDriverSignInCode(phone, { email: d.email, name: d.name });
-  return sent.phone ? { sentTo: sent.phone, channel: "sms" } : { sentTo: sent.email, channel: "email" };
+  return sent.phone ? { sentTo: sent.phone, channel: "sms", newDriver: false } : { sentTo: sent.email, channel: "email", newDriver: false };
 }
 
-/** Phone sign-in, step 2: the right code signs the driver in. */
-export async function verifyDriverPhoneSignIn(phoneRaw: string, code: string, info: DeviceInfo): Promise<DriverSessionDto> {
+/** Step 2: the right code signs the driver in; a new number becomes a free driver account (needs a name). */
+export async function verifyDriverPhoneSignIn(phoneRaw: string, code: string, info: DeviceInfo, name?: string | null): Promise<DriverSessionDto & { created: boolean }> {
   const phone = normalizePhone(phoneRaw);
   if (!phone) throw new ValidationError("Enter your mobile number, like (905) 555-0121.");
+  const [d0] = await activeDriversByPhone(phone);
+  if (!d0 && !name?.trim()) throw new ValidationError("Enter your name to create your account.");
   await checkDriverSignInCode(phone, code);
   const [d] = await activeDriversByPhone(phone);
-  if (!d) throw new ForbiddenError("No company has you as an active driver. Ask them to add you.");
-  return startSession(d.id, info);
+  if (d) return { ...(await startSession(d.id, info)), created: false };
+  const id = await createSelfDriver(phone, name!.trim());
+  await writeAudit({ action: "driver.signed_up", actorUserId: null, organizationId: null, targetType: "driver", targetId: id, metadata: {}, ipAddress: null, userAgent: null });
+  return { ...(await startSession(id, info)), created: true };
 }
 
 function activeDriversByPhone(phone: string) {

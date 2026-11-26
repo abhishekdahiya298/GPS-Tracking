@@ -1,13 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, Text, TextInput, View } from "react-native";
 import { signInMessage } from "@/auth/service";
 import { useSession } from "@/auth/SessionProvider";
 import { FLEET_SIZES, guessCountry, pendingSignIn, phoneZone, signup, type CompanyDetails, type Role } from "@/auth/signup";
 import { ApiError } from "@/api";
-import { Button, ErrorNote, Field } from "@/components/ui";
+import { ArrowButton, AuthShell, StepDots } from "@/components/AuthShell";
+import { ErrorNote, Field } from "@/components/ui";
 import { colors, radius, space, themed } from "@/theme";
 
 const ROLE_LABEL: Record<Role, string> = { fleet: "I run trucks", operator: "Owner-operator", broker: "I book loads" };
@@ -15,7 +15,6 @@ const ROLE_LABEL: Record<Role, string> = { fleet: "I run trucks", operator: "Own
 /** S2: company and you, on one screen. One code then goes to the email and the phone. */
 export default function SignupDetails() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { signIn } = useSession();
   const params = useLocalSearchParams<{ role?: string }>();
   const role: Role = params.role === "operator" || params.role === "broker" ? params.role : "fleet";
@@ -51,29 +50,9 @@ export default function SignupDetails() {
 
   const city = form.timeZone.split("/").pop()?.replace(/_/g, " ");
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" style={styles.back}>
-          <Ionicons name="chevron-back" size={24} color={colors.foreground} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Your company</Text>
-        <View style={styles.back} />
-      </View>
-      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + space.lg }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
-        <View style={styles.progress}>
-          {[0, 1, 2].map((i) => (
-            <View key={i} style={[styles.bar, i < 2 && styles.barOn]} />
-          ))}
-          <Text style={styles.step}>2 of 3</Text>
-        </View>
-        <Text style={styles.lead}>
-          {ROLE_LABEL[role]} ·{" "}
-          <Text style={styles.link} onPress={() => router.back()}>
-            Change
-          </Text>{" "}
-          · You&apos;ll be the admin.
-        </Text>
-        <View style={styles.card}>
+    <AuthShell back title="Your" accent="company" tagline={`${ROLE_LABEL[role]} · You'll be the admin.`}>
+        <StepDots step={2} />
+        <View style={styles.cardInner}>
           <Field label="Company name" icon="business-outline" value={form.company} onChangeText={(v) => set("company", v)} autoComplete="organization" textContentType="organizationName" returnKeyType="next" onSubmitEditing={() => refs.name.current?.focus()} />
           <View style={styles.two}>
             <View style={styles.half}>
@@ -110,14 +89,14 @@ export default function SignupDetails() {
           </Pressable>
         </View>
         {error && <ErrorNote text={error} />}
-        <Button title="Send my code" icon="arrow-forward" onPress={submit} loading={busy} />
+        <ArrowButton title="Send my code" onPress={submit} loading={busy} />
         <Text style={styles.fine}>One code goes to your email and phone. By continuing you agree to the Terms and Privacy policy.</Text>
-      </ScrollView>
-    </View>
+    </AuthShell>
   );
 }
 
 const styles = themed(() => ({
+  cardInner: { gap: space.md },
   screen: { flex: 1, backgroundColor: colors.canvas },
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: space.sm, height: 52 },
   back: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },

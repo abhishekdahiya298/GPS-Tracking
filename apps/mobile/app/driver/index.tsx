@@ -1,32 +1,39 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { ApiError } from "@/api";
-import { signup } from "@/auth/signup";
-import { AuthShell, LinkCard } from "@/components/AuthShell";
-import { Button, ErrorNote, Field } from "@/components/ui";
-import { driver, type InvitePeek } from "@/driver/api";
+import { ArrowButton, AuthShell, CodeBoxes, DRIVER_TONE, Note, RoleSwitch, StepDots } from "@/components/AuthShell";
+import { PopIn } from "@/components/motion";
+import { ErrorNote, Field } from "@/components/ui";
+import { driver, type InvitePeek, type PhoneStart } from "@/driver/api";
 import { useDriverSession } from "@/driver/DriverSession";
 import { inviteToken } from "@/driver/model";
 import { colors, space, themed } from "@/theme";
 
-type Mode = { m: "phone" } | { m: "code"; phone: string; sentTo: string | null; channel: "sms" | "email" | null } | { m: "invite"; token: string } | { m: "join" } | { m: "joinCode"; token: string; company: string } | { m: "joined"; company: string } | { m: "paste" };
+type Mode =
+  | { m: "phone" }
+  | { m: "code"; phone: string; start: PhoneStart }
+  | { m: "name"; phone: string; code: string }
+  | { m: "invite"; token: string }
+  | { m: "paste" };
 
 const say = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
+const T = DRIVER_TONE;
 
 /**
- * Driver sign-in (D1, D1B, D1C, D1D). Opened by the invite link (riogps://driver?t=…), from
- * "Driver?" on Sign in, or from "I'm a driver" on Create account (?join=1).
+ * Drivers: sign in or sign up with a mobile number (D1 → D1B code → D1F name, for new numbers).
+ * No company needed. Also opened by a company's one-tap link (riogps://driver?t=…).
  */
 export default function DriverSignIn() {
-  const params = useLocalSearchParams<{ t?: string; join?: string }>();
+  const params = useLocalSearchParams<{ t?: string }>();
+  const router = useRouter();
   const session = useDriverSession();
-  const [mode, setMode] = useState<Mode>(() => (params.t ? { m: "invite", token: params.t } : params.join ? { m: "join" } : { m: "phone" }));
+  const [mode, setMode] = useState<Mode>(() => (params.t ? { m: "invite", token: params.t } : { m: "phone" }));
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [companyCode, setCompanyCode] = useState("");
+  const [agree, setAgree] = useState(true);
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +51,23 @@ export default function DriverSignIn() {
       .catch(() => setPeek({ state: "unknown" }));
   }, [mode]);
 
+  // Test numbers: the code comes back from the server and is typed in for the driver, one digit at a time.
+  const filling = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (mode.m !== "code" || !mode.start.testCode) return;
+    const full = mode.start.testCode;
+    let i = 0;
+    setCode("");
+    filling.current = setInterval(() => {
+      i += 1;
+      setCode(full.slice(0, i));
+      if (i >= full.length && filling.current) clearInterval(filling.current);
+    }, 140);
+    return () => {
+      if (filling.current) clearInterval(filling.current);
+    };
+  }, [mode]);
+
   const run = async (fn: () => Promise<void>) => {
     if (busy) return;
     setBusy(true);
@@ -55,45 +79,32 @@ export default function DriverSignIn() {
     }
   };
 
-  const others = (
-    <>
-      {mode.m !== "phone" && mode.m !== "code" ? <LinkCard icon="call-outline" color="#1d4ed8" soft="#dbe4f8" title="Sign in with your phone" detail="We text you a code" onPress={() => setMode({ m: "phone" })} /> : null}
-      {mode.m !== "paste" && mode.m !== "invite" ? <LinkCard icon="link-outline" color="#136c35" soft="#c8e8d2" title="Have an invite link?" detail="Open it on this phone, or paste it here" onPress={() => setMode({ m: "paste" })} /> : null}
-      {mode.m !== "join" && mode.m !== "joinCode" ? <LinkCard icon="keypad-outline" color="#a3470a" soft="#fcd9b2" title="Join with a company code" detail="Your company approves you" onPress={() => setMode({ m: "join" })} /> : null}
-    </>
-  );
+  const toFleet = () => router.replace("/login");
 
   if (mode.m === "invite") {
     const ok = peek?.state === "ok";
-    const initials = (peek?.driverName ?? "")
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0]!.toUpperCase())
-      .join("");
     return (
-      <AuthShell back title="You're invited" tagline="Opened from your invite link. No password needed." footer="The link works once" below={others}>
+      <AuthShell back photo="driver" title="Join" accent={peek?.companyName ?? "your company"} tagline="Opened from your company's RIO GPS link. No password needed." cardKey="invite">
         {!peek ? (
-          <ActivityIndicator color={colors.primary} />
+          <ActivityIndicator color={T.main} />
         ) : ok ? (
           <>
             <View style={styles.who}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{initials}</Text>
-              </View>
+              <Ionicons name="person-circle" size={34} color={T.main} />
               <View style={styles.flexShrink}>
                 <Text style={styles.whoName}>{peek.driverName}</Text>
-                <Text style={styles.whoCompany}>Joining {peek.companyName}</Text>
+                <Text style={styles.whoCompany}>Driver at {peek.companyName}</Text>
               </View>
             </View>
-            <Text style={styles.h2}>Join {peek.companyName}</Text>
-            <Step n={1} text="Your truck and loads appear here" />
-            <Step n={2} text="Location is shared while you're signed in" />
             {error && <ErrorNote text={error} />}
-            <Button title={`Continue as ${(peek.driverName ?? "").split(" ")[0]}`} onPress={() => run(async () => session.signInWithInvite(mode.token).catch((e) => setError(say(e, "Couldn't sign in. Try again."))))} loading={busy} />
+            <ArrowButton tone={T} title={`Continue as ${(peek.driverName ?? "").split(" ")[0]}`} loading={busy} onPress={() => run(async () => session.signInWithInvite(mode.token).catch((e) => setError(say(e, "Couldn't sign in. Try again."))))} />
+            <Note tone={T} text={`${peek.companyName} sees your location while you're signed in. You can leave any time in Account.`} />
           </>
         ) : (
-          <ErrorNote text={peek.state === "used" ? "This link was already used. Ask your company for a new one." : peek.state === "expired" ? "This link has expired. Ask your company to send a new one." : "This link isn't valid. Ask your company to send it again."} />
+          <>
+            <ErrorNote text={peek.state === "used" ? "This link was already used." : peek.state === "expired" ? "This link has expired." : "This link isn't valid."} />
+            <ArrowButton tone={T} title="Use my mobile number" onPress={() => setMode({ m: "phone" })} />
+          </>
         )}
       </AuthShell>
     );
@@ -101,148 +112,134 @@ export default function DriverSignIn() {
 
   if (mode.m === "paste") {
     return (
-      <AuthShell back title="Your invite link" tagline="Paste the link your company sent you." below={others}>
-        <Field label="Invite link" icon="link-outline" value={link} onChangeText={setLink} placeholder="https://app.riogps.com/driver-app?t=…" autoCapitalize="none" autoCorrect={false} />
+      <AuthShell back photo="driver" title="Your company's" accent="link" tagline="Paste the RIO GPS link your company sent you." cardKey="paste">
+        <Field label="Link" icon="link-outline" value={link} onChangeText={setLink} placeholder="https://app.riogps.com/driver-app?t=…" autoCapitalize="none" autoCorrect={false} />
         {error && <ErrorNote text={error} />}
-        <Button
+        <ArrowButton
+          tone={T}
           title="Continue"
-          icon="arrow-forward"
           onPress={() => {
             const t = inviteToken(link);
-            if (!t) return setError("That doesn't look like an invite link. Copy the whole link from the message.");
+            if (!t) return setError("That doesn't look like a RIO GPS link. Copy the whole link from the message.");
             setError(null);
             setMode({ m: "invite", token: t });
           }}
         />
-      </AuthShell>
-    );
-  }
-
-  if (mode.m === "code") {
-    return (
-      <AuthShell back title={mode.channel === "email" ? "Check your email" : "Check your texts"} tagline={mode.sentTo ? `We sent a 6-digit code to ${mode.sentTo}.` : "If this number is on RIO GPS, we sent a 6-digit code."} footer="Codes expire after 10 minutes">
-        <Field label="Enter the code" icon="keypad-outline" value={code} onChangeText={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" textContentType="oneTimeCode" autoComplete="one-time-code" autoFocus maxLength={6} />
-        {error && <ErrorNote text={error} />}
-        <Button title="Verify and continue" icon="arrow-forward" onPress={() => run(async () => session.verifyPhone(mode.phone, code).catch((e) => setError(say(e, "That code didn't work."))))} loading={busy} />
         <Text style={styles.link} onPress={() => setMode({ m: "phone" })}>
-          Change number
+          Use my mobile number instead
         </Text>
       </AuthShell>
     );
   }
 
-  if (mode.m === "join" || mode.m === "joinCode") {
+  if (mode.m === "code") {
+    const { start } = mode;
+    const where = start.channel === "test" ? "Test number: your code is filled in for you." : start.channel === "email" ? `We emailed a 6-digit code to ${start.sentTo ?? "your email"}.` : `We sent a 6-digit code to ${start.sentTo ?? mode.phone}.`;
+    const next = () =>
+      run(async () => {
+        if (code.length !== 6) return setError("Enter the 6-digit code.");
+        if (start.newDriver) return setMode({ m: "name", phone: mode.phone, code });
+        await session.verifyPhone(mode.phone, code).catch((e) => setError(say(e, "That code didn't work.")));
+      });
     return (
-      <AuthShell back title="Join your company" tagline="Enter the code your company gave you." below={others}>
-        {mode.m === "join" ? (
-          <>
-            <Field label="Company code" icon="keypad-outline" value={companyCode} onChangeText={(v) => setCompanyCode(v.toUpperCase())} placeholder="DHILLON-4821" autoCapitalize="characters" autoCorrect={false} />
-            <Field label="Your name" icon="person-outline" value={name} onChangeText={setName} autoComplete="name" />
-            <Field label="Mobile number" icon="call-outline" value={phone} onChangeText={setPhone} keyboardType="phone-pad" autoComplete="tel" placeholder="(647) 555-0144" />
-            {error && <ErrorNote text={error} />}
-            <Button
-              title="Send my code"
-              onPress={() =>
-                run(async () => {
-                  try {
-                    const r = await signup.joinCompany(companyCode.trim(), name.trim(), phone.trim());
-                    setMode(r.status === "code_sent" ? { m: "joinCode", token: r.token, company: r.companyName } : { m: "joined", company: r.companyName });
-                  } catch (e) {
-                    setError(say(e, "Couldn't check that code."));
-                  }
-                })
-              }
-              loading={busy}
-            />
-          </>
-        ) : (
-          <>
-            <Text style={styles.h2}>Enter the code we sent you</Text>
-            <Field label="Code" icon="keypad-outline" value={code} onChangeText={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))} keyboardType="number-pad" textContentType="oneTimeCode" autoFocus />
-            {error && <ErrorNote text={error} />}
-            <Button
-              title="Verify"
-              onPress={() =>
-                run(async () => {
-                  try {
-                    await signup.verify(mode.token, code.trim());
-                    setCode("");
-                    setMode({ m: "joined", company: mode.company });
-                  } catch (e) {
-                    setError(say(e, "That code didn't work."));
-                  }
-                })
-              }
-              loading={busy}
-            />
-          </>
-        )}
+      <AuthShell back photo="driver" title="Check your" accent={start.channel === "email" ? "email" : "texts"} tagline={where} cardKey="code">
+        <StepDots step={2} tone={T} />
+        <Text style={styles.h1}>Enter the code</Text>
+        <CodeBoxes value={code} onChange={setCode} tone={T} autoFocus={!start.testCode} />
+        <View style={styles.row}>
+          <Text style={styles.muted}>Codes expire after 10 minutes</Text>
+          <Pressable onPress={() => setMode({ m: "phone" })} hitSlop={8}>
+            <Text style={styles.linkSmall}>Change number</Text>
+          </Pressable>
+        </View>
+        {error && <ErrorNote text={error} />}
+        <ArrowButton tone={T} title={start.newDriver ? "Continue" : "Verify"} onPress={next} loading={busy} />
+        <Note tone={T} text="Nothing is shared until you accept a request." />
       </AuthShell>
     );
   }
 
-  if (mode.m === "joined") {
+  if (mode.m === "name") {
     return (
-      <AuthShell back title="You're on the list" tagline={`${mode.company} has added you as a driver.`}>
-        <View style={styles.who}>
-          <Ionicons name="checkmark-circle" size={28} color={colors.success} />
-          <Text style={styles.flexShrink}>Sign in with your phone number to start. Nothing is shared until you allow location.</Text>
-        </View>
-        <Button title="Sign in with my phone" icon="arrow-forward" onPress={() => setMode({ m: "phone" })} />
+      <AuthShell back photo="driver" title="Welcome to" accent="RIO GPS" tagline="One last thing: your name." cardKey="name">
+        <StepDots step={3} tone={T} />
+        <PopIn>
+          <View style={styles.confirmed}>
+            <Ionicons name="checkmark-circle" size={20} color="#0f5c2c" />
+            <Text style={styles.confirmedText}>
+              <Text style={{ fontWeight: "800" }}>{mode.phone}</Text> confirmed
+            </Text>
+          </View>
+        </PopIn>
+        <Field label="Your name" icon="person-outline" value={name} onChangeText={setName} autoComplete="name" textContentType="name" autoFocus placeholder="First and last name" />
+        <Pressable onPress={() => setAgree((a) => !a)} style={styles.agree} accessibilityRole="checkbox" accessibilityState={{ checked: agree }}>
+          <View style={[styles.box, agree && { backgroundColor: T.main, borderColor: T.main }]}>{agree ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}</View>
+          <Text style={styles.agreeText}>I agree to the Terms and Privacy policy.</Text>
+        </Pressable>
+        {error && <ErrorNote text={error} />}
+        <ArrowButton
+          tone={T}
+          title="Create my free account"
+          loading={busy}
+          disabled={!agree}
+          onPress={() =>
+            run(async () => {
+              if (name.trim().length < 2) return setError("Enter your name.");
+              await session.verifyPhone(mode.phone, mode.code, name.trim()).catch((e) => setError(say(e, "Couldn't create your account.")));
+            })
+          }
+        />
+        <Text style={styles.mutedCenter}>No company needed. Nothing is shared until you accept.</Text>
       </AuthShell>
     );
   }
 
   return (
-    <AuthShell back title="Driver sign in" tagline="Get your loads. Your company sees your location while you're signed in." below={others}>
-      <Text style={styles.h2}>Your mobile number</Text>
-      <Field label="Mobile number" icon="call-outline" value={phone} onChangeText={setPhone} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" placeholder="(416) 555-0142" />
-      <Text style={styles.muted}>Use the number your company added for you.</Text>
+    <AuthShell back={router.canGoBack()} photo="driver" title="Drive with" accent="RIO GPS" tagline="One free account for every carrier and broker you drive for." cardKey="phone">
+      <RoleSwitch active="driver" onChange={toFleet} />
+      <Text style={styles.h1}>Your mobile number</Text>
+      <Field label="Mobile" icon="call-outline" value={phone} onChangeText={setPhone} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" placeholder="(416) 555-0142" />
+      <Text style={styles.muted}>Carriers and brokers find you by this number.</Text>
       {error && <ErrorNote text={error} />}
-      <Button
-        title="Send me a code"
-        icon="chatbubble-outline"
+      <ArrowButton
+        tone={T}
+        title="Continue"
+        loading={busy}
         onPress={() =>
           run(async () => {
             if (phone.replace(/\D/g, "").length < 10) return setError("Enter your 10-digit mobile number.");
             try {
-              const r = await session.startPhone(phone.trim());
+              const start = await session.startPhone(phone.trim());
               setCode("");
-              setMode({ m: "code", phone: phone.trim(), sentTo: r.sentTo, channel: r.channel ?? null });
+              setMode({ m: "code", phone: phone.trim(), start });
             } catch (e) {
-              setError(`${say(e, "Couldn't send a code.")} You can also ask your company to send you the app link.`);
+              setError(say(e, "Couldn't send a code. Try again."));
             }
           })
         }
-        loading={busy}
       />
+      <Note tone={T} icon="sparkles-outline" bold="New here?" text="Same screen. We make your free account after the code. No company needed." />
+      <Text style={styles.link} onPress={() => setMode({ m: "paste" })}>
+        Got a link from your company?
+      </Text>
     </AuthShell>
   );
 }
 
-function Step({ n, text }: { n: number; text: string }) {
-  return (
-    <View style={styles.step}>
-      <View style={styles.stepN}>
-        <Text style={styles.stepNText}>{n}</Text>
-      </View>
-      <Text style={styles.stepText}>{text}</Text>
-    </View>
-  );
-}
-
 const styles = themed(() => ({
-  flexShrink: { flexShrink: 1, color: colors.foreground, fontSize: 14 },
-  who: { flexDirection: "row", alignItems: "center", gap: space.md, alignSelf: "center", paddingVertical: 6, paddingLeft: 6, paddingRight: 16, borderRadius: 99, backgroundColor: colors.successSoft },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#133a9e", alignItems: "center", justifyContent: "center" },
-  avatarText: { color: "#ffffff", fontWeight: "800", fontSize: 15 },
-  whoName: { fontSize: 15, fontWeight: "700", color: colors.foreground },
-  whoCompany: { fontSize: 12.5, fontWeight: "600", color: colors.success },
-  h2: { fontSize: 18, fontWeight: "700", color: colors.foreground, textAlign: "center" },
-  step: { flexDirection: "row", alignItems: "center", gap: space.md, padding: 10, borderRadius: 12, backgroundColor: colors.muted },
-  stepN: { width: 30, height: 30, borderRadius: 10, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
-  stepNText: { fontWeight: "800", color: colors.primary },
-  stepText: { flex: 1, fontSize: 13.5, color: colors.foreground },
-  muted: { fontSize: 13, color: colors.mutedForeground, marginTop: -space.xs },
-  link: { fontSize: 14, fontWeight: "600", color: colors.primary, textAlign: "center" }
+  flexShrink: { flexShrink: 1 },
+  h1: { fontSize: 18, fontWeight: "800", textAlign: "center", color: colors.foreground },
+  who: { flexDirection: "row", alignItems: "center", gap: space.md, padding: 10, borderRadius: 16, backgroundColor: T.soft },
+  whoName: { fontSize: 16, fontWeight: "700", color: colors.foreground },
+  whoCompany: { fontSize: 13, fontWeight: "600", color: T.ink },
+  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  muted: { fontSize: 12.5, color: colors.mutedForeground },
+  mutedCenter: { fontSize: 12.5, color: colors.mutedForeground, textAlign: "center" },
+  link: { fontSize: 14, fontWeight: "600", color: colors.primary, textAlign: "center" },
+  linkSmall: { fontSize: 13, fontWeight: "700", color: colors.primary },
+  confirmed: { flexDirection: "row", alignItems: "center", gap: 8, padding: 11, borderRadius: 14, backgroundColor: "#dcf3e4" },
+  confirmedText: { fontSize: 14, color: "#0f5c2c" },
+  agree: { flexDirection: "row", alignItems: "center", gap: 10 },
+  box: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: "center", justifyContent: "center" },
+  agreeText: { flex: 1, fontSize: 13, color: colors.foreground }
 }));
