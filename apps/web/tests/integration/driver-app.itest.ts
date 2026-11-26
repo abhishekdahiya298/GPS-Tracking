@@ -19,6 +19,9 @@ import { POST as signoutPOST } from "@/app/api/driver-app/signout/route";
 import { PUT as pushPUT } from "@/app/api/driver-app/push/route";
 import { POST as askPOST } from "@/app/api/drivers/[id]/ask-location/route";
 import { setPushTransportForTests, type PushMessage } from "@/lib/push";
+import { setEmailTransportForTests, type EmailMessage } from "@/lib/email";
+import { POST as phoneStartPOST } from "@/app/api/driver-app/phone/start/route";
+import { POST as phoneVerifyPOST } from "@/app/api/driver-app/phone/verify/route";
 
 const BASE = "http://localhost:3000";
 const PASSWORD = "correct-horse-battery-staple";
@@ -158,5 +161,40 @@ describe("driver app", () => {
     setPushTransportForTests(null);
     expect(((await out.json()) as { signedOut: number }).signedOut).toBe(1);
     expect((await reportPOST(app("POST", "/api/driver-app/report", { points: [] }))).status).toBe(401);
+  });
+});
+
+describe("phone sign-in without texts", () => {
+  it("emails the code to the driver's address and signs in with it", async () => {
+    const db = getDb();
+    const [d] = await db.insert(schema.drivers).values({ organizationId: orgId, name: "Mail Driver", phone: "+14165550177", email: "mail.driver@phone.test" }).returning();
+    await db.execute(sql`truncate phone_codes`);
+    const mails: EmailMessage[] = [];
+    setEmailTransportForTests(async (m) => {
+      mails.push(m);
+    });
+    try {
+      const start = await phoneStartPOST(app("POST", "/api/driver-app/phone/start", { phone: "(416) 555-0177" }, ""));
+      expect(start.status).toBe(202);
+      const sent = (await start.json()) as { sentTo: string | null; channel: string | null };
+      expect(sent.channel).toBe("email");
+      expect(sent.sentTo).toMatch(/@phone\.test$/);
+      expect(mails).toHaveLength(1);
+      const code = /\b(\d{6})\b/.exec(`${mails[0]!.subject} ${mails[0]!.text ?? ""} ${mails[0]!.html ?? ""}`)?.[1];
+      expect(code).toBeTruthy();
+      const ok = await phoneVerifyPOST(app("POST", "/api/driver-app/phone/verify", { phone: "(416) 555-0177", code, device: { platform: "ios" } }, ""));
+      expect(ok.status).toBe(201);
+      const s = (await ok.json()) as { token: string; driver: { id: string } };
+      expect(s.driver.id).toBe(d!.id);
+      // unknown number: same answer shape, nothing sent
+      const unknown = (await (await phoneStartPOST(app("POST", "/api/driver-app/phone/start", { phone: "(416) 555-0999" }, ""))).json()) as { channel: string | null };
+      expect(unknown.channel).toBeNull();
+      expect(mails).toHaveLength(1);
+      // a driver with no email gets told to ask the company
+      await db.insert(schema.drivers).values({ organizationId: orgId, name: "No Mail", phone: "+14165550178" });
+      expect((await phoneStartPOST(app("POST", "/api/driver-app/phone/start", { phone: "(416) 555-0178" }, ""))).status).toBe(400);
+    } finally {
+      setEmailTransportForTests(null);
+    }
   });
 });
