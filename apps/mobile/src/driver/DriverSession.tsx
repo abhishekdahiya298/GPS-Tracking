@@ -18,6 +18,8 @@ interface DriverSessionValue {
   finishSetup(): Promise<void>;
   refresh(): Promise<void>;
   signOut(): Promise<void>;
+  /** The sign-in already ended on the server (left the last company): clear this phone. */
+  forget(): Promise<void>;
   /** Leave the "You're signed out" screen. */
   dismissEnded(): void;
 }
@@ -117,6 +119,13 @@ export function DriverSessionProvider({ children }: { children: ReactNode }) {
         await stopTracking();
         await driver.setPushToken(null).catch(() => undefined);
         await driver.signOut();
+        await SecureStore.deleteItemAsync(ME_KEY).catch(() => undefined);
+        await SecureStore.deleteItemAsync(SETUP_KEY).catch(() => undefined);
+        setState({ status: "none" });
+      },
+      async forget() {
+        await stopTracking();
+        await driverTokens.clear();
         await SecureStore.deleteItemAsync(ME_KEY).catch(() => undefined);
         await SecureStore.deleteItemAsync(SETUP_KEY).catch(() => undefined);
         setState({ status: "none" });

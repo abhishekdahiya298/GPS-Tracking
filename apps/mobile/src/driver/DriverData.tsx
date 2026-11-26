@@ -4,7 +4,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppState, Linking, Platform } from "react-native";
-import { driver } from "./api";
+import { driver, type DriverCompany, type DriverRequest } from "./api";
 import { useDriverSession } from "./DriverSession";
 import type { DriverLoad, Permission } from "./model";
 import { phonePermission, sendReport, startTracking } from "./tracking";
@@ -15,6 +15,11 @@ interface DriverData {
   permission: Permission;
   locationEnabled: boolean;
   lastSentAt: string | null;
+  /** Companies asking to add the driver (Accept / Decline on Today). */
+  requests: DriverRequest[];
+  /** Companies the driver works for. */
+  companies: DriverCompany[];
+  respond(id: string, accept: boolean): Promise<void>;
   refresh(): Promise<void>;
   /** Opens the phone's settings for this app, to turn location on or to Always. */
   openLocationSettings(): void;
@@ -28,6 +33,7 @@ export function DriverDataProvider({ children }: { children: ReactNode }) {
   const [loadsError, setLoadsError] = useState(false);
   const [perm, setPerm] = useState<{ permission: Permission; locationEnabled: boolean }>({ permission: "always", locationEnabled: true });
   const [lastSentAt, setLastSentAt] = useState<string | null>(null);
+  const [links, setLinks] = useState<{ requests: DriverRequest[]; companies: DriverCompany[] }>({ requests: [], companies: [] });
   const company = session.state.status === "signedIn" ? session.state.me.company.name : "";
 
   const refresh = useCallback(async () => {
@@ -41,6 +47,11 @@ export function DriverDataProvider({ children }: { children: ReactNode }) {
     } catch {
       setLoadsError(true);
     }
+    // Older servers don't have requests yet: keep the screen as it was.
+    driver
+      .requests()
+      .then(setLinks)
+      .catch(() => undefined);
     void session.refresh();
   }, [company]);
 
@@ -61,13 +72,19 @@ export function DriverDataProvider({ children }: { children: ReactNode }) {
       permission: perm.permission,
       locationEnabled: perm.locationEnabled,
       lastSentAt,
+      requests: links.requests,
+      companies: links.companies,
+      respond: async (id, accept) => {
+        setLinks(await driver.respond(id, accept));
+        void refresh();
+      },
       refresh,
       openLocationSettings: () => {
         if (Platform.OS === "android" && !perm.locationEnabled) void Linking.sendIntent("android.settings.LOCATION_SOURCE_SETTINGS").catch(() => Linking.openSettings());
         else void Linking.openSettings();
       }
     }),
-    [loads, loadsError, perm, lastSentAt, refresh]
+    [loads, loadsError, perm, lastSentAt, links, refresh]
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

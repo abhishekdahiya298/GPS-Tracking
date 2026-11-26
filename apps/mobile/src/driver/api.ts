@@ -35,7 +35,11 @@ export const driverApi = createApiClient({
 });
 
 export interface DriverMe {
-  driver: { id: string; name: string; phone: string | null };
+  driver: { id: string; name: string; phone: string | null; email?: string | null; licenseNumber?: string | null; licenseExpiresOn?: string | null };
+  /** This company's link: pending until the driver accepts (older servers leave it out). */
+  link?: "pending" | "active" | "declined" | "left";
+  pendingRequests?: number;
+  companiesSharing?: number;
   company: { id: string; name: string; phone: string | null };
   vehicle: { id: string; name: string; licensePlate: string | null } | null;
   sharing: { always: true; note: string };
@@ -46,6 +50,30 @@ interface SessionReply {
   driver: { id: string; name: string; phone: string | null };
   company: { id: string; name: string };
 }
+export interface DriverRequest {
+  id: string;
+  company: { id: string; name: string; phone: string | null };
+  askedAt: string;
+}
+export interface DriverCompany {
+  id: string;
+  company: { id: string; name: string; phone: string | null };
+  link: "pending" | "active" | "declined" | "left";
+  since: string;
+  vehicle: { name: string; licensePlate: string | null } | null;
+  current: boolean;
+}
+export type StatsRange = "today" | "week" | "month";
+export interface DriverStats {
+  range: StatsRange;
+  from: string;
+  to: string;
+  totals: { distanceKm: number; drivingMin: number; idleMin: number; trips: number; maxSpeedKph: number | null; daysDriven: number };
+  days: { day: string; distanceKm: number; drivingMin: number }[];
+  byCompany: { company: { id: string; name: string }; distanceKm: number; drivingMin: number; trips: number }[];
+  updatedAt: string | null;
+}
+export type ProfilePatch = { name?: string; email?: string; licenseNumber?: string; licenseExpiresOn?: string };
 export type InvitePeek = { state: "ok" | "used" | "expired" | "unknown"; driverName?: string; companyName?: string };
 
 export const device = () => ({
@@ -71,6 +99,11 @@ export const driver = {
   loads: () => driverApi.get<{ loads: DriverLoad[] }>("driver-app/loads").then((r) => r.loads),
   report: (body: { points: ReportPoint[]; battery?: { pct: number; charging?: boolean }; permission?: Permission; locationEnabled?: boolean }) =>
     driverApi.post<{ stored: number }>("driver-app/report", { ...body, appVersion: device().appVersion, platform: device().platform }),
+  requests: () => driverApi.get<{ requests: DriverRequest[]; companies: DriverCompany[] }>("driver-app/requests"),
+  respond: (id: string, accept: boolean) => driverApi.post<{ requests: DriverRequest[]; companies: DriverCompany[] }>(`driver-app/requests/${id}`, { accept }),
+  leave: (id: string) => driverApi.post<{ signedOut: boolean; movedTo: { id: string; name: string } | null }>(`driver-app/companies/${id}/leave`),
+  updateProfile: (patch: ProfilePatch) => driverApi.send<DriverMe>("driver-app/me", { method: "PATCH", body: patch }).then((r) => r.data),
+  stats: (range: StatsRange) => driverApi.get<DriverStats>("driver-app/stats", { range }),
   setPushToken: (token: string | null) => driverApi.send<void>("driver-app/push", { method: "PUT", body: { token } }),
   /** Always ends the sign-in on this phone, even without signal. */
   async signOut() {

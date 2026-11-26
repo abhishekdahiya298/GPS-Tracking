@@ -28,6 +28,13 @@ export const drivers = pgTable(
     status: driverStatusEnum("status").notNull().default("active"),
     notes: text("notes"),
     phoneDeviceId: uuid("phone_device_id").references(() => gpsDevices.id, { onDelete: "set null" }),
+    /**
+     * The driver's consent to share their phone with this company (driver-first model):
+     * pending (the company asked), active (the driver accepted), declined, or left. Location from the
+     * driver app is stored for a company only while this is active.
+     */
+    appLink: text("app_link").notNull().default("active"),
+    appLinkAt: timestamp("app_link_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow()
   },

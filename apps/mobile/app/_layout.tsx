@@ -65,7 +65,8 @@ function Screens() {
     if (!tapped) return;
     const data = (tapped.notification.request.content.data ?? {}) as Record<string, unknown>;
     if (driverIn) {
-      if (data.type === "location_request") router.navigate({ pathname: "/driver/request", params: { from: String(data.from ?? ""), message: String(data.message ?? ""), at: String(data.at ?? "") } });
+      if (data.type === "driver_request") router.navigate("/today");
+      else if (data.type === "location_request") router.navigate({ pathname: "/driver/request", params: { from: String(data.from ?? ""), message: String(data.message ?? ""), at: String(data.at ?? "") } });
       else void driver.refresh();
     } else if (signedIn) {
       const route = routeForNotification(data);
@@ -103,6 +104,9 @@ function Screens() {
       <Stack.Protected guard={driverIn && setupDone}>
         <Stack.Screen name="(driver)" />
         <Stack.Screen name="driver/request" options={{ presentation: "modal" }} />
+        <Stack.Screen name="driver/record" options={{ ...pushed, title: "Companies" }} />
+        <Stack.Screen name="driver/profile" options={{ ...pushed, title: "Edit profile" }} />
+        <Stack.Screen name="driver/reports" options={{ ...pushed, title: "My reports" }} />
       </Stack.Protected>
       <Stack.Protected guard={driverIn && !setupDone}>
         <Stack.Screen name="driver/setup" />

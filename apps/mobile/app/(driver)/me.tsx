@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import { useEffect, useState } from "react";
+import { useRouter } from "expo-router";
 import { Alert, Linking, ScrollView, Text, View } from "react-native";
 import { useDriverData } from "@/driver/DriverData";
 import { useDriverSession } from "@/driver/DriverSession";
@@ -10,6 +11,7 @@ import { colors, space, themed } from "@/theme";
 
 /** Account (D7): who I am, what's shared and who sees it, notifications, sign out. */
 export default function DriverAccount() {
+  const router = useRouter();
   const { state, signOut } = useDriverSession();
   const data = useDriverData();
   const [notify, setNotify] = useState<boolean | null>(null);
@@ -39,7 +41,7 @@ export default function DriverAccount() {
           </View>
           <View style={styles.flex}>
             <Text style={styles.name}>{me.driver.name}</Text>
-            <Text style={styles.sub}>Driver · {me.company.name}</Text>
+            <Text style={styles.sub}>{data.companies.length > 1 ? `Driver · ${data.companies.length} companies` : `Driver · ${me.company.name}`}</Text>
             {me.driver.phone ? <Text style={styles.sub}>{me.driver.phone}</Text> : null}
           </View>
           <Pill text={sharing ? "Sharing" : "Off"} color={sharing ? "#136c35" : "#ad1f1f"} soft={sharing ? "#c8e8d2" : "#f6cdcd"} />
@@ -56,12 +58,28 @@ export default function DriverAccount() {
               <Text style={styles.factLabel}>While signed in</Text>
             </View>
             <View style={styles.fact}>
-              <Text style={styles.factValue}>{me.company.name}</Text>
+              <Text style={styles.factValue} numberOfLines={1}>
+                {(me.companiesSharing ?? 1) > 1 ? `${me.companiesSharing} companies` : me.company.name}
+              </Text>
               <Text style={styles.factLabel}>Who sees it</Text>
             </View>
           </View>
           <Text style={styles.privacyText}>{me.sharing.note} Signing out stops sharing, and your company is told.</Text>
         </View>
+
+        <Text style={ds.section}>MY RECORD</Text>
+        <Group>
+          <Row icon="person-circle-outline" color="#133a9e" soft="#dbe4f8" title="Edit profile" detail={[me.driver.email, me.driver.licenseNumber ? `Licence ${me.driver.licenseNumber}` : null].filter(Boolean).join(" · ") || "Name, email and licence"} onPress={() => router.push("/driver/profile")} />
+          <Row icon="bar-chart-outline" color="#136c35" soft="#c8e8d2" title="My reports" detail="How much you drove today, this week and this month" onPress={() => router.push("/driver/reports")} />
+          <Row
+            icon="business-outline"
+            color="#6d28d9"
+            soft="#e6dcfb"
+            title="Companies I work for"
+            detail={data.requests.length ? `${data.requests.length} waiting for your answer` : data.companies.length ? data.companies.map((c) => c.company.name).join(", ") : me.company.name}
+            onPress={() => router.push("/driver/record")}
+          />
+        </Group>
 
         <Text style={ds.section}>DRIVING</Text>
         <Group>
@@ -91,7 +109,7 @@ export default function DriverAccount() {
             title="Sign out"
             detail="Stops sharing; your company is told"
             onPress={() =>
-              Alert.alert("Sign out?", `Location sharing with ${me.company.name} stops.`, [
+              Alert.alert("Sign out?", (me.companiesSharing ?? 1) > 1 ? "Location sharing with every company stops." : `Location sharing with ${me.company.name} stops.`, [
                 { text: "Cancel", style: "cancel" },
                 { text: "Sign out", style: "destructive", onPress: () => void signOut() }
               ])

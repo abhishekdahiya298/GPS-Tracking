@@ -2,7 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Battery from "expo-battery";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { Linking, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import type { DriverRequest } from "@/driver/api";
 import { useDriverData } from "@/driver/DriverData";
 import { useDriverSession } from "@/driver/DriverSession";
 import { ago, currentLoad, greeting } from "@/driver/model";
@@ -57,6 +58,10 @@ export default function Today() {
           </Text>
         </View>
 
+        {data.requests.map((r) => (
+          <RequestCard key={r.id} r={r} onAnswer={data.respond} />
+        ))}
+
         {off ? (
           <View style={[styles.alert, styles.alertRed]}>
             <View style={[styles.edge, { backgroundColor: "#9c1818" }]} />
@@ -93,7 +98,7 @@ export default function Today() {
               <View style={styles.flex}>
                 <Text style={styles.heroTitle}>You&apos;re on the map</Text>
                 <Text style={styles.heroSub}>
-                  Sharing with {me.company.name}
+                  {me.companiesSharing === 0 ? "No company sees you until you accept" : `Sharing with ${(me.companiesSharing ?? 1) > 1 ? `${me.companiesSharing} companies` : me.company.name}`}
                   {battery != null ? ` · battery ${battery}%` : ""}
                 </Text>
               </View>
@@ -140,6 +145,44 @@ export default function Today() {
   );
 }
 
+/** R1: a company added the driver's number. Nothing is shared with it until the driver accepts. */
+function RequestCard({ r, onAnswer }: { r: DriverRequest; onAnswer: (id: string, accept: boolean) => Promise<void> }) {
+  const [busy, setBusy] = useState<"yes" | "no" | null>(null);
+  const answer = async (accept: boolean) => {
+    setBusy(accept ? "yes" : "no");
+    try {
+      await onAnswer(r.id, accept);
+    } catch (err) {
+      Alert.alert("Couldn't send that", err instanceof Error ? err.message : "Try again in a moment.");
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <View style={styles.req}>
+      <View style={[styles.edge, { backgroundColor: colors.primary }]} />
+      <View style={styles.alertTop}>
+        <View style={[styles.alertIcon, { backgroundColor: colors.primarySoft }]}>
+          <Ionicons name="business-outline" size={24} color={colors.primary} />
+        </View>
+        <View style={styles.flex}>
+          <Text style={styles.reqTitle}>{r.company.name} wants to add you</Text>
+          <Text style={styles.alertSub}>Asked {ago(r.askedAt)}</Text>
+        </View>
+      </View>
+      <Text style={styles.reqText}>If you accept, {r.company.name} can see your location while you&apos;re signed in and send you loads. You can leave any time in Account.</Text>
+      <View style={styles.reqBtns}>
+        <Pressable onPress={() => void answer(false)} disabled={!!busy} style={[styles.reqBtn, styles.reqNo]} accessibilityRole="button" accessibilityLabel={`Decline ${r.company.name}`}>
+          {busy === "no" ? <ActivityIndicator color={colors.foreground} /> : <Text style={styles.reqNoText}>Decline</Text>}
+        </Pressable>
+        <Pressable onPress={() => void answer(true)} disabled={!!busy} style={[styles.reqBtn, styles.reqYes]} accessibilityRole="button" accessibilityLabel={`Accept ${r.company.name}`}>
+          {busy === "yes" ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.greenText}>Accept</Text>}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function Fact({ value, label }: { value: string; label: string }) {
   return (
     <View style={styles.fact}>
@@ -176,6 +219,14 @@ const styles = themed(() => ({
   alertText: { fontSize: 14, lineHeight: 20, color: "#0f172a" },
   greenBtn: { height: 50, borderRadius: 14, backgroundColor: "#136c35", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   greenText: { fontSize: 15, fontWeight: "700", color: "#ffffff" },
+  req: { position: "relative", gap: space.md, padding: 16, paddingLeft: 20, borderRadius: 20, overflow: "hidden", borderWidth: 1.5, borderColor: colors.primary, backgroundColor: colors.background, ...elevation.md },
+  reqTitle: { fontSize: 17, fontWeight: "700", color: colors.foreground },
+  reqText: { fontSize: 14, lineHeight: 20, color: colors.foreground },
+  reqBtns: { flexDirection: "row", gap: space.sm },
+  reqBtn: { flex: 1, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  reqNo: { backgroundColor: colors.background, borderWidth: 1.5, borderColor: colors.border },
+  reqNoText: { fontSize: 15, fontWeight: "700", color: colors.foreground },
+  reqYes: { backgroundColor: "#136c35" },
   empty: { alignItems: "center", gap: 8, padding: 18, borderRadius: 16, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
   emptyIcon: { width: 48, height: 48, borderRadius: 14, backgroundColor: colors.primarySoft, alignItems: "center", justifyContent: "center" },
   emptyTitle: { fontSize: 16, fontWeight: "700", color: colors.foreground },

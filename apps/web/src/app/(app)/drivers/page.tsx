@@ -30,7 +30,8 @@ export default async function DriversPage({ searchParams }: { searchParams: Prom
     create: contextHasPermission(ctx, "vehicles.create"),
     update: contextHasPermission(ctx, "vehicles.update"),
     remove: contextHasPermission(ctx, "vehicles.delete"),
-    map: contextHasPermission(ctx, "locations.read")
+    map: contextHasPermission(ctx, "locations.read"),
+    loads: contextHasPermission(ctx, "loads.write")
   };
   const joinCode = can.create ? await companyJoinCode(ctx.organizationId).catch(() => null) : null;
   return (

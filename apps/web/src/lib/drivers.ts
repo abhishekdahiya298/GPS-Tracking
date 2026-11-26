@@ -1,6 +1,7 @@
 import { assertCanAdd } from "./entitlements";
 import type { TenantContext } from "@rio-gps/core";
 import { normalizePhone, PHONE_HINT } from "./phone";
+import { notifyDriverRequest } from "./driver-links";
 import { getDb, schema } from "@rio-gps/db";
 import { and, eq, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
@@ -70,7 +71,7 @@ export const DriverInputSchema = z.object({
 export const DriverPatchSchema = DriverInputSchema.partial();
 export type DriverInput = z.infer<typeof DriverInputSchema>;
 
-export const DRIVER_FILTERS = ["all", "active", "driving", "assigned", "unassigned", "license", "inactive", "sharing", "location_off", "no_app"] as const;
+export const DRIVER_FILTERS = ["all", "active", "driving", "assigned", "unassigned", "license", "inactive", "sharing", "location_off", "pending", "no_app"] as const;
 export const DriverListQuery = z.object({
   page: z.coerce.number().int().min(1).max(100_000).default(1),
   pageSize: z.coerce
@@ -97,6 +98,10 @@ export interface DriverRow {
   notes: string | null;
   assignedAt: string | null;
   vehicle: { id: string; name: string; type: string; licensePlate: string | null; deviceId: string | null; moving: boolean; speedKph: number | null; lastSeenAt: string | null } | null;
+  /** Driver-first: has the driver accepted this company? */
+  link: { state: "pending" | "active" | "declined" | "left"; at: string | null };
+  /** The open load this driver is on (by phone or truck), if any. */
+  load: { id: string; reference: string; status: string } | null;
   /** The RIO GPS app on the driver's phone (always on while signed in). */
   app: { state: DriverAppState; batteryPct: number | null; charging: boolean | null; lastReportAt: string | null; phoneDeviceId: string | null; speedKph: number | null; inviteSentAt: string | null; locationAskedAt: string | null; canNotify: boolean };
 }
@@ -128,7 +133,8 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
     inactive: sql`d.status = 'inactive'`,
     sharing: sql`d.status = 'active' and s.signed_in and coalesce(s.permission, '') <> 'off' and s.location_enabled is not false and s.last_report_at > now() - make_interval(mins => ${staleMin})`,
     location_off: sql`d.status = 'active' and s.signed_in and (s.permission = 'off' or s.location_enabled = false)`,
-    no_app: sql`d.status = 'active' and (s.driver_id is null or not s.signed_in)`
+    pending: sql`d.status = 'active' and d.app_link <> 'active'`,
+    no_app: sql`d.status = 'active' and d.app_link = 'active' and (s.driver_id is null or not s.signed_in)`
   };
   const dir = q.direction === "desc" ? sql`desc` : sql`asc`;
   const order = {
@@ -147,6 +153,10 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
              (select max(i.created_at) from driver_invites i where i.driver_id = d.id) as s_invited,
              s.location_asked_at as s_asked,
              exists (select 1 from driver_app_sessions x where x.driver_id = d.id and x.revoked_at is null and x.push_token is not null) as s_notify,
+             (select json_build_object('id', l.id, 'reference', l.reference, 'status', l.status) from loads l
+                where l.organization_id = d.organization_id and l.status not in ('delivered', 'cancelled', 'declined')
+                  and ((d.phone is not null and l.driver_phone = d.phone) or (d.vehicle_id is not null and l.vehicle_id = d.vehicle_id))
+                order by l.created_at desc limit 1) as l_load,
              count(*) over() as total
       ${base} and ${filters[q.state]}
       order by d.status asc, ${order}, d.id
@@ -161,6 +171,7 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
         count(*) filter (where ${filters.inactive})::int as inactive,
         count(*) filter (where ${filters.sharing})::int as sharing,
         count(*) filter (where ${filters.location_off})::int as location_off,
+        count(*) filter (where ${filters.pending})::int as pending,
         count(*) filter (where ${filters.no_app})::int as no_app
       ${base}`)
   ]);
@@ -178,6 +189,8 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
         status: r.status as "active" | "inactive",
         notes: (r.notes as string | null) ?? null,
         assignedAt: r.assigned_at ? new Date(r.assigned_at as string).toISOString() : null,
+        link: { state: (r.app_link as DriverRow["link"]["state"]) ?? "active", at: r.app_link_at ? new Date(r.app_link_at as string).toISOString() : null },
+        load: r.l_load ? (typeof r.l_load === "string" ? JSON.parse(r.l_load) : (r.l_load as DriverRow["load"])) : null,
         vehicle: r.vehicle_id
           ? {
               id: String(r.vehicle_id),
@@ -206,7 +219,7 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
     total: Number(rows[0]?.total ?? 0),
     page: q.page,
     pageSize: q.pageSize,
-    counts: (counts[0] ?? { all: 0, active: 0, driving: 0, assigned: 0, unassigned: 0, license: 0, inactive: 0, sharing: 0, location_off: 0, no_app: 0 }) as Record<(typeof DRIVER_FILTERS)[number], number>
+    counts: (counts[0] ?? { all: 0, active: 0, driving: 0, assigned: 0, unassigned: 0, license: 0, inactive: 0, sharing: 0, location_off: 0, pending: 0, no_app: 0 }) as Record<(typeof DRIVER_FILTERS)[number], number>
   };
 }
 
@@ -329,13 +342,17 @@ export async function createDriver(ctx: TenantContext, input: DriverInput, meta:
         vehicleId: input.vehicleId ?? null,
         assignedAt: input.vehicleId ? new Date() : null,
         status: input.status ?? "active",
-        notes: input.notes ?? null
+        notes: input.notes ?? null,
+        // Driver-first: with a phone number the driver has to accept before the company sees them.
+        appLink: input.phone ? "pending" : "active",
+        appLinkAt: new Date()
       })
       .returning();
     if (row!.vehicleId) await recordAssignment(tx, ctx.organizationId, row!.id, row!.vehicleId, row!.assignedAt ?? new Date());
     return row!;
   });
   await writeAudit({ action: "driver.created", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "driver", targetId: d.id, metadata: { name: d.name }, ...meta });
+  if (d.appLink === "pending") await notifyDriverRequest(ctx.organizationId, d.phone);
   return d;
 }
 
@@ -351,11 +368,14 @@ export async function updateDriver(ctx: TenantContext, id: string, patch: Partia
     if (vehicleChanged && patch.vehicleId) await takeVehicle(tx, ctx.organizationId, patch.vehicleId, id);
     // An inactive driver drives nothing.
     const deactivating = patch.status === "inactive";
+    // A new number is a new person to ask.
+    const phoneChanged = patch.phone !== undefined && patch.phone !== null && patch.phone !== cur.phone;
     const [row] = await tx
       .update(schema.drivers)
       .set({
         ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
+        ...(phoneChanged ? { appLink: "pending", appLinkAt: new Date() } : {}),
         ...(patch.email !== undefined ? { email: patch.email } : {}),
         ...(patch.licenseNumber !== undefined ? { licenseNumber: patch.licenseNumber } : {}),
         ...(patch.licenseExpiresOn !== undefined ? { licenseExpiresOn: patch.licenseExpiresOn } : {}),
@@ -370,6 +390,7 @@ export async function updateDriver(ctx: TenantContext, id: string, patch: Partia
     return row!;
   });
   await writeAudit({ action: "driver.updated", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "driver", targetId: id, metadata: { fields: Object.keys(patch) }, ...meta });
+  if (patch.phone && d.appLink === "pending") await notifyDriverRequest(ctx.organizationId, d.phone);
   // An inactive driver can't use the driver app: sharing stops on every phone.
   if (patch.status === "inactive") await signOutDriverEverywhere(ctx.organizationId, id, ctx.userId);
   return d;
