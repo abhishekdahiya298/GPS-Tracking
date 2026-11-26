@@ -92,6 +92,16 @@ export function useFleetStream(handlers: StreamHandlers) {
         pending.set(e.deviceId, updated);
         if (!flushRaf) flushRaf = requestAnimationFrame(flush);
       });
+      es.addEventListener("seen", (ev) => {
+        // Reported without a new position (no GNSS fix / late record): only "last seen" moves.
+        const e = JSON.parse((ev as MessageEvent).data) as { deviceId: string; lastSeenAt: string };
+        const d = devices.current.get(e.deviceId);
+        if (!d || (d.lastSeenAt && d.lastSeenAt >= e.lastSeenAt)) return;
+        const updated: CurrentDeviceLocation = { ...d, connectivity: "online", lastSeenAt: e.lastSeenAt };
+        devices.current.set(e.deviceId, updated);
+        pending.set(e.deviceId, updated);
+        if (!flushRaf) flushRaf = requestAnimationFrame(flush);
+      });
       es.addEventListener("alert", (ev) => h.current.onAlert?.(JSON.parse((ev as MessageEvent).data) as AlertEventDto));
       es.addEventListener("end", (ev) => {
         const { reason } = JSON.parse((ev as MessageEvent).data) as { reason: string };

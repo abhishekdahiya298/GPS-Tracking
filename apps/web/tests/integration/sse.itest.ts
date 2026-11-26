@@ -1,5 +1,5 @@
 import "./setup-env";
-import { locationChannel } from "@rio-gps/core";
+import { deviceSeenChannel, locationChannel } from "@rio-gps/core";
 import { closeDb, getDb, schema } from "@rio-gps/db";
 import { eq, sql } from "drizzle-orm";
 import Redis from "ioredis";
@@ -105,6 +105,19 @@ describe("SSE", () => {
     s.abort();
   });
 
+  it("forwards 'seen' pings (reported without a new fix) for the caller's org only", async () => {
+    const s = open(await signIn("a@a.test", "192.0.2.215"));
+    expect((await s.ready).status).toBe(200);
+    expect(await until(() => s.events.some((e) => e.event === "snapshot"))).toBe(true);
+    await publisher.publish(deviceSeenChannel(orgB), JSON.stringify({ deviceId: devB, lastSeenAt: "2026-11-26T18:00:00.000Z" }));
+    await publisher.publish(deviceSeenChannel(orgA), JSON.stringify({ deviceId: devA, lastSeenAt: "2026-11-26T18:00:00.000Z" }));
+    expect(await until(() => s.events.some((e) => e.event === "seen"))).toBe(true);
+    await sleep(150);
+    const seen = s.events.filter((e) => e.event === "seen").map((e) => e.data as { deviceId: string; lastSeenAt: string });
+    expect(seen).toEqual([{ deviceId: devA, lastSeenAt: "2026-11-26T18:00:00.000Z" }]);
+    s.abort();
+  });
+
   it("shares one Redis subscription per org and releases it when clients leave", async () => {
     const cookie = await signIn("a@a.test", "192.0.2.202");
     const s1 = open(cookie);
@@ -112,7 +125,7 @@ describe("SSE", () => {
     await s1.ready;
     await s2.ready;
     await until(() => s1.events.length > 0 && s2.events.length > 0);
-    expect(getLiveHub().stats().channels).toBe(2); // locations + alerts
+    expect(getLiveHub().stats().channels).toBe(3); // locations + seen + alerts
     s1.abort();
     s2.abort();
     expect(await until(() => getLiveHub().stats().listeners === 0)).toBe(true);

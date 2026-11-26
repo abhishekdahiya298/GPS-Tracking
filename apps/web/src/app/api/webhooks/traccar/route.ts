@@ -1,7 +1,7 @@
 import { TraccarWebhookAuthError, TraccarWebhookPayloadError, parseWebhookPosition, verifyWebhookSecret } from "@rio-gps/traccar-client";
 import { NextResponse } from "next/server";
 import { ingestPosition } from "@/lib/ingest";
-import { afterStoredPosition } from "@/lib/ingest-pipeline";
+import { afterStoredPosition, publishDeviceSeen } from "@/lib/ingest-pipeline";
 import { countIngest } from "@/lib/ingest-stats";
 import { logger } from "@/lib/logger";
 
@@ -64,12 +64,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: "ignored", reason: "customer archived" }, { status: 202 });
     case "no_fix":
       // No GNSS fix (or the 0,0 placeholder): device is alive (last_seen updated) but no location is stored.
+      // Still tell open maps it reported, so their "last seen" doesn't freeze.
+      await publishDeviceSeen({ id: outcome.deviceId, organizationId: outcome.organizationId });
       return NextResponse.json({ status: "ignored", reason: "no valid fix" }, { status: 202 });
     case "duplicate":
       return NextResponse.json({ status: "ignored", reason: "duplicate" }, { status: 202 });
   }
   if (!outcome.currentUpdated) {
     // Late backlog record: stored in history, but older than the current location.
+    await publishDeviceSeen({ id: outcome.deviceId, organizationId: outcome.organizationId });
     return NextResponse.json({ status: "stored", current: false }, { status: 202 });
   }
   await afterStoredPosition({ id: outcome.deviceId, organizationId: outcome.organizationId }, position);
