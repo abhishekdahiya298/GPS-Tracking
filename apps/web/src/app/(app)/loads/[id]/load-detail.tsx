@@ -136,7 +136,7 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
     <>
       {!ended && load.trackingMode === "phone" && (
         <Button variant="secondary" onClick={() => setConfirm("driver-link")} >
-          <Send aria-hidden="true" /> Driver link
+          <Send aria-hidden="true" /> Send to driver
         </Button>
       )}
       {load.status !== "cancelled" && load.status !== "declined" && (
@@ -190,14 +190,14 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
       />
 
       {load.status === "invited" && (
-        <Alert tone="info" className="mb-4" title="Waiting for the driver to accept.">
-          {load.inviteSentAt ? <>Invite texted {t.dateTime(load.inviteSentAt)}. </> : <>Send the driver their link if you haven&apos;t yet. </>}
-          {canWrite && "Lost the link? Use Driver link to make a new one."}
+        <Alert tone="info" className="mb-4" title="Waiting for the driver to accept in the RIO GPS app.">
+          {load.inviteSentAt ? <>Sent to their app {t.dateTime(load.inviteSentAt)}. </> : <>If they don&apos;t have the app yet, send them the app link. </>}
+          {canWrite && "Use Send to driver to notify them again or get the app link."}
         </Alert>
       )}
       {load.sharingStopped && (
         <Alert tone="warning" className="mb-4" title="The driver paused location sharing.">
-          Call them to check in. Tracking continues when they tap Share again on their link.
+          Call them to check in. Tracking continues when they tap Resume in the RIO GPS app.
         </Alert>
       )}
       {load.stale && !load.sharingStopped && (
@@ -312,8 +312,8 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
       </Card>
 
       <Dialog open={confirm === "driver-link"} onOpenChange={(o) => !o && setConfirm(null)}>
-        <DialogContent title="New driver link" description="The driver's current link stops working. If they already accepted, they keep sharing once they open the new link.">
-          <p className="m-0 text-sm">Send it to {load.driverName ?? "the driver"} at {load.driverPhone}.</p>
+        <DialogContent title="Send to the driver" description="Drivers with the RIO GPS app get a notification. Everyone else gets a link to install the app, where the load is waiting.">
+          <p className="m-0 text-sm">To {load.driverName ?? "the driver"} at {load.driverPhone}.</p>
           <DialogFooter>
             {load.smsAvailable && (
               <Button variant="secondary" onClick={() => void newDriverLink(true)} loading={busy}>
@@ -321,7 +321,7 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
               </Button>
             )}
             <Button onClick={() => void newDriverLink(false)} loading={busy}>
-              Get the link to send
+              Notify and get the app link
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -330,8 +330,8 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
       <Dialog open={dialog !== null} onOpenChange={(o) => !o && setDialog(null)}>
         {dialog && (
           <DialogContent
-            title={dialog.kind === "driver" ? "Driver link" : "Shipper tracking link"}
-            description={dialog.kind === "driver" ? "Shown only now." : "Read-only: status, ETA and the truck's position. It never shows the driver's name or phone. Making a new one turns this one off."}
+            title={dialog.kind === "driver" ? "App link for the driver" : "Shipper tracking link"}
+            description={dialog.kind === "driver" ? "Send it by WhatsApp or text. It opens the RIO GPS app, where the load is waiting." : "Read-only: status, ETA and the truck's position. It never shows the driver's name or phone. Making a new one turns this one off."}
           >
             <div className="grid gap-3">
               {dialog.kind === "driver" && <SmsOutcome sms={dialog.sms} smsAvailable={load.smsAvailable} />}
@@ -348,7 +348,7 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
         open={confirm === "delivered" || confirm === "cancel"}
         onOpenChange={(o) => !o && setConfirm(null)}
         title={confirm === "delivered" ? "Mark this load delivered?" : "Cancel this load?"}
-        description="Tracking stops and the driver's link stops sending locations. This can't be undone."
+        description="Tracking stops and the driver's app stops sending locations for this load. This can't be undone."
         confirmLabel={confirm === "delivered" ? "Mark delivered" : "Cancel load"}
         destructive={confirm === "cancel"}
         onConfirm={() => outcome(confirm === "delivered" ? "delivered" : "cancel")}

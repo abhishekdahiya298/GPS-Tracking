@@ -3,7 +3,7 @@ import { errorResponse } from "@/lib/errors";
 import { viewAsShipper } from "@/lib/load-public";
 import { assertRateLimit } from "@/lib/rate-limit";
 import { readJson, requestMeta } from "@/lib/request-meta";
-import { notAvailable, PUBLIC_HEADERS } from "../../driver/_shared";
+import { notAvailable, PUBLIC_HEADERS } from "../_shared";
 
 export const dynamic = "force-dynamic";
 

@@ -19,7 +19,8 @@ export default function DriverCompanies() {
   const [busy, setBusy] = useState<string | null>(null);
   if (session.state.status !== "signedIn") return null;
   const { me } = session.state;
-  const working = data.companies.length ? data.companies : [{ id: me.driver.id, company: me.company, link: me.link ?? "active", since: new Date().toISOString(), vehicle: me.vehicle ? { name: me.vehicle.name, licensePlate: me.vehicle.licensePlate } : null, current: true } satisfies DriverCompany];
+  const independent = me.link === "self";
+  const working = data.companies.length || independent ? data.companies : [{ id: me.driver.id, company: me.company, link: me.link === "self" || !me.link ? "active" : me.link, since: new Date().toISOString(), vehicle: me.vehicle ? { name: me.vehicle.name, licensePlate: me.vehicle.licensePlate } : null, current: true } satisfies DriverCompany];
 
   const leave = (c: DriverCompany) => {
     const last = working.filter((w) => w.link === "active").length <= 1;
@@ -76,6 +77,12 @@ export default function DriverCompanies() {
       ) : null}
 
       <Text style={ds.section}>WHO SEES MY LOCATION</Text>
+      {working.length === 0 ? (
+        <View style={styles.card}>
+          <Text style={styles.name}>No company yet</Text>
+          <Text style={styles.sub}>Nobody sees your location all the time. When a carrier adds your number, it shows above for you to accept. Loads you accept are shared for that load only.</Text>
+        </View>
+      ) : null}
       {working.map((c) => {
         const sharing = c.link === "active";
         return (

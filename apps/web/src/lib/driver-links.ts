@@ -74,7 +74,7 @@ export async function driverRequests(auth: DriverAuth): Promise<DriverRequestDto
 
 export async function driverCompanies(auth: DriverAuth): Promise<DriverCompanyDto[]> {
   return (await linkedRows(auth))
-    .filter((r) => r.appLink === "active" || r.id === auth.driverId)
+    .filter((r) => r.appLink === "active" || (r.id === auth.driverId && r.appLink !== "self"))
     .map((r) => ({
       id: r.id,
       company: { id: r.organizationId, name: r.orgName, phone: r.orgPhone },

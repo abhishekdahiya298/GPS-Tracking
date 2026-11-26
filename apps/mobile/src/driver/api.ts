@@ -37,7 +37,7 @@ export const driverApi = createApiClient({
 export interface DriverMe {
   driver: { id: string; name: string; phone: string | null; email?: string | null; licenseNumber?: string | null; licenseExpiresOn?: string | null };
   /** This company's link: pending until the driver accepts (older servers leave it out). */
-  link?: "pending" | "active" | "declined" | "left";
+  link?: "pending" | "active" | "declined" | "left" | "self";
   pendingRequests?: number;
   companiesSharing?: number;
   company: { id: string; name: string; phone: string | null };
@@ -63,6 +63,16 @@ export interface DriverCompany {
   vehicle: { name: string; licensePlate: string | null } | null;
   current: boolean;
 }
+export interface LoadRequest {
+  id: string;
+  reference: string;
+  from: { id: string; name: string; phone: string | null };
+  pickup: { name: string | null; address: string; appointmentAt: string | null };
+  delivery: { name: string | null; address: string; appointmentAt: string | null };
+  notes: string | null;
+  askedAt: string;
+}
+export type LoadAnswer = "accept" | "decline" | "stop" | "resume";
 export type StatsRange = "today" | "week" | "month";
 export interface DriverStats {
   range: StatsRange;
@@ -99,7 +109,8 @@ export const driver = {
   loads: () => driverApi.get<{ loads: DriverLoad[] }>("driver-app/loads").then((r) => r.loads),
   report: (body: { points: ReportPoint[]; battery?: { pct: number; charging?: boolean }; permission?: Permission; locationEnabled?: boolean }) =>
     driverApi.post<{ stored: number }>("driver-app/report", { ...body, appVersion: device().appVersion, platform: device().platform }),
-  requests: () => driverApi.get<{ requests: DriverRequest[]; companies: DriverCompany[] }>("driver-app/requests"),
+  requests: () => driverApi.get<{ requests: DriverRequest[]; companies: DriverCompany[]; loads?: LoadRequest[] }>("driver-app/requests"),
+  answerLoad: (id: string, action: LoadAnswer) => driverApi.post<{ loads: DriverLoad[]; requests: LoadRequest[] }>(`driver-app/loads/${id}`, { action }),
   respond: (id: string, accept: boolean) => driverApi.post<{ requests: DriverRequest[]; companies: DriverCompany[] }>(`driver-app/requests/${id}`, { accept }),
   leave: (id: string) => driverApi.post<{ signedOut: boolean; movedTo: { id: string; name: string } | null }>(`driver-app/companies/${id}/leave`),
   updateProfile: (patch: ProfilePatch) => driverApi.send<DriverMe>("driver-app/me", { method: "PATCH", body: patch }).then((r) => r.data),

@@ -22,6 +22,7 @@ import { getServerEnv } from "./env";
 import { ConflictError, NotFoundError, ValidationError } from "./errors";
 import { recordBillableLoad } from "./plans";
 import { assertRateLimit } from "./rate-limit";
+import { appAccessForPhone, notifyDriverPhone } from "./driver-loads";
 import { sendSms, smsConfigured, type SmsResult } from "./sms";
 
 /**
@@ -309,7 +310,7 @@ export function shipperLink(token: string): string {
  * also say how to opt out; a message the broker sends from their own phone or WhatsApp does not.
  */
 export function inviteText(orgName: string, reference: string, link: string, opts: { optOut?: boolean } = {}): string {
-  const base = `${orgName}: please share your location for load ${reference} while you haul it. Open ${link} to accept. Tracking ends when the load is delivered.`;
+  const base = `${orgName} sent you load ${reference} in the RIO GPS driver app. Open ${link} to get the app and accept. Your location is shared for this load only and stops when it's delivered.`;
   return opts.optOut === false ? base : `${base} Reply STOP to opt out.`;
 }
 
@@ -348,6 +349,8 @@ export interface CreatedLoad {
   sms: SmsResult | null;
   /** For sending the link from the broker's own WhatsApp or Messages app. null with no driver link. */
   share: DriverShare | null;
+  /** The driver already has the RIO GPS app (they got a notification). */
+  hasApp?: boolean;
 }
 
 /** The vehicle (same organization) and its tracker's latest fix, if any. */
@@ -410,9 +413,27 @@ export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Met
   if (byVehicle) await recordBillableLoad(getDb(), { organizationId: ctx.organizationId, id, reference: input.reference }, now);
   await writeAudit({ action: "load.created", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, metadata: { reference: input.reference, ...(willText ? { driverTextConsent: true } : {}) }, ...meta });
   if (byVehicle) return { id, driverLink: null, sms: null, share: null };
-  const link = driverLink(token);
-  const sms = willText ? await textInvite(ctx, { id, reference: input.reference, driverPhone: input.driverPhone }, link) : null;
-  return { id, driverLink: link, sms, share: { phone: input.driverPhone, message: inviteText(await orgName(ctx.organizationId), input.reference, link, { optOut: false }) } };
+  void token;
+  return sendToDriverApp(ctx, { id, reference: input.reference, driverPhone: input.driverPhone, driverName: input.driverName ?? null }, willText);
+}
+
+/**
+ * Driver-first: a phone load goes to the driver's RIO GPS app (no browser link). A driver with the
+ * app gets a notification; everyone gets a link to the app (a one-tap sign-in when they have no
+ * company yet), sent by text when texts work, or by the sender's WhatsApp.
+ */
+async function sendToDriverApp(ctx: TenantContext, row: { id: string; reference: string; driverPhone: string | null; driverName: string | null }, text: boolean): Promise<CreatedLoad> {
+  if (!row.driverPhone) return { id: row.id, driverLink: null, sms: null, share: null, hasApp: false };
+  const name = await orgName(ctx.organizationId);
+  const access = await appAccessForPhone(row.driverPhone, row.driverName, ctx.userId);
+  const pushed = await notifyDriverPhone(row.driverPhone, `${name}: load ${row.reference}`, "Open RIO GPS to accept or decline. They see your location for this load only.", { type: "load_request", loadId: row.id });
+  if (pushed) {
+    const now = new Date();
+    await getDb().update(schema.loads).set({ inviteSentAt: now }).where(eq(schema.loads.id, row.id));
+    await addEvent(ctx.organizationId, row.id, "invite_sent", ctx.userId, now, { channel: "app" });
+  }
+  const sms = text ? await textInvite(ctx, row, access.link) : null;
+  return { id: row.id, driverLink: access.link, sms, share: { phone: row.driverPhone, message: inviteText(name, row.reference, access.link, { optOut: false }) }, hasApp: access.hasApp };
 }
 
 export async function updateLoad(ctx: TenantContext, id: string, patch: z.infer<typeof LoadPatchSchema>, meta: Meta, now = new Date()): Promise<void> {
@@ -426,6 +447,9 @@ export async function updateLoad(ctx: TenantContext, id: string, patch: z.infer<
     await vehicleForLoad(ctx.organizationId, patch.vehicleId);
   }
   const set: Record<string, unknown> = { updatedAt: now };
+  // A different driver on a phone load has to get it (and, from outside their company, accept it).
+  const newDriver = row.trackingMode === "phone" && patch.driverPhone !== undefined && patch.driverPhone !== null && patch.driverPhone !== row.driverPhone;
+  if (newDriver) Object.assign(set, { acceptedAt: null, sharingStoppedAt: null, ...(row.status === "tracking" ? { status: "invited" } : {}) });
   if (patch.vehicleId !== undefined) set.vehicleId = patch.vehicleId;
   for (const k of ["reference", "carrierName", "driverName", "driverPhone", "notes"] as const) if (patch[k] !== undefined) set[k] = patch[k];
   if (patch.pickup) Object.assign(set, stopColumns("pickup", patch.pickup));
@@ -441,6 +465,7 @@ export async function updateLoad(ctx: TenantContext, id: string, patch: z.infer<
   }
   await addEvent(ctx.organizationId, id, "updated", ctx.userId, now, { fields: Object.keys(patch) });
   await writeAudit({ action: "load.updated", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, metadata: { fields: Object.keys(patch) }, ...meta });
+  if (newDriver) await sendToDriverApp(ctx, { id, reference: patch.reference ?? row.reference, driverPhone: patch.driverPhone!, driverName: patch.driverName ?? row.driverName }, false);
 }
 
 /**
@@ -448,19 +473,13 @@ export async function updateLoad(ctx: TenantContext, id: string, patch: z.infer<
  * a text message with it. The driver keeps their consent if they had already accepted;
  * they only need to open the new link.
  */
-export async function reissueDriverLink(ctx: TenantContext, id: string, opts: { send: boolean }, meta: Meta): Promise<{ driverLink: string; sms: SmsResult | null; share: DriverShare }> {
+export async function reissueDriverLink(ctx: TenantContext, id: string, opts: { send: boolean }, meta: Meta): Promise<{ driverLink: string; sms: SmsResult | null; share: DriverShare; hasApp: boolean }> {
   const row = await loadRow(ctx.organizationId, id);
   if (isLoadEnded(row.status)) throw new ValidationError("This load has ended");
   if (row.trackingMode !== "phone") throw new ValidationError("This load is tracked by a vehicle's tracker, not the driver's phone");
-  const token = newToken();
-  await getDb()
-    .update(schema.loads)
-    .set({ driverTokenHash: hashLoadToken(token), updatedAt: new Date() })
-    .where(and(eq(schema.loads.id, id), eq(schema.loads.organizationId, ctx.organizationId)));
   await writeAudit({ action: "load.driver_link_reissued", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, metadata: { send: opts.send }, ...meta });
-  const link = driverLink(token);
-  const sms = opts.send ? await textInvite(ctx, row, link) : null;
-  return { driverLink: link, sms, share: { phone: row.driverPhone, message: inviteText(await orgName(ctx.organizationId), row.reference, link, { optOut: false }) } };
+  const r = await sendToDriverApp(ctx, { id, reference: row.reference, driverPhone: row.driverPhone, driverName: row.driverName }, opts.send && smsConfigured());
+  return { driverLink: r.driverLink ?? "", sms: r.sms, share: r.share ?? { phone: row.driverPhone, message: "" }, hasApp: Boolean(r.hasApp) };
 }
 
 /** Ends a load by hand. Tracking stops; the driver link stops accepting positions. */

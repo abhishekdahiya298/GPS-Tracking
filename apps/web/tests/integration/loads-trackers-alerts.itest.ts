@@ -10,9 +10,7 @@ import { setPushTransportForTests } from "@/lib/push";
 import { POST as createPOST } from "@/app/api/loads/route";
 import { GET as loadGET, PATCH as loadPATCH } from "@/app/api/loads/[id]/route";
 import { POST as driverLinkPOST } from "@/app/api/loads/[id]/driver-link/route";
-import { POST as driverViewPOST } from "@/app/api/driver/view/route";
-import { POST as driverActionPOST } from "@/app/api/driver/action/route";
-import { POST as driverPosPOST } from "@/app/api/driver/positions/route";
+import { driverPhone } from "./driver-app-client";
 import { POST as webhookPOST } from "@/app/api/webhooks/traccar/route";
 import { POST as pushRegisterPOST } from "@/app/api/push/devices/route";
 
@@ -41,7 +39,6 @@ async function signIn(email: string) {
 const req = (method: string, path: string, who: string, body?: unknown) =>
   new Request(`${BASE}${path}`, { method, headers: { cookie: cookies[who]!, "content-type": "application/json", origin: BASE }, body: body === undefined ? undefined : JSON.stringify(body) });
 const p = (id: string) => ({ params: Promise.resolve({ id }) });
-const pub = (path: string, body: unknown) => new Request(`${BASE}${path}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `203.0.114.${ipN++}` }, body: JSON.stringify(body) });
 
 let fixTime = Date.now() - 60 * 60_000;
 /** A real Traccar-shaped position through the webhook. */
@@ -175,10 +172,10 @@ describe("loads tracked by the organization's own tracker", () => {
 describe("load alerts", () => {
   it("driver pausing is alerted and emailed to the team", async () => {
     const { json } = await create({ reference: "P-200", driverPhone: "4165550102", pickup: PICKUP, delivery: DELIVERY });
-    const token = json.driverLink!.split("#")[1]!;
-    expect((await driverViewPOST(pub("/api/driver/view", { token }))).status).toBe(200);
-    await driverActionPOST(pub("/api/driver/action", { token, action: "accept" }));
-    await driverActionPOST(pub("/api/driver/action", { token, action: "stop" }));
+    const phone = driverPhone();
+    await phone.signIn(json.driverLink!);
+    expect((await phone.answer(json.id, "accept")).status).toBe(200);
+    expect((await phone.answer(json.id, "stop")).status).toBe(200);
     const a = await alertsOf(json.id);
     expect(a.map((e) => e.type)).toEqual(["load_paused"]);
     expect(outbox.length).toBeGreaterThan(0);
@@ -188,15 +185,16 @@ describe("load alerts", () => {
 
   it("no signal is raised once, and again only after a new position", async () => {
     const { json } = await create({ reference: "P-201", driverPhone: "4165550103", pickup: PICKUP, delivery: DELIVERY });
-    const token = json.driverLink!.split("#")[1]!;
-    await driverActionPOST(pub("/api/driver/action", { token, action: "accept" }));
+    const phone = driverPhone();
+    await phone.signIn(json.driverLink!);
+    await phone.answer(json.id, "accept");
     // Accepted 40 minutes ago with no position since.
     await getDb().update(schema.loads).set({ acceptedAt: new Date(Date.now() - 40 * 60_000) }).where(eq(schema.loads.id, json.id));
     await runLoadChecks();
     await runLoadChecks();
     expect((await alertsOf(json.id)).filter((e) => e.type === "load_no_signal")).toHaveLength(1);
     // A new position clears it; a later silence raises it again.
-    await driverPosPOST(pub("/api/driver/positions", { token, positions: [{ latitude: 43.7, longitude: -79.4, accuracyM: 10, recordedAt: new Date().toISOString() }] }));
+    await phone.positions(json.id, [{ latitude: 43.7, longitude: -79.4, accuracyM: 10, at: new Date().toISOString() }]);
     expect((await getDb().select().from(schema.loads).where(eq(schema.loads.id, json.id)))[0]!.staleAlertedAt).toBeNull();
     await runLoadChecks(new Date(Date.now() + 31 * 60_000));
     expect((await alertsOf(json.id)).filter((e) => e.type === "load_no_signal")).toHaveLength(2);
