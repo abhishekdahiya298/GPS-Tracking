@@ -27,7 +27,7 @@ export default async function DriversLoadsPage({ searchParams }: { searchParams:
     listLoads(ctx.organizationId, { filter, q }),
     loadCounts(ctx.organizationId),
     canWrite ? loadAllowanceNotice(ctx.organizationId) : Promise.resolve(null),
-    listDriversPage(ctx.organizationId, DriverListQuery.parse({ pageSize: 25 }))
+    listDriversPage(ctx.organizationId, DriverListQuery.parse({ pageSize: 10 }))
   ]);
   const driven = await loadsDrivenLast24h(ctx.organizationId, loads.filter((l) => !["delivered", "cancelled", "declined"].includes(l.status)));
   return (

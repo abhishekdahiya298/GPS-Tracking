@@ -1,6 +1,7 @@
 import "server-only";
 import { contextHasPermission, type TenantContext } from "@rio-gps/core";
-import { listLoads } from "@/lib/loads";
+import { getDb } from "@rio-gps/db";
+import { sql } from "drizzle-orm";
 import { featureGate } from "@/lib/entitlements";
 import type { DriversTabs } from "./drivers-tabs";
 
@@ -10,15 +11,21 @@ type Props = Parameters<typeof DriversTabs>[0];
 export async function loadsTabStats(ctx: TenantContext): Promise<Props["loads"]> {
   if (!contextHasPermission(ctx, "loads.read")) return null;
   if ((await featureGate(ctx, "loads")) !== "open") return null;
-  const active = await listLoads(ctx.organizationId, { filter: "active" });
-  const onRoad = active.filter((l) => ["tracking", "at_pickup", "in_transit", "at_delivery"].includes(l.status)).length;
-  const late = active.filter((l) => l.eta?.late).length;
-  const waiting = active.filter((l) => l.status === "invited").length;
+  // One small count query (this runs on every Drivers page view).
+  const [c] = await getDb().execute<{ active: number; on_road: number; waiting: number; late: number }>(sql`
+    select count(*)::int as active,
+      count(*) filter (where status in ('tracking', 'at_pickup', 'in_transit', 'at_delivery'))::int as on_road,
+      count(*) filter (where status = 'invited')::int as waiting,
+      count(*) filter (where status in ('tracking', 'in_transit') and late_alert_target is not null)::int as late
+    from loads where organization_id = ${ctx.organizationId} and status not in ('delivered', 'cancelled', 'declined')`);
+  const onRoad = Number(c?.on_road ?? 0);
+  const waiting = Number(c?.waiting ?? 0);
+  const late = Number(c?.late ?? 0);
   const stats: NonNullable<Props["loads"]>["stats"] = [];
   if (onRoad) stats.push({ label: `${onRoad} on the road`, tone: "blue" });
   if (waiting) stats.push({ label: `${waiting} waiting`, tone: "orange" });
   if (late) stats.push({ label: `${late} late`, tone: "red" });
-  return { count: active.length, stats };
+  return { count: Number(c?.active ?? 0), stats };
 }
 
 export function driversTabStats(c: Record<string, number>): Props["drivers"] {
