@@ -67,6 +67,20 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 240
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "RIO GPS lets drivers add load paperwork, like a signed bill of lading, from their photos.",
+          "cameraPermission": "RIO GPS uses the camera so drivers can scan the bill of lading and take photos of the seal, freight and delivery for their loads.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "react-native-document-scanner-plugin",
+        {
+          "cameraPermission": "RIO GPS uses the camera so drivers can scan the bill of lading and take photos of the seal, freight and delivery for their loads."
+        }
       ]
     ],
     "experiments": {

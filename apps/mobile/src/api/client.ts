@@ -46,6 +46,8 @@ export interface RequestOptions {
   query?: Record<string, string | number | boolean | null | undefined>;
   /** "v1" for data routes (default), "auth" for sign-in routes. */
   area?: "v1" | "auth";
+  /** A multipart upload (the fetch sets its own Content-Type with the boundary). */
+  form?: FormData;
   /** Send the request without a token even if one is stored (sign-in). */
   anonymous?: boolean;
   /** Extra request headers. Only the two-step sign-in uses this. */
@@ -80,20 +82,21 @@ export function createApiClient(options: ApiClientOptions) {
       headers["X-RIO-App-Version"] = options.appInfo.version;
       headers["X-RIO-App-Platform"] = options.appInfo.platform;
     }
-    if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+    const form = opts.form;
+    if (opts.body !== undefined && !form) headers["Content-Type"] = "application/json";
     if (!opts.anonymous) {
       const token = await options.tokens.get();
       if (token) headers.Authorization = `Bearer ${token}`;
     }
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), form ? Math.max(timeoutMs, 90_000) : timeoutMs);
     let response: Response;
     try {
       response = await doFetch(buildUrl(options.baseUrl, path, opts), {
         method: opts.method ?? "GET",
         headers,
-        body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+        body: form ?? (opts.body === undefined ? undefined : JSON.stringify(opts.body)),
         signal: controller.signal,
         // Never attach cookies: the server only accepts a phone's write when none are present.
         credentials: "omit"
@@ -136,7 +139,8 @@ export function createApiClient(options: ApiClientOptions) {
     send,
     get: async <T>(path: string, query?: RequestOptions["query"]) => (await send<T>(path, { query })).data,
     post: async <T>(path: string, body?: unknown) => (await send<T>(path, { method: "POST", body })).data,
-    delete: async <T>(path: string, body?: unknown) => (await send<T>(path, { method: "DELETE", body })).data
+    delete: async <T>(path: string, body?: unknown) => (await send<T>(path, { method: "DELETE", body })).data,
+    upload: async <T>(path: string, form: FormData) => (await send<T>(path, { method: "POST", form })).data
   };
 }
 

@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 /** Pieces the driver screens share: header, cards, load card, stop row. */
 import { Ionicons } from "@expo/vector-icons";
 import type { ReactNode } from "react";
@@ -110,12 +111,18 @@ export function LoadCard({ load, expanded, onPress, dispatchPhone }: { load: Dri
           {load.notes ? <Text style={styles.notes}>{load.notes}</Text> : null}
         </View>
       ) : null}
-      {next || expanded ? (
+      {next || expanded || load.status !== "invited" ? (
         <View style={styles.actions}>
           {next ? (
             <Pressable onPress={() => navigateTo(next.lat, next.lon, placeName(next))} style={[styles.action, styles.actionMain]} accessibilityRole="button">
               <Ionicons name="navigate" size={16} color="#ffffff" />
               <Text style={styles.actionMainText}>Navigate</Text>
+            </Pressable>
+          ) : null}
+          {load.status !== "invited" ? (
+            <Pressable onPress={() => router.push({ pathname: "/driver/paperwork", params: { id: load.id, ref: load.reference } })} style={styles.action} accessibilityRole="button" accessibilityLabel={`Paperwork for ${load.reference}`}>
+              <Ionicons name="document-text-outline" size={16} color={colors.foreground} />
+              <Text style={styles.actionText}>Paperwork</Text>
             </Pressable>
           ) : null}
           {dispatchPhone ? (
