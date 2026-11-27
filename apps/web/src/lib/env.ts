@@ -34,6 +34,8 @@ const ServerEnvSchema = z.object({
    * (see offlineThresholdSeconds). A driving tracker is flagged sooner ("No signal", 15 min).
    */
   GPS_PARKED_OFFLINE_SECONDS: z.coerce.number().int().min(60).max(172_800).default(16_200),
+  /** Where load paperwork files are kept (a Docker volume in production). */
+  DOCUMENTS_DIR: z.string().min(1).default(process.env.NODE_ENV === "production" ? "/data/documents" : "./.data/documents"),
   /** Upper bound on a single location-history query window. */
   MAX_HISTORY_RANGE_DAYS: z.coerce.number().int().min(1).max(366).default(31),
   /** Interval between SSE keep-alive comments. */

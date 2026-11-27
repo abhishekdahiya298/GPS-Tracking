@@ -8,6 +8,7 @@ import { startUsageScheduler } from "./lib/plans";
 import { logger } from "./lib/logger";
 import { startMaintenanceScheduler } from "./lib/maintenance";
 import { startReportScheduler } from "./lib/report-schedules";
+import { startPaperworkScheduler } from "./lib/paperwork";
 
 export function startNode() {
   try {
@@ -21,6 +22,7 @@ export function startNode() {
       startDailyStatsScheduler();
       startHologramSyncScheduler();
       startUsageScheduler();
+      startPaperworkScheduler();
     }
   } catch (err) {
     logger.error("startup.config_invalid", {}, err);

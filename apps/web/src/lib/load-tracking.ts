@@ -117,6 +117,8 @@ export async function raiseLoadAlerts(l: Pick<LoadRow, "id" | "organizationId" |
       .returning();
     const fired: FiredEvent[] = rows.map((row) => ({ row, rule: { id: "", name: `Load ${l.reference}`, notifyEmail: EMAILED.includes(row.type as LoadAlertType) } }));
     await deliver(l.organizationId, fired);
+    // Delivered: the load packet goes out if the company sends it on delivery.
+    if (alerts.some((a) => a.type === "load_delivered")) void import("./paperwork").then((m) => m.maybeSendPacket(l.organizationId, l.id, "delivered"));
   } catch (err) {
     logger.error("load.alerts_failed", { loadId: l.id }, err);
   }

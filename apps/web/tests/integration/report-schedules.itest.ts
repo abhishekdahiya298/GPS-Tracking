@@ -123,7 +123,7 @@ describe("report schedules: delivery", () => {
     expect(m.html).not.toContain("<script");
     const csv = m.attachments![0]!;
     expect(csv.filename).toBe("trips-daily-2026-09-24.csv");
-    expect(csv.content.split("\r\n")[1]).toMatch(/^'=Truck 7,/); // formula injection neutralised
+    expect(String(csv.content).split("\r\n")[1]).toMatch(/^'=Truck 7,/); // formula injection neutralised
     outbox.length = 0;
     expect(await runReportSchedules(new Date("2026-09-25T20:00:00Z"))).toBe(0);
     expect(outbox).toHaveLength(0);
@@ -159,7 +159,7 @@ describe("report schedules: delivery", () => {
     expect(await runReportSchedules(new Date("2026-09-25T07:06:00Z"))).toBe(1);
     const m = outbox[0]!;
     expect(m.text).toContain("=Truck 7: 1 trip, 2.8 mi, 0h 09m driving, top 19 mph");
-    expect(m.attachments![0]!.content.split("\r\n")[0]).toContain("distance_mi,max_speed_mph,avg_moving_mph");
+    expect(String(m.attachments![0]!.content).split("\r\n")[0]).toContain("distance_mi,max_speed_mph,avg_moving_mph");
     await getDb().update(schema.organizations).set({ unitSystem: "metric" }).where(eq(schema.organizations.id, orgA));
   });
 });

@@ -96,6 +96,11 @@ const LoadFields = z.object({
 export const LoadInputSchema = LoadFields.extend({
   trackingMode: z.enum(["phone", "vehicle"]).default("phone"),
   vehicleId: z.string().uuid().nullish().transform((v) => v ?? null),
+  /** This load's own paperwork list (Off/Optional/Required per item); empty = the company's list. */
+  paperwork: z
+    .array(z.object({ key: z.string().regex(/^[a-z0-9_]{2,40}$/), mode: z.enum(["off", "optional", "required"]) }))
+    .max(20)
+    .optional(),
   /** Text the driver the invite now (when SMS is set up). */
   sendInvite: z.boolean().default(true),
   /**
@@ -399,6 +404,7 @@ export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Met
         ...(byVehicle ? { status: "tracking" as const, acceptedAt: now } : {}),
         ...(vehicle?.loc ? { lastLat: vehicle.loc.latitude, lastLon: vehicle.loc.longitude, lastSpeedKph: vehicle.loc.speedKph, lastPositionAt: vehicle.loc.recordedAt } : {}),
         notes: input.notes,
+        paperwork: input.paperwork?.length ? input.paperwork : null,
         ...(stopColumns("pickup", input.pickup) as object),
         ...(stopColumns("delivery", input.delivery) as object),
         driverTokenHash: hashLoadToken(token),
@@ -514,6 +520,7 @@ export async function setLoadOutcome(ctx: TenantContext, id: string, action: z.i
     .returning({ id: schema.loads.id });
   if (!updated) throw new ValidationError("This load has already ended");
   await addEvent(ctx.organizationId, id, action === "delivered" ? "delivered" : "cancelled", ctx.userId, now, { manual: true });
+  if (status === "delivered") void import("./paperwork").then((m) => m.maybeSendPacket(ctx.organizationId, id, "delivered"));
   await writeAudit({ action: `load.${status}`, actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, ...meta });
 }
 
