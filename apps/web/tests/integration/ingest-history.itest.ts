@@ -9,6 +9,7 @@ import { getAuth } from "@/lib/auth";
 import { ingestPosition } from "@/lib/ingest";
 import { GET as currentGET } from "@/app/api/locations/current/route";
 import { GET as historyGET } from "@/app/api/locations/history/route";
+import { trackStats } from "@/app/(app)/map/fleet-model";
 import { POST as webhookPOST } from "@/app/api/webhooks/traccar/route";
 
 const BASE = "http://localhost:3000";
@@ -222,6 +223,52 @@ describe("GET /api/locations/history", () => {
       cursor = body.nextCursor;
     } while (cursor);
     expect(seen).toEqual(all.map((p: { recordedAt: string }) => p.recordedAt));
+  });
+
+
+  it("a long window (more than 20,000 points) comes back whole as an overview with all-point totals", async () => {
+    const db = getDb();
+    // 30,000 points every 10 s from Sep 10 (about 3.5 days), heading east, with a 1-hour stop in the middle.
+    await db.execute(sql`
+      insert into location_history (organization_id, device_id, recorded_at, latitude, longitude, speed_kph, heading_deg, altitude_m, ignition, motion)
+      select ${orgA}, ${devA}, timestamptz '2026-09-10T00:00:00Z' + (g * interval '10 seconds'),
+             34.0, -118.0 + least(g, 15000) * 0.0005 + greatest(g - 15360, 0) * 0.0005,
+             case when g between 15001 and 15360 then 0 else 20 end, 90, 80,
+             g not between 15001 and 15360, g not between 15001 and 15360
+      from generate_series(0, 29999) g`);
+    const longWin = { from: "2026-09-10T00:00:00Z", to: "2026-09-14T00:00:00Z" };
+    const res = await historyGET(get(q({ deviceId: devA, ...longWin, limit: "5000", detail: "auto" }), cookieA));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.nextCursor).toBeNull();
+    expect(body.overview.totalPoints).toBe(30000);
+    expect(body.points.length).toBeLessThan(20000);
+    const times: string[] = body.points.map((p: { recordedAt: string }) => p.recordedAt);
+    expect(times).toEqual([...times].sort());
+    expect(times[0]).toBe("2026-09-10T00:00:00.000Z");
+    expect(times.at(-1)).toBe(new Date(Date.parse("2026-09-10T00:00:00Z") + 29999 * 10_000).toISOString());
+    // The stop keeps its real start and end.
+    expect(times).toContain(new Date(Date.parse("2026-09-10T00:00:00Z") + 15001 * 10_000).toISOString());
+    expect(times).toContain(new Date(Date.parse("2026-09-10T00:00:00Z") + 15361 * 10_000).toISOString());
+
+    // Full detail still pages through every point, and the overview's distance matches it.
+    const all: Parameters<typeof trackStats>[0] = [];
+    let cursor: string | null = null;
+    do {
+      const params: Record<string, string> = { deviceId: devA, ...longWin, limit: "5000" };
+      if (cursor) params.cursor = cursor;
+      const page = await (await historyGET(get(q(params), cookieA))).json();
+      all.push(...page.points);
+      cursor = page.nextCursor;
+    } while (cursor);
+    expect(all.length).toBe(30000);
+    const full = trackStats(all);
+    expect(Math.abs(body.overview.distanceKm - full.km) / full.km).toBeLessThan(0.001);
+    expect(body.overview.maxSpeedKph).toBe(20);
+
+    // A short window with detail=auto is unchanged: plain points, no overview.
+    const short = await (await historyGET(get(q({ deviceId: devA, ...window, detail: "auto" }), cookieA))).json();
+    expect(short.overview).toBeUndefined();
   });
 
   it("another org's device is indistinguishable from a missing one (404)", async () => {

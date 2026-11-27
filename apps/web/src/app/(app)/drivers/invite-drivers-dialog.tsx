@@ -6,6 +6,7 @@ import { Alert } from "@/components/ui/alert";
 import { Button, buttonVariants, IconButton } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Checkbox, Input, Select } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
@@ -176,7 +177,7 @@ export function InviteDriversDialog({
                   {rows.map((r, i) => (
                     <div key={i} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_1fr_32px] sm:items-center">
                       <Input aria-label="Driver name" placeholder="Driver name" value={r.name} maxLength={120} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
-                      <Input aria-label="Mobile number" type="tel" placeholder="+1 905 555 0177" value={r.phone} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, phone: e.target.value } : x)))} />
+                      <PhoneInput aria-label="Mobile number" value={r.phone} onChange={(v) => setRows(rows.map((x, j) => (j === i ? { ...x, phone: v } : x)))} />
                       <Select aria-label="Truck" value={r.vehicleId} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, vehicleId: e.target.value } : x)))}>
                         <option value="">No truck yet</option>
                         {free.map((v) => (

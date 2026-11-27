@@ -50,6 +50,11 @@ export const PLAN_VISIBILITY = ["public", "offered", "hidden"] as const;
 export type PlanVisibility = (typeof PLAN_VISIBILITY)[number];
 
 export const PlanInputSchema = PlanTermsSchema.extend({
+  /** Catalog prices; left out = keep the current values (the matrix saves without them). */
+  perTrailer: cents.optional(),
+  perDriver: cents.optional(),
+  /** false = Loads lives under Drivers (Drivers | Loads), not in the side menu (RIO Fleet). */
+  loadsInMenu: z.boolean().optional(),
   name: z.string().trim().min(2).max(60),
   active: z.boolean().default(true),
   visibility: z.enum(PLAN_VISIBILITY).default("offered"),
@@ -77,6 +82,9 @@ export interface PlanTerms {
 }
 export interface PlanDto extends PlanTerms {
   id: string;
+  perTrailerCents: number;
+  perDriverCents: number;
+  loadsInMenu: boolean;
   name: string;
   active: boolean;
   visibility: PlanVisibility;
@@ -129,11 +137,14 @@ export async function listPlans(): Promise<PlanDto[]> {
       limits: p.limits,
       visibility: p.visibility,
       priceNote: p.priceNote,
+      perTrailerCents: p.perTrailerCents,
+      perDriverCents: p.perDriverCents,
+      options: p.options,
       customers: sql<number>`(select count(*)::int from subscriptions s where s.plan_id = "plans"."id" and s.ended_at is null)`
     })
     .from(p)
     .orderBy(desc(p.active), asc(p.sortOrder), asc(p.name));
-  return rows.map((r) => ({ id: r.id, name: r.name, active: r.active, visibility: asVisibility(r.visibility), priceNote: r.priceNote, customers: r.customers, ...terms(r) }));
+  return rows.map((r) => ({ id: r.id, name: r.name, active: r.active, visibility: asVisibility(r.visibility), priceNote: r.priceNote, customers: r.customers, perTrailerCents: r.perTrailerCents, perDriverCents: r.perDriverCents, loadsInMenu: r.options?.loadsInMenu !== false, ...terms(r) }));
 }
 
 function planValues(input: z.infer<typeof PlanInputSchema>) {
@@ -148,7 +159,10 @@ function planValues(input: z.infer<typeof PlanInputSchema>) {
     lockedFeatures: input.lockedFeatures,
     limits: input.limits,
     visibility: input.visibility,
-    priceNote: input.priceNote || null
+    priceNote: input.priceNote || null,
+    ...(input.perTrailer !== undefined ? { perTrailerCents: input.perTrailer } : {}),
+    ...(input.perDriver !== undefined ? { perDriverCents: input.perDriver } : {}),
+    ...(input.loadsInMenu !== undefined ? { options: { loadsInMenu: input.loadsInMenu } } : {})
   };
 }
 
@@ -188,6 +202,8 @@ export async function updatePlan(actorUserId: string, id: string, input: z.infer
 
 export interface PlanAccess {
   planName: string;
+  /** false: the plan keeps Loads under Drivers, not in the side menu. */
+  loadsInMenu: boolean;
   modules: Module[];
   lockedFeatures: Feature[];
   limits: PlanLimits;
@@ -206,8 +222,9 @@ export interface PlanAccess {
 export async function organizationPlanAccess(organizationId: string, now = new Date()): Promise<PlanAccess | undefined> {
   const s = schema.subscriptions;
   const [row] = await getDb()
-    .select({ planName: s.planName, modules: s.modules, lockedFeatures: s.lockedFeatures, limits: s.limits, includedLoads: s.includedLoads, trialEndsAt: s.trialEndsAt })
+    .select({ planName: s.planName, modules: s.modules, lockedFeatures: s.lockedFeatures, limits: s.limits, includedLoads: s.includedLoads, trialEndsAt: s.trialEndsAt, options: schema.plans.options })
     .from(s)
+    .leftJoin(schema.plans, eq(schema.plans.id, s.planId))
     .where(and(eq(s.organizationId, organizationId), isNull(s.endedAt)))
     .limit(1);
   if (!row) return undefined;
@@ -215,7 +232,7 @@ export async function organizationPlanAccess(organizationId: string, now = new D
     await endTrial(organizationId, now);
     return organizationPlanAccess(organizationId, new Date(0));
   }
-  return { planName: row.planName, modules: row.modules as Module[], lockedFeatures: cleanFeatures(row.lockedFeatures), limits: cleanLimits(row.limits), includedLoads: row.includedLoads, trialEndsAt: row.trialEndsAt };
+  return { planName: row.planName, loadsInMenu: row.options?.loadsInMenu !== false, modules: row.modules as Module[], lockedFeatures: cleanFeatures(row.lockedFeatures), limits: cleanLimits(row.limits), includedLoads: row.includedLoads, trialEndsAt: row.trialEndsAt };
 }
 
 /** Kept for callers that only need modules. */

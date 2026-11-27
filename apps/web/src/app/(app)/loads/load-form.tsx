@@ -15,6 +15,9 @@ import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox, Input, Select, Textarea } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
+import { PaperworkPicker } from "./paperwork-picker";
+import { DriverLookupNote } from "./driver-lookup";
 import { Field, Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
@@ -321,6 +324,8 @@ export function LoadForm({ initial, smsAvailable, vehicles, fleet = true, notice
   const [driverConsent, setDriverConsent] = useState(false);
   const [mode, setMode] = useState<"phone" | "vehicle">(initial?.trackingMode ?? "phone");
   const [vehicleId, setVehicleId] = useState(initial?.vehicle?.id ?? "");
+  const [driverPhone, setDriverPhone] = useState(initial?.driverPhone ?? "");
+  const [paperwork, setPaperwork] = useState<{ key: string; mode: "off" | "optional" | "required" }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stopErrors, setStopErrors] = useState<{ pickup: string | null; delivery: string | null }>({ pickup: null, delivery: null });
@@ -371,7 +376,7 @@ export function LoadForm({ initial, smsAvailable, vehicles, fleet = true, notice
         router.push(`/loads/${initial.id}`);
         router.refresh();
       } else {
-        const r = await api<{ id: string; driverLink: string | null; sms: SmsResult | null; share: DriverShare | null; hasApp?: boolean }>("/api/loads", { method: "POST", json: { ...body, trackingMode: mode, sendInvite, driverConsent } });
+        const r = await api<{ id: string; driverLink: string | null; sms: SmsResult | null; share: DriverShare | null; hasApp?: boolean }>("/api/loads", { method: "POST", json: { ...body, trackingMode: mode, sendInvite, driverConsent, ...(paperwork.length ? { paperwork } : {}) } });
         setCreated({ ...r, reference: body.reference });
         window.scrollTo({ top: 0 });
       }
@@ -467,11 +472,21 @@ export function LoadForm({ initial, smsAvailable, vehicles, fleet = true, notice
             <Input id="driverName" name="driverName" maxLength={80} defaultValue={initial?.driverName ?? ""} autoComplete="off" />
           </Field>
           <Field id="driverPhone" label="Driver mobile" required={mode === "phone"} description={mode === "phone" ? "The load goes to this number in the RIO GPS app." : "Optional, so your team can call the driver."}>
-            <Input id="driverPhone" name="driverPhone" type="tel" required={mode === "phone"} maxLength={30} defaultValue={initial?.driverPhone ?? ""} placeholder="(416) 555-0123" autoComplete="off" />
+            <div className="grid gap-1.5">
+              <PhoneInput id="driverPhone" name="driverPhone" required={mode === "phone"} defaultValue={initial?.driverPhone ?? ""} autoComplete="off" onChange={setDriverPhone} />
+              <DriverLookupNote
+                phone={driverPhone}
+                onName={(n) => {
+                  const el = document.getElementById("driverName") as HTMLInputElement | null;
+                  if (el && !el.value.trim()) el.value = n;
+                }}
+              />
+            </div>
           </Field>
           <Field id="notes" label="Notes" className="sm:col-span-2" description="Only your team sees notes.">
             <Textarea id="notes" name="notes" maxLength={1000} defaultValue={initial?.notes ?? ""} rows={2} />
           </Field>
+          {!initial && <PaperworkPicker onChange={setPaperwork} />}
         </CardContent>
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">

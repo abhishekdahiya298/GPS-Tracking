@@ -1,9 +1,10 @@
+import { flushPaperwork } from "@/driver/capture";
 import * as Notifications from "expo-notifications";
 import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useSyncExternalStore } from "react";
-import { Appearance } from "react-native";
+import { Appearance, AppState } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AlertsProvider } from "@/alerts/AlertsProvider";
 import { SessionProvider, useSession } from "@/auth/SessionProvider";
@@ -67,6 +68,7 @@ function Screens() {
     if (driverIn) {
       if (data.type === "driver_request" || data.type === "load_request") router.navigate("/today");
       else if (data.type === "driver_removed") router.navigate({ pathname: "/driver/removed", params: { company: String(data.company ?? "") } });
+      else if (data.type === "paperwork" && data.loadId) router.navigate({ pathname: "/driver/paperwork", params: { id: String(data.loadId) } });
       else if (data.type === "location_request") router.navigate({ pathname: "/driver/request", params: { from: String(data.from ?? ""), message: String(data.message ?? ""), at: String(data.at ?? "") } });
       else void driver.refresh();
     } else if (signedIn) {
@@ -75,6 +77,14 @@ function Screens() {
     } else return;
     void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
   }, [signedIn, driverIn, tapped, router]);
+
+  // Paperwork captured with no signal goes out when the app comes back (and at start).
+  useEffect(() => {
+    if (!driverIn) return;
+    void flushPaperwork().catch(() => undefined);
+    const sub = AppState.addEventListener("change", (st) => st === "active" && void flushPaperwork().catch(() => undefined));
+    return () => sub.remove();
+  }, [driverIn]);
 
   // A request or sign-out notice arriving while a driver has the app open.
   useEffect(() => {
@@ -110,6 +120,7 @@ function Screens() {
         <Stack.Screen name="(driver)" />
         <Stack.Screen name="driver/request" options={{ presentation: "modal" }} />
         <Stack.Screen name="driver/record" options={{ ...pushed, title: "Companies" }} />
+        <Stack.Screen name="driver/paperwork" options={{ ...pushed, title: "Paperwork" }} />
         <Stack.Screen name="driver/profile" options={{ ...pushed, title: "Edit profile" }} />
         <Stack.Screen name="driver/reports" options={{ ...pushed, title: "My reports" }} />
         <Stack.Screen name="driver/removed" options={{ presentation: "modal" }} />

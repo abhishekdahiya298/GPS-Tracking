@@ -3,13 +3,15 @@ import type { TenantContext } from "@rio-gps/core";
 import { normalizePhone, PHONE_HINT } from "./phone";
 import { notifyDriverRequest, releaseDriverFromCompany } from "./driver-links";
 import { getDb, schema } from "@rio-gps/db";
-import { and, eq, isNull, ne, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import { writeAudit } from "./audit";
 import { appState, type DriverAppState } from "./driver-app";
 import { NotFoundError } from "./errors";
 import { getPlatformSettings } from "./platform-settings";
 import { likePattern, PAGE_SIZES } from "./fleet-list";
+import { toLoadSummary, withPaperwork, type LoadSummaryDto } from "./loads";
+import { driverDocuments } from "./paperwork";
 
 /**
  * Drivers and the vehicle each one drives now. One driver per vehicle at a time:
@@ -100,8 +102,13 @@ export interface DriverRow {
   vehicle: { id: string; name: string; type: string; licensePlate: string | null; deviceId: string | null; moving: boolean; speedKph: number | null; lastSeenAt: string | null } | null;
   /** Driver-first: has the driver accepted this company? */
   link: { state: "pending" | "active" | "declined" | "left"; at: string | null };
-  /** The open load this driver is on (by phone or truck), if any. */
-  load: { id: string; reference: string; status: string } | null;
+  /** The open load this driver is on (by phone or truck), if any, with route, ETA and how far along it is. */
+  load: LoadSummaryDto | null;
+  /**
+   * Where the driver is: the truck's tracker when it reports (most accurate), otherwise the
+   * phone. `phoneOff` marks a driver whose phone location is off while the truck still reports.
+   */
+  where: { latitude: number; longitude: number; at: string; source: "tracker" | "phone"; phoneOff: boolean } | null;
   /** The RIO GPS app on the driver's phone (always on while signed in). */
   app: { state: DriverAppState; batteryPct: number | null; charging: boolean | null; lastReportAt: string | null; phoneDeviceId: string | null; speedKph: number | null; inviteSentAt: string | null; locationAskedAt: string | null; canNotify: boolean };
 }
@@ -147,13 +154,14 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
   const [rows, counts] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
       select d.*, v.name as v_name, v.type as v_type, v.license_plate as v_plate, a.device_id as v_device,
-             cl.speed_kph as v_speed, cl.recorded_at as v_seen,
+             cl.speed_kph as v_speed, cl.recorded_at as v_seen, cl.latitude as v_lat, cl.longitude as v_lon,
+             pl.latitude as p_lat, pl.longitude as p_lon, pl.recorded_at as p_seen,
              s.signed_in as s_signed_in, s.permission as s_permission, s.location_enabled as s_loc, s.battery_pct as s_battery, s.charging as s_charging, s.last_report_at as s_report,
              pl.speed_kph as p_speed,
              (select max(i.created_at) from driver_invites i where i.driver_id = d.id) as s_invited,
              s.location_asked_at as s_asked,
              exists (select 1 from driver_app_sessions x where x.driver_id = d.id and x.revoked_at is null and x.push_token is not null) as s_notify,
-             (select json_build_object('id', l.id, 'reference', l.reference, 'status', l.status) from loads l
+             (select l.id from loads l
                 where l.organization_id = d.organization_id and l.status not in ('delivered', 'cancelled', 'declined')
                   and ((d.phone is not null and l.driver_phone = d.phone) or (d.vehicle_id is not null and l.vehicle_id = d.vehicle_id))
                 order by l.created_at desc limit 1) as l_load,
@@ -176,9 +184,30 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
       ${base}`)
   ]);
   const now = Date.now();
+  const loadIds = [...new Set(rows.map((r) => r.l_load as string | null).filter((x): x is string => Boolean(x)))];
+  const loadRows = loadIds.length
+    ? await db
+        .select({ l: schema.loads, vehicleName: schema.vehicles.name })
+        .from(schema.loads)
+        .leftJoin(schema.vehicles, and(eq(schema.vehicles.id, schema.loads.vehicleId), eq(schema.vehicles.organizationId, schema.loads.organizationId)))
+        .where(and(eq(schema.loads.organizationId, organizationId), inArray(schema.loads.id, loadIds)))
+    : [];
+  const loadDtos = await withPaperwork(organizationId, loadRows.map((x) => ({ row: x.l, dto: toLoadSummary(x.l, new Date(now), x.vehicleName) })));
+  const loadsById = new Map(loadDtos.map((x) => [x.id, x]));
   return {
     items: rows.map((r): DriverRow => {
       const seen = r.v_seen ? new Date(r.v_seen as string) : null;
+      const phoneSeen = r.p_seen ? new Date(r.p_seen as string) : null;
+      const app = appState(r.s_signed_in == null ? null : { signedIn: Boolean(r.s_signed_in), permission: (r.s_permission as string | null) ?? null, locationEnabled: r.s_loc == null ? null : Boolean(r.s_loc), lastReportAt: r.s_report ? new Date(r.s_report as string) : null }, now, staleMin * 60_000);
+      // The truck's tracker wins while it reported in the last 30 minutes; otherwise the newer of the two.
+      const trackerFresh = Boolean(seen && r.v_lat != null && now - seen.getTime() < 30 * 60_000);
+      const useTracker = r.v_lat != null && seen && (trackerFresh || !phoneSeen || seen >= phoneSeen);
+      const where: DriverRow["where"] =
+        useTracker && seen
+          ? { latitude: Number(r.v_lat), longitude: Number(r.v_lon), at: seen.toISOString(), source: "tracker", phoneOff: app === "location_off" }
+          : phoneSeen && r.p_lat != null
+            ? { latitude: Number(r.p_lat), longitude: Number(r.p_lon), at: phoneSeen.toISOString(), source: "phone", phoneOff: app === "location_off" }
+            : null;
       return {
         id: String(r.id),
         name: String(r.name),
@@ -190,7 +219,8 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
         notes: (r.notes as string | null) ?? null,
         assignedAt: r.assigned_at ? new Date(r.assigned_at as string).toISOString() : null,
         link: { state: (r.app_link as DriverRow["link"]["state"]) ?? "active", at: r.app_link_at ? new Date(r.app_link_at as string).toISOString() : null },
-        load: r.l_load ? (typeof r.l_load === "string" ? JSON.parse(r.l_load) : (r.l_load as DriverRow["load"])) : null,
+        load: r.l_load ? (loadsById.get(String(r.l_load)) ?? null) : null,
+        where,
         vehicle: r.vehicle_id
           ? {
               id: String(r.vehicle_id),
@@ -204,7 +234,7 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
             }
           : null,
         app: {
-          state: appState(r.s_signed_in == null ? null : { signedIn: Boolean(r.s_signed_in), permission: (r.s_permission as string | null) ?? null, locationEnabled: r.s_loc == null ? null : Boolean(r.s_loc), lastReportAt: r.s_report ? new Date(r.s_report as string) : null }, now, staleMin * 60_000),
+          state: app,
           batteryPct: r.s_battery == null ? null : Number(r.s_battery),
           charging: r.s_charging == null ? null : Boolean(r.s_charging),
           lastReportAt: r.s_report ? new Date(r.s_report as string).toISOString() : null,
@@ -417,6 +447,10 @@ export interface DriverRecord {
   history: AssignmentRow[];
   /** Last 7 days on the vehicles this driver drove (only the days they were assigned). */
   week: { distanceM: number; drivingS: number; trips: number; speeding: number };
+  /** The driver's latest loads with this company (A42), newest first. */
+  loads: LoadSummaryDto[];
+  /** The newest paperwork the driver sent (A42). */
+  documents: Awaited<ReturnType<typeof driverDocuments>>;
 }
 
 /** A driver's record: vehicle history and the last 7 days, for the side panel on Drivers. */
@@ -439,5 +473,16 @@ export async function driverRecord(organizationId: string, driverId: string, now
       where e.organization_id = ${organizationId} and e.type = 'speeding' and e.occurred_at > ${now.toISOString()}::timestamptz - interval '7 days'`)
   ]);
   const st = stats[0];
-  return { history, week: { distanceM: Number(st?.distance_m ?? 0), drivingS: Number(st?.driving_s ?? 0), trips: Number(st?.trips ?? 0), speeding: Number(speeding[0]?.n ?? 0) } };
+  const [me] = await getDb().select({ phone: schema.drivers.phone }).from(schema.drivers).where(and(eq(schema.drivers.id, driverId), eq(schema.drivers.organizationId, organizationId)));
+  const loadRows = me?.phone
+    ? await getDb()
+        .select({ l: schema.loads, vehicleName: schema.vehicles.name })
+        .from(schema.loads)
+        .leftJoin(schema.vehicles, eq(schema.vehicles.id, schema.loads.vehicleId))
+        .where(and(eq(schema.loads.organizationId, organizationId), eq(schema.loads.driverPhone, me.phone)))
+        .orderBy(sql`${schema.loads.createdAt} desc`)
+        .limit(12)
+    : [];
+  const [loads, documents] = await Promise.all([withPaperwork(organizationId, loadRows.map((x) => ({ row: x.l, dto: toLoadSummary(x.l, now, x.vehicleName) }))), driverDocuments(organizationId, driverId, 12)]);
+  return { history, loads, documents, week: { distanceM: Number(st?.distance_m ?? 0), drivingS: Number(st?.driving_s ?? 0), trips: Number(st?.trips ?? 0), speeding: Number(speeding[0]?.n ?? 0) } };
 }

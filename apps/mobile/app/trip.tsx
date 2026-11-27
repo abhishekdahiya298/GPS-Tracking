@@ -18,8 +18,8 @@ import { SPEEDS, advance, buildTrack, durationText, positionAt, progressOf, time
 
 const inExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 const TripMap = inExpoGo ? null : lazy(() => import("@/trips/TripMap"));
-/** A long haul can hold many thousands of points; this is the same ceiling as the website. */
-const MAX_POINTS = 20_000;
+/** Safety ceiling while paging; a long haul comes back as one overview track (detail: "auto"), like the website. */
+const MAX_POINTS = 40_000;
 const TICK_MS = 100;
 
 type Load = { state: "loading" } | { state: "ready"; track: Track } | { state: "empty" } | { state: "failed"; message: string };
@@ -44,7 +44,7 @@ export default function TripScreen() {
       const points: HistoryPoint[] = [];
       let cursor: string | null = null;
       do {
-        const page: HistoryPage = await api.get<HistoryPage>("locations/history", { deviceId: id, from, to: end, limit: 5000, cursor });
+        const page: HistoryPage = await api.get<HistoryPage>("locations/history", { deviceId: id, from, to: end, limit: 5000, cursor, detail: "auto" });
         points.push(...page.points);
         cursor = page.nextCursor;
       } while (cursor && points.length < MAX_POINTS);

@@ -1,3 +1,4 @@
+import { PhoneField, phoneProblem } from "@/components/PhoneField";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useRef, useState } from "react";
@@ -29,6 +30,8 @@ export default function SignupDetails() {
     if (busy) return;
     if (form.company.trim().length < 2 || form.name.trim().length < 2) return setError("Enter your company name and your name.");
     if (!form.phone.trim() || !form.email.trim()) return setError("Enter your mobile number and work email.");
+    const badPhone = phoneProblem(form.phone);
+    if (badPhone) return setError(badPhone);
     if (form.password.length < 10) return setError("Use at least 10 characters for the password.");
     setError(null);
     setBusy(true);
@@ -59,7 +62,7 @@ export default function SignupDetails() {
               <Field ref={refs.name} label="Your name" value={form.name} onChangeText={(v) => set("name", v)} autoComplete="name" textContentType="name" returnKeyType="next" onSubmitEditing={() => refs.phone.current?.focus()} />
             </View>
             <View style={styles.half}>
-              <Field ref={refs.phone} label="Mobile" value={form.phone} onChangeText={(v) => set("phone", v)} placeholder="(905) 555-0121" keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" returnKeyType="next" onSubmitEditing={() => refs.email.current?.focus()} />
+              <PhoneField ref={refs.phone} value={form.phone} defaultCountry={form.country} onChangeText={(v) => set("phone", v)} returnKeyType="next" onSubmitEditing={() => refs.email.current?.focus()} />
             </View>
           </View>
           <Field ref={refs.email} label="Work email" icon="mail-outline" value={form.email} onChangeText={(v) => set("email", v)} placeholder="you@company.com" keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" textContentType="emailAddress" returnKeyType="next" onSubmitEditing={() => refs.password.current?.focus()} />

@@ -30,6 +30,11 @@ export const plans = pgTable(
     monthlyFeeCents: integer("monthly_fee_cents").notNull().default(0),
     /** Per tracker per month (GPS plans). */
     perTrackerCents: integer("per_tracker_cents").notNull().default(0),
+    /** Catalog prices shown on the website and Plan page (not billed automatically yet). */
+    perTrailerCents: integer("per_trailer_cents").notNull().default(0),
+    perDriverCents: integer("per_driver_cents").notNull().default(0),
+    /** Plan options, e.g. { loadsInMenu: false } puts Loads under Drivers instead of the side menu. */
+    options: jsonb("options").$type<{ loadsInMenu?: boolean }>().notNull().default({}),
     /** Features (core FEATURES) this plan does NOT include. Empty = everything. */
     lockedFeatures: text("locked_features").array().notNull().default(sql`'{}'::text[]`),
     /** Limits (core LIMITS); a missing key = no limit. */

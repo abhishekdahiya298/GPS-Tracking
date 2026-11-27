@@ -1,6 +1,6 @@
 import type { NormalizedPosition } from "@rio-gps/core";
 import { getDb, schema } from "@rio-gps/db";
-import { and, asc, eq, gt, gte, isNull, lt, or } from "drizzle-orm";
+import { and, asc, eq, gt, gte, isNull, lt, or, sql } from "drizzle-orm";
 
 /**
  * Read models for tenant-scoped location APIs. Every function takes the
@@ -210,5 +210,81 @@ export async function queryHistory(args: {
       recordedAt: r.recordedAt.toISOString()
     })),
     nextCursor: rows.length > args.limit && last ? encodeCursor({ t: last.recordedAt.toISOString(), id: last.id }) : null
+  };
+}
+
+/** Most points one history request returns in full; longer windows get the overview below. */
+export const HISTORY_FULL_POINTS = 20_000;
+/** Target size of the overview track for long windows. */
+export const HISTORY_OVERVIEW_POINTS = 12_000;
+
+export interface HistoryOverview {
+  /** Real recorded points, in time order: a subset of the full track (nothing is invented or moved). */
+  points: LocationPoint[];
+  /** Points recorded in the window. */
+  totalPoints: number;
+  /** Distance and top speed worked out from every recorded point, not just the overview. */
+  distanceKm: number;
+  maxSpeedKph: number;
+}
+
+/**
+ * For a window with more than `HISTORY_FULL_POINTS` points, returns an overview track instead of
+ * the whole thing, so a week or a month draws in one go instead of stopping at a point limit:
+ * one real point per time slice, plus every point where ignition or motion changes and both
+ * sides of any reporting gap over 5 minutes, so trips, stops and idling keep their real times.
+ * Distance and top speed come from all points. Returns null when the full track is small enough.
+ */
+export async function historyOverview(args: { organizationId: string; deviceId: string; from: Date; to: Date; target?: number }): Promise<HistoryOverview | null> {
+  const db = getDb();
+  const target = args.target ?? HISTORY_OVERVIEW_POINTS;
+  const where = sql`organization_id = ${args.organizationId} and device_id = ${args.deviceId} and recorded_at >= ${args.from.toISOString()}::timestamptz and recorded_at < ${args.to.toISOString()}::timestamptz`;
+  const [agg] = await db.execute<{ n: string; km: string | null; vmax: string | null }>(sql`
+    select count(*)::text as n,
+           sum(case when dt_h > 0 and d_km / dt_h <= 250 then d_km end)::text as km,
+           max(speed_kph)::text as vmax
+    from (
+      select speed_kph,
+             2 * 6371 * asin(sqrt(power(sin(radians(latitude - lag(latitude) over w) / 2), 2)
+               + cos(radians(lag(latitude) over w)) * cos(radians(latitude)) * power(sin(radians(longitude - lag(longitude) over w) / 2), 2))) as d_km,
+             extract(epoch from recorded_at - lag(recorded_at) over w) / 3600 as dt_h
+      from location_history where ${where}
+      window w as (order by recorded_at, id)
+    ) x`);
+  const total = Number(agg?.n ?? 0);
+  if (total <= HISTORY_FULL_POINTS) return null;
+  const sliceMs = Math.max(1000, Math.ceil((args.to.getTime() - args.from.getTime()) / target));
+  const rows = await db.execute<{
+    latitude: number; longitude: number; speed_kph: number | null; heading_deg: number | null; altitude_m: number | null;
+    ignition: boolean | null; motion: boolean | null; recorded_at: Date | string;
+  }>(sql`
+    select latitude, longitude, speed_kph, heading_deg, altitude_m, ignition, motion, recorded_at from (
+      select *,
+             row_number() over (partition by floor(extract(epoch from recorded_at) * 1000 / ${sliceMs}) order by recorded_at, id) as rn,
+             lag(ignition) over w as prev_ign, lag(motion) over w as prev_motion,
+             lag(recorded_at) over w as prev_t, lead(recorded_at) over w as next_t,
+             lead(recorded_at) over w is null as is_last
+      from location_history where ${where}
+      window w as (order by recorded_at, id)
+    ) p
+    where rn = 1 or is_last
+       or prev_ign is distinct from ignition or prev_motion is distinct from motion
+       or recorded_at - prev_t > interval '5 minutes' or next_t - recorded_at > interval '5 minutes'
+    order by recorded_at, id
+    limit ${target * 3}`);
+  return {
+    points: rows.map((r) => ({
+      latitude: Number(r.latitude),
+      longitude: Number(r.longitude),
+      speedKph: r.speed_kph === null ? null : Number(r.speed_kph),
+      headingDeg: r.heading_deg === null ? null : Number(r.heading_deg),
+      altitudeM: r.altitude_m === null ? null : Number(r.altitude_m),
+      ignition: r.ignition,
+      motion: r.motion,
+      recordedAt: new Date(r.recorded_at).toISOString()
+    })),
+    totalPoints: total,
+    distanceKm: Number(agg?.km ?? 0),
+    maxSpeedKph: Number(agg?.vmax ?? 0)
   };
 }

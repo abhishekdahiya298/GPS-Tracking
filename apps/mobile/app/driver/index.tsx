@@ -1,3 +1,4 @@
+import { PhoneField, phoneE164, phoneProblem } from "@/components/PhoneField";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -198,7 +199,7 @@ export default function DriverSignIn() {
     <AuthShell back={router.canGoBack()} photo="driver" title="Drive with" accent="RIO GPS" tagline="One free account for every carrier and broker you drive for." cardKey="phone">
       <RoleSwitch active="driver" onChange={toFleet} />
       <Text style={styles.h1}>Your mobile number</Text>
-      <Field label="Mobile" icon="call-outline" value={phone} onChangeText={setPhone} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" placeholder="(416) 555-0142" />
+      <PhoneField value={phone} onChangeText={setPhone} />
       <Text style={styles.muted}>Carriers and brokers find you by this number.</Text>
       {error && <ErrorNote text={error} />}
       <ArrowButton
@@ -207,9 +208,10 @@ export default function DriverSignIn() {
         loading={busy}
         onPress={() =>
           run(async () => {
-            if (phone.replace(/\D/g, "").length < 10) return setError("Enter your 10-digit mobile number.");
+            const bad = phoneProblem(phone);
+            if (bad) return setError(bad);
             try {
-              const start = await session.startPhone(phone.trim());
+              const start = await session.startPhone(phoneE164(phone)!);
               setCode("");
               setMode({ m: "code", phone: phone.trim(), start });
             } catch (e) {

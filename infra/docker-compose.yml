@@ -113,6 +113,9 @@ services:
       RIO_DATABASE_URL: postgres://rio:${RIO_DB_PASSWORD:?set in .env}@postgres:5432/rio
       REDIS_URL: redis://redis:6379
       TRACCAR_API_URL: http://traccar:8082
+    volumes:
+      # Load paperwork (scans, photos, PDFs). Back this up with the database (docs/DISASTER_RECOVERY.md).
+      - documents-data:/data/documents
     ports:
       # Loopback only — the reverse-proxy service is the public entry point
       # (see reverse-proxy below); this mapping exists for host-side debugging.
@@ -170,6 +173,7 @@ services:
 
 volumes:
   postgres-data:
+  documents-data:
   traccar-logs:
   caddy-data:
   caddy-config:

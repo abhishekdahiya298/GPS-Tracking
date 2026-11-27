@@ -167,6 +167,24 @@ describe("loads tracked by the organization's own tracker", () => {
     const phone = await create({ reference: "P-101", driverPhone: "4165550101", pickup: PICKUP, delivery: DELIVERY });
     expect((await loadPATCH(req("PATCH", `/api/loads/${phone.json.id}`, "dispatch", { vehicleId: vehA }), p(phone.json.id))).status).toBe(400);
   });
+
+  it("before pickup, Assign can move a phone load to the driver's truck tracker and back", async () => {
+    const { json } = await create({ reference: "P-102", driverPhone: "4165550103", pickup: PICKUP, delivery: DELIVERY });
+    const toTruck = await loadPATCH(req("PATCH", `/api/loads/${json.id}`, "dispatch", { trackingMode: "vehicle", vehicleId: vehA }), p(json.id));
+    expect(toTruck.status).toBe(200);
+    const row = (await getDb().select().from(schema.loads).where(eq(schema.loads.id, json.id)))[0]!;
+    expect(row.trackingMode).toBe("vehicle");
+    expect(row.vehicleId).toBe(vehA);
+    expect(row.status).toBe("tracking");
+    const back = await loadPATCH(req("PATCH", `/api/loads/${json.id}`, "dispatch", { trackingMode: "phone" }), p(json.id));
+    expect(back.status).toBe(200);
+    const again = (await getDb().select().from(schema.loads).where(eq(schema.loads.id, json.id)))[0]!;
+    expect(again.trackingMode).toBe("phone");
+    expect(again.vehicleId).toBeNull();
+    expect(again.status).toBe("invited");
+    // Moving to a truck needs the truck.
+    expect((await loadPATCH(req("PATCH", `/api/loads/${json.id}`, "dispatch", { trackingMode: "vehicle" }), p(json.id))).status).toBe(400);
+  });
 });
 
 describe("load alerts", () => {

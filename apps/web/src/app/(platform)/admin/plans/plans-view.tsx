@@ -24,9 +24,12 @@ function planFields(p: PlanDto | null): FieldSpec[] {
     { name: "gps", label: "GPS tracking", kind: "checkbox", defaultValue: p ? p.modules.includes("gps") : true, description: "Live map, vehicles, trackers, trips, zones, reports, maintenance." },
     { name: "loads", label: "Loads", kind: "checkbox", defaultValue: p ? p.modules.includes("loads") : true, description: "Broker loads tracked by the driver's phone (or the customer's own trucks when GPS is included)." },
     { name: "monthlyFee", label: "Monthly fee ($)", kind: "money", defaultValue: dollars(p?.monthlyFeeCents ?? 0), half: true },
-    { name: "perTracker", label: "Per tracker per month ($)", kind: "money", defaultValue: dollars(p?.perTrackerCents ?? 0), half: true, description: "GPS plans." },
+    { name: "perTracker", label: "Per truck tracker per month ($)", kind: "money", defaultValue: dollars(p?.perTrackerCents ?? 0), half: true, description: "GPS plans." },
+    { name: "perTrailer", label: "Per trailer tracker per month ($)", kind: "money", defaultValue: dollars(p?.perTrailerCents ?? 0), half: true, description: "Shown on the price list." },
+    { name: "perDriver", label: "Per driver (phone only) per month ($)", kind: "money", defaultValue: dollars(p?.perDriverCents ?? 0), half: true, description: "Shown on the price list." },
     { name: "includedLoads", label: "Loads included per month", kind: "text", numeric: true, defaultValue: String(p?.includedLoads ?? 0), half: true, description: "0 = every load is billed." },
     { name: "extraLoad", label: "Price per extra load ($)", kind: "money", defaultValue: dollars(p?.extraLoadCents ?? 0), half: true },
+    { name: "loadsInMenu", label: "Loads in the side menu", kind: "checkbox", defaultValue: p?.loadsInMenu ?? true, description: "Off: loads live in the Drivers page (Drivers | Loads), as on RIO Fleet." },
     { name: "active", label: "Offered to new customers", kind: "checkbox", defaultValue: p?.active ?? true }
   ];
 }
@@ -41,6 +44,9 @@ const body = (v: FormValues, p: PlanDto | null) => ({
   modules: [v.gps && "gps", v.loads && "loads"].filter(Boolean),
   monthlyFee: v.monthlyFee || 0,
   perTracker: v.perTracker || 0,
+  perTrailer: v.perTrailer || 0,
+  perDriver: v.perDriver || 0,
+  loadsInMenu: Boolean(v.loadsInMenu),
   includedLoads: v.includedLoads || 0,
   extraLoad: v.extraLoad || 0,
   active: Boolean(v.active)

@@ -5,7 +5,7 @@ import { requirePermission, requireTenantContext } from "@/lib/authz";
 import { getServerEnv } from "@/lib/env";
 import { historyStartLimit } from "@/lib/entitlements";
 import { errorResponse, NotFoundError, ValidationError } from "@/lib/errors";
-import { decodeCursor, deviceBelongsToOrg, queryHistory } from "@/lib/locations";
+import { decodeCursor, deviceBelongsToOrg, historyOverview, queryHistory } from "@/lib/locations";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +15,17 @@ const QuerySchema = z.object({
   from: z.string().datetime({ offset: true }).optional(),
   to: z.string().datetime({ offset: true }).optional(),
   limit: z.coerce.number().int().min(1).max(5000).default(2000),
-  cursor: z.string().max(200).optional()
+  cursor: z.string().max(200).optional(),
+  /** "auto": long windows come back as one overview track (see historyOverview) instead of pages. */
+  detail: z.enum(["full", "auto"]).default("full")
 });
 
 /**
  * GET /api/locations/history?deviceId=<uuid>&from=<ISO>&to=<ISO>&limit=&cursor=
  * Time-ordered track for one device of the caller's organization.
  * Defaults to the last 24 h; the window is capped at MAX_HISTORY_RANGE_DAYS.
+ * With detail=auto, a window too big to send in full returns `overview` (all-point totals)
+ * and a reduced track of real points in one response, with no cursor.
  */
 export async function GET(request: Request) {
   try {
@@ -39,7 +43,7 @@ export async function GET(request: Request) {
     const maxDays = getServerEnv().MAX_HISTORY_RANGE_DAYS;
     if (from >= to) throw new ValidationError("from must be earlier than to");
     if (to.getTime() - from.getTime() > maxDays * DAY_MS) {
-      throw new ValidationError(`Range exceeds ${maxDays} days`);
+      throw new ValidationError(`Trip history shows up to ${maxDays} days at a time. Choose a shorter range.`);
     }
     // A plan with a history limit (Free Basic: today only) reads from the start of the allowed days.
     const earliest = await historyStartLimit(ctx.organizationId);
@@ -54,6 +58,24 @@ export async function GET(request: Request) {
     // Same 404 for "doesn't exist" and "belongs to another org": no cross-tenant existence oracle.
     if (!(await deviceBelongsToOrg(q.deviceId, ctx.organizationId))) throw new NotFoundError("Device not found");
 
+    if (q.detail === "auto" && !cursor) {
+      const ov = await historyOverview({ organizationId: ctx.organizationId, deviceId: q.deviceId, from, to });
+      if (ov) {
+        return NextResponse.json(
+          {
+            deviceId: q.deviceId,
+            from: from.toISOString(),
+            to: to.toISOString(),
+            count: ov.points.length,
+            points: ov.points,
+            nextCursor: null,
+            overview: { totalPoints: ov.totalPoints, distanceKm: ov.distanceKm, maxSpeedKph: ov.maxSpeedKph },
+            limitedFrom: limitedFrom?.toISOString() ?? null
+          },
+          { headers: { "Cache-Control": "no-store" } }
+        );
+      }
+    }
     const result = await queryHistory({ organizationId: ctx.organizationId, deviceId: q.deviceId, from, to, limit: q.limit, cursor });
     return NextResponse.json(
       { deviceId: q.deviceId, from: from.toISOString(), to: to.toISOString(), count: result.points.length, ...result, limitedFrom: limitedFrom?.toISOString() ?? null },

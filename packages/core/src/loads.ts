@@ -34,7 +34,10 @@ export const LOAD_EVENT_TYPES = [
   "departed_delivery",
   "delivered",
   "cancelled",
-  "updated"
+  "updated",
+  "paperwork_added",
+  "paperwork_reminder",
+  "packet_sent"
 ] as const;
 export type LoadEventType = (typeof LOAD_EVENT_TYPES)[number];
 

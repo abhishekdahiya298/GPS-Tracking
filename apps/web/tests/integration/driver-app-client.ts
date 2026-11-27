@@ -19,6 +19,10 @@ export function driverPhone() {
     get signedIn() {
       return bearer !== "";
     },
+    /** The app's Bearer token, for calls this helper doesn't wrap (e.g. uploads). */
+    get token() {
+      return bearer;
+    },
     /** Signs in with a one-tap app link (/driver-app?t=…). */
     async signIn(link: string) {
       const t = new URL(link).searchParams.get("t");

@@ -26,7 +26,10 @@ export const LOAD_EVENT_LABEL: Record<string, string> = {
   departed_delivery: "Left delivery",
   delivered: "Delivered",
   cancelled: "Cancelled",
-  updated: "Load details edited"
+  updated: "Load details edited",
+  paperwork_added: "Paperwork added",
+  paperwork_reminder: "Driver reminded about paperwork",
+  packet_sent: "Load packet emailed"
 };
 
 /**

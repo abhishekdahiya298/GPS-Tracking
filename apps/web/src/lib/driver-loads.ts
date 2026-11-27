@@ -229,3 +229,47 @@ export async function feedingLoadIds(phone: string): Promise<string[]> {
     .where(and(eq(schema.loads.trackingMode, "phone"), eq(schema.loads.driverPhone, phone), isNotNull(schema.loads.acceptedAt), isNull(schema.loads.sharingStoppedAt), inArray(schema.loads.status, ["tracking", "at_pickup", "in_transit", "at_delivery"])));
   return rows.map((r) => r.id);
 }
+
+export interface DriverLookup {
+  /** The number has the RIO GPS app signed in: a load goes straight to it, no text needed. */
+  onRio: boolean;
+  /** This company already worked with the driver (their driver, or a load before). */
+  known: boolean;
+  /** Full name when known; otherwise first name and last initial (privacy); null when not on RIO. */
+  name: string | null;
+  loadsWithYou: number;
+}
+
+/**
+ * Broker/carrier driver lookup (A43): is this mobile number on RIO GPS? Shows only what's needed
+ * to pick the right person: the full name for drivers the company worked with, otherwise
+ * "Marcus J.". Nothing about other companies or loads. Callers rate-limit it.
+ */
+export async function lookupDriverPhone(organizationId: string, phone: string): Promise<DriverLookup> {
+  const db = getDb();
+  const rows = await db
+    .select({ id: schema.drivers.id, name: schema.drivers.name, organizationId: schema.drivers.organizationId })
+    .from(schema.drivers)
+    .innerJoin(schema.organizations, eq(schema.organizations.id, schema.drivers.organizationId))
+    .where(and(eq(schema.drivers.phone, phone), eq(schema.drivers.status, "active"), eq(schema.organizations.status, "active")));
+  const [open] = rows.length
+    ? await db
+        .select({ id: schema.driverAppSessions.id })
+        .from(schema.driverAppSessions)
+        .where(and(inArray(schema.driverAppSessions.driverId, rows.map((r) => r.id)), isNull(schema.driverAppSessions.revokedAt)))
+        .limit(1)
+    : [];
+  const mine = rows.find((r) => r.organizationId === organizationId);
+  const [past] = await db
+    .select({ n: sql<number>`count(*)::int`, name: sql<string | null>`max(${schema.loads.driverName})` })
+    .from(schema.loads)
+    .where(and(eq(schema.loads.organizationId, organizationId), eq(schema.loads.driverPhone, phone)));
+  const loadsWithYou = Number(past?.n ?? 0);
+  const known = Boolean(mine) || loadsWithYou > 0;
+  const anyName = mine?.name ?? past?.name ?? rows.find((r) => r.name && r.name !== "Driver")?.name ?? null;
+  const short = (n: string) => {
+    const parts = n.trim().split(/\s+/);
+    return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1]![0]!.toUpperCase()}.` : parts[0]!;
+  };
+  return { onRio: Boolean(open), known, name: anyName ? (known ? anyName : open ? short(anyName) : null) : null, loadsWithYou };
+}

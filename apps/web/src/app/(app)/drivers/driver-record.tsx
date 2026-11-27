@@ -1,5 +1,7 @@
 "use client";
-import { AlertTriangle, Bell, History, LogOut, MapPin, Pencil, Send, X } from "lucide-react";
+import { RouteCell } from "../loads/loads-view";
+import { LOAD_STATUS_META } from "@/lib/load-meta";
+import { AlertTriangle, Bell, FileText, History, LogOut, MapPin, Package, Pencil, Send, X } from "lucide-react";
 import { RelativeTime } from "@/components/app/local-time";
 import { APP_STATE, AppStateChip, Battery } from "./driver-app-bits";
 import { AskLocationDialog, canAskAgainAt } from "./ask-location-dialog";
@@ -180,6 +182,54 @@ export function DriverRecordPanel({ driver, canUpdate, onEdit, onInvite, onClose
             </ol>
           )}
         </section>
+
+        {rec && rec.loads.length > 0 && (
+          <section className="grid gap-2">
+            <h3 className="m-0 flex items-center gap-1.5 text-[13px] font-bold">
+              <Package className="size-4 text-primary" aria-hidden="true" /> Loads
+              <span className="ml-auto text-[11px] font-semibold text-muted-foreground">{rec.loads.length} latest</span>
+            </h3>
+            <ul className="m-0 grid list-none gap-1.5 p-0">
+              {rec.loads.map((l) => (
+                <li key={l.id}>
+                  <Link href={`/loads/${l.id}`} className="grid gap-1 rounded-xl bg-canvas px-2.5 py-2 text-foreground no-underline shadow-[inset_0_0_0_1px_var(--color-border)] transition-shadow hover:shadow-[inset_0_0_0_1.5px_var(--color-primary)]">
+                    <span className="flex items-center gap-1.5 text-xs">
+                      <b className="text-primary">{l.reference}</b>
+                      <span className="rounded-full bg-muted px-1.5 text-[10.5px] font-bold text-muted-foreground">{LOAD_STATUS_META[l.status]?.label ?? l.status}</span>
+                      <span className="ml-auto text-[11px] text-muted-foreground">{time.date(l.createdAt)}</span>
+                    </span>
+                    <RouteCell load={l} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {rec && rec.documents.length > 0 && (
+          <section className="grid gap-2">
+            <h3 className="m-0 flex items-center gap-1.5 text-[13px] font-bold">
+              <FileText className="size-4 text-primary" aria-hidden="true" /> Latest documents
+            </h3>
+            <ul className="m-0 grid list-none grid-cols-3 gap-2 p-0">
+              {rec.documents.slice(0, 9).map((d) => (
+                <li key={d.id} className="grid min-w-0 gap-0.5">
+                  <a href={`/api/loads/${d.loadId}/documents/${d.id}`} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-border bg-background">
+                    {d.contentType.startsWith("image/") && d.contentType !== "image/heic" ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={`/api/loads/${d.loadId}/documents/${d.id}`} alt="" loading="lazy" className="h-16 w-full object-cover" />
+                    ) : (
+                      <span className="grid h-16 place-items-center text-[11px] font-semibold text-muted-foreground">PDF</span>
+                    )}
+                  </a>
+                  <span className="truncate text-[10.5px] text-muted-foreground">
+                    {d.reference} · {time.date(d.at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <div className="flex gap-2">
           {driver.vehicle?.deviceId ? (

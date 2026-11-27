@@ -15,3 +15,4 @@ export * from "./loads.js";
 export * from "./app-version.js";
 export * from "./freshness.js";
 export * from "./plan-features.js";
+export * from "./phone.js";

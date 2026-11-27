@@ -1,5 +1,5 @@
 "use client";
-import { AlertTriangle, ArrowRight, Clock, Map as MapIcon, MapPin, PackagePlus, PauseCircle, Package } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, FileText, Map as MapIcon, MapPin, PackagePlus, PauseCircle, Package } from "lucide-react";
 import { haversineMeters } from "@rio-gps/core/geo";
 import { useUnits } from "@/components/app/units-context";
 import { placeText, useAddressState } from "@/lib/use-address";
@@ -90,7 +90,7 @@ function CurrentPlace({ load }: { load: LoadSummaryDto }) {
 }
 
 /** Pickup → delivery with how far is left and the ETA. */
-function RouteCell({ load }: { load: LoadSummaryDto }) {
+export function RouteCell({ load }: { load: LoadSummaryDto }) {
   const u = useUnits();
   const t = useTime();
   const total = haversineMeters([load.pickup.longitude, load.pickup.latitude], [load.delivery.longitude, load.delivery.latitude]);
@@ -116,7 +116,20 @@ function RouteCell({ load }: { load: LoadSummaryDto }) {
           {load.eta ? `ETA ${t.time(load.eta.at)}${load.eta.lateByMinutes !== null ? (load.eta.late ? ` · ${fmtMinutes(load.eta.lateByMinutes)} late` : " · on time") : ""}` : "—"}
         </span>
       </span>
+      {load.paperwork && load.paperwork.requiredCount + load.paperwork.docs > 0 && <DocsChip p={load.paperwork} />}
     </div>
+  );
+}
+
+/** Paperwork at a glance: required done / required, red while something required is missing. */
+export function DocsChip({ p }: { p: NonNullable<LoadSummaryDto["paperwork"]> }) {
+  const tone = p.missing ? "bg-danger-soft text-danger" : p.requiredCount && p.requiredDone >= p.requiredCount ? "bg-success-soft text-success" : "bg-muted text-muted-foreground";
+  return (
+    <span title={p.missing ? `${p.missing} required item${p.missing > 1 ? "s" : ""} missing` : "Paperwork"} className={`inline-flex h-5 w-fit items-center gap-1 rounded-full px-1.5 text-[11px] font-bold ${tone}`}>
+      <FileText className="size-3" aria-hidden="true" />
+      {p.requiredCount ? `${p.requiredDone}/${p.requiredCount} docs` : `${p.docs} docs`}
+      {p.missing ? " · missing" : ""}
+    </span>
   );
 }
 
@@ -125,7 +138,7 @@ function hm(seconds: number) {
   return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
 }
 
-export function LoadsView({ loads, driven = {}, counts, filter, q, canWrite, notice, fleet = true }: { loads: LoadSummaryDto[]; driven?: Record<string, { distanceM: number; drivingS: number }>; counts: { active: number; ended: number }; filter: "active" | "ended" | "all"; q: string; canWrite: boolean; notice?: ReactNode; fleet?: boolean }) {
+export function LoadsView({ loads, driven = {}, counts, filter, q, canWrite, notice, fleet = true, title = "Loads", description, tabs }: { loads: LoadSummaryDto[]; driven?: Record<string, { distanceM: number; drivingS: number }>; counts: { active: number; ended: number }; filter: "active" | "ended" | "all"; q: string; canWrite: boolean; notice?: ReactNode; fleet?: boolean; title?: string; description?: string; tabs?: ReactNode }) {
   const router = useRouter();
   const u = useUnits();
   const pathname = usePathname();
@@ -166,7 +179,8 @@ export function LoadsView({ loads, driven = {}, counts, filter, q, canWrite, not
 
   return (
     <>
-      <PageHeader title="Loads" description={fleet ? "Track each shipment from pickup to delivery, by the driver's phone or your own trackers." : "Track each shipment from pickup to delivery with the driver's phone."} actions={headerActions} />
+      <PageHeader title={title} description={description ?? (fleet ? "Track each shipment from pickup to delivery, by the driver's phone or your own trackers." : "Track each shipment from pickup to delivery with the driver's phone.")} actions={headerActions} />
+      {tabs}
       {notice && <div className="mb-4">{notice}</div>}
       <Card>
         <FilterBar>

@@ -71,6 +71,12 @@ export const loads = pgTable(
 
     /** Alert bookkeeping so each problem is raised once: the stop a "late" alert was sent for, and when "no signal" was raised (cleared by the next position). */
     lateAlertTarget: text("late_alert_target"),
+    /** This load's paperwork list when it differs from the company's (A41); null = company settings. */
+    paperwork: jsonb("paperwork"),
+    /** When the load packet (PDF) was last emailed. */
+    packetSentAt: timestamp("packet_sent_at", { withTimezone: true }),
+    /** Last paperwork reminder sent to the driver. */
+    paperworkRemindedAt: timestamp("paperwork_reminded_at", { withTimezone: true }),
     staleAlertedAt: timestamp("stale_alerted_at", { withTimezone: true }),
 
     createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),

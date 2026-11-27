@@ -1,5 +1,5 @@
 "use client";
-import { Cpu, MapPin, MapPinOff, Phone, Send, ShieldCheck, Smartphone } from "lucide-react";
+import { Cpu, MapPin, MapPinOff, Package, Phone, Send, ShieldCheck, Smartphone } from "lucide-react";
 import Link from "next/link";
 import type { Map as MlMap, Marker } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
@@ -13,6 +13,9 @@ import { cn } from "@/lib/cn";
 import { APP_STATE, AppStateChip, Battery } from "../drivers/driver-app-bits";
 import { AskLocationDialog, canAskAgainAt } from "../drivers/ask-location-dialog";
 import { DriverAvatar } from "../drivers/drivers-view";
+import { AssignLoadDialog } from "../drivers/assign-load-dialog";
+import { RouteCell } from "../loads/loads-view";
+import { LOAD_STATUS_META } from "@/lib/load-meta";
 
 type DFilter = "all" | "driving" | "stopped" | "location_off" | "no_app";
 const MOVING_KPH = 5;
@@ -29,6 +32,7 @@ export function DriversMapPanel({ map, devices, version, onFocus }: { map: MlMap
   const [filter, setFilter] = useState<DFilter>("all");
   const [selected, setSelected] = useState<string | null>(null);
   const [ask, setAsk] = useState<MapDriverDto | null>(null);
+  const [assign, setAssign] = useState<MapDriverDto | null>(null);
   const [reload, setReload] = useState(0);
 
   useEffect(() => {
@@ -152,9 +156,6 @@ export function DriversMapPanel({ map, devices, version, onFocus }: { map: MlMap
           <div className="min-w-0 flex-1">
             <SearchInput value={search} onChange={setSearch} placeholder="Driver, phone or truck" label="Search drivers" debounceMs={150} className="sm:w-full" />
           </div>
-          <Link href="/drivers?invite=1" className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-[13px] font-semibold text-primary no-underline shadow-card hover:bg-muted">
-            <Send className="size-4" aria-hidden="true" /> Invite
-          </Link>
         </div>
         <div role="radiogroup" aria-label="Filter drivers" className="grid grid-cols-5 gap-1">
           {TABS.map((t) => {
@@ -252,7 +253,27 @@ export function DriversMapPanel({ map, devices, version, onFocus }: { map: MlMap
                           {loc && <RelativeTime iso={loc.recordedAt} />}
                         </span>
                       </span>
-                      {!noApp && !off && !d.vehicle && <span className="w-fit rounded-md bg-muted px-1.5 text-[11px] font-semibold text-muted-foreground">No load · still on the map</span>}
+                      {d.load ? (
+                        <Link href={`/loads/${d.load.id}`} onClick={(e) => e.stopPropagation()} className="mt-1 grid gap-1 rounded-lg bg-background/80 px-2 py-1.5 text-foreground no-underline shadow-[inset_0_0_0_1px_var(--color-border)] transition-shadow hover:shadow-[inset_0_0_0_1.5px_var(--color-primary)]">
+                          <span className="flex min-w-0 items-center gap-1.5 text-xs">
+                            <Package className="size-3.5 shrink-0 text-primary" aria-hidden="true" />
+                            <b className="truncate">{d.load.reference}</b>
+                            <span className="shrink-0 rounded-full bg-primary-soft px-1.5 text-[10.5px] font-bold text-primary">{LOAD_STATUS_META[d.load.status]?.label ?? d.load.status}</span>
+                          </span>
+                          <RouteCell load={d.load} />
+                        </Link>
+                      ) : d.load === null && !noApp ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAssign(d);
+                          }}
+                          className="mt-1 inline-flex h-7 w-fit cursor-pointer items-center gap-1 rounded-md border border-border bg-background px-2 text-xs font-semibold text-primary transition-colors hover:border-primary/60"
+                        >
+                          <Package className="size-3.5" aria-hidden="true" /> Assign load
+                        </button>
+                      ) : null}
                       {off && (
                         <span className="flex flex-wrap items-center gap-1.5 pt-0.5">
                           <MapPinOff className="size-3.5 text-danger" aria-hidden="true" />
@@ -276,14 +297,7 @@ export function DriversMapPanel({ map, devices, version, onFocus }: { map: MlMap
                           )}
                         </span>
                       )}
-                      {noApp && (
-                        <span className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                          <span className="text-[11.5px] text-muted-foreground">{d.app.inviteSentAt ? <>Invite sent <RelativeTime iso={d.app.inviteSentAt} /></> : "Hasn't joined the driver app"}</span>
-                          <Link href={`/drivers?invite=1`} onClick={(e) => e.stopPropagation()} className="ml-auto inline-flex h-7 items-center gap-1 rounded-md border border-border bg-background px-2 text-xs font-semibold text-foreground no-underline">
-                            <Send className="size-3.5" aria-hidden="true" /> {d.app.inviteSentAt ? "Resend invite" : "Invite"}
-                          </Link>
-                        </span>
-                      )}
+                      {noApp && <span className="w-fit rounded-full bg-muted px-2 text-[11px] font-semibold text-muted-foreground">No app</span>}
                       {!loc && !off && !noApp && (
                         <span className="flex items-center gap-1 text-[11.5px] text-muted-foreground">
                           <MapPin className="size-3.5" aria-hidden="true" /> No position yet
@@ -295,6 +309,13 @@ export function DriversMapPanel({ map, devices, version, onFocus }: { map: MlMap
               );
             })}
           </ul>
+        )}
+        {assign && (
+          <AssignLoadDialog
+            driver={{ name: assign.name, phone: assign.phone, vehicle: assign.vehicle, hasTracker: assign.source === "tracker" }}
+            onClose={() => setAssign(null)}
+            onDone={() => setReload((n) => n + 1)}
+          />
         )}
         {ask && <AskLocationDialog driverId={ask.id} driverName={ask.name} since={ask.app.lastReportAt} onClose={() => setAsk(null)} onSent={() => setReload((n) => n + 1)} />}
         <p className="m-2 mt-3 flex items-start gap-1.5 text-[11.5px] text-muted-foreground">

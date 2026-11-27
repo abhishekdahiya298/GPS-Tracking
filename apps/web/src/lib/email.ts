@@ -17,8 +17,8 @@ export interface EmailMessage {
   text: string;
   /** Template name for logs/metrics only. */
   template: string;
-  /** Small text attachments (e.g. CSV); content is plain text, base64-encoded on send. */
-  attachments?: { filename: string; content: string }[];
+  /** Attachments: text (e.g. CSV, base64-encoded on send) or binary (e.g. a PDF). */
+  attachments?: { filename: string; content: string | Buffer }[];
 }
 
 type Transport = (msg: EmailMessage) => Promise<void>;
@@ -53,7 +53,7 @@ export async function sendEmail(msg: EmailMessage): Promise<void> {
         html: msg.html,
         text: msg.text,
         ...(msg.attachments?.length
-          ? { attachments: msg.attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content, "utf8").toString("base64") })) }
+          ? { attachments: msg.attachments.map((a) => ({ filename: a.filename, content: (typeof a.content === "string" ? Buffer.from(a.content, "utf8") : a.content).toString("base64") })) }
           : {})
       }),
       signal: ac.signal

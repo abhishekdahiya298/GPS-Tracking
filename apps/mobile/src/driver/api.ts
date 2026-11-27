@@ -115,6 +115,20 @@ export const driver = {
   leave: (id: string) => driverApi.post<{ signedOut: boolean; movedTo: { id: string; name: string } | null }>(`driver-app/companies/${id}/leave`),
   updateProfile: (patch: ProfilePatch) => driverApi.send<DriverMe>("driver-app/me", { method: "PATCH", body: patch }).then((r) => r.data),
   stats: (range: StatsRange) => driverApi.get<DriverStats>("driver-app/stats", { range }),
+  paperwork: (loadId: string) => driverApi.get<LoadPaperwork>(`driver-app/loads/${loadId}/paperwork`),
+  uploadPaperwork: (loadId: string, f: PaperworkUpload) => {
+    const form = new FormData();
+    form.append("itemKey", f.itemKey);
+    form.append("method", f.method);
+    if (f.lat != null && f.lon != null) {
+      form.append("lat", String(f.lat));
+      form.append("lon", String(f.lon));
+    }
+    form.append("capturedAt", f.capturedAt);
+    // React Native's FormData takes a file as {uri, name, type}.
+    form.append("file", { uri: f.uri, name: f.name, type: f.type } as unknown as Blob);
+    return driverApi.upload<LoadPaperwork>(`driver-app/loads/${loadId}/paperwork`, form);
+  },
   setPushToken: (token: string | null) => driverApi.send<void>("driver-app/push", { method: "PUT", body: { token } }),
   /** Always ends the sign-in on this phone, even without signal. */
   async signOut() {
@@ -127,3 +141,30 @@ export const driver = {
     }
   }
 };
+
+/** Load paperwork for the driver (D-paperwork): what to send, what's in, what's missing. */
+export interface PaperworkLine {
+  key: string;
+  stop: "pickup" | "delivery";
+  label: string;
+  kind: "doc" | "photo";
+  mode: "optional" | "required";
+  due: boolean;
+  missing: boolean;
+  count: number;
+  last: string | null;
+}
+export interface LoadPaperwork {
+  items: PaperworkLine[];
+  missing: number;
+}
+export interface PaperworkUpload {
+  itemKey: string;
+  method: "scan" | "camera" | "upload";
+  uri: string;
+  name: string;
+  type: string;
+  lat: number | null;
+  lon: number | null;
+  capturedAt: string;
+}

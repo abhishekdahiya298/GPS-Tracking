@@ -21,6 +21,7 @@ import { writeAudit } from "./audit";
 import { getServerEnv } from "./env";
 import { ConflictError, NotFoundError, ValidationError } from "./errors";
 import { recordBillableLoad } from "./plans";
+import { paperworkCounts } from "./paperwork";
 import { assertRateLimit } from "./rate-limit";
 import { appAccessForPhone, notifyDriverPhone } from "./driver-loads";
 import { sendSms, smsConfigured, type SmsResult } from "./sms";
@@ -96,6 +97,11 @@ const LoadFields = z.object({
 export const LoadInputSchema = LoadFields.extend({
   trackingMode: z.enum(["phone", "vehicle"]).default("phone"),
   vehicleId: z.string().uuid().nullish().transform((v) => v ?? null),
+  /** This load's own paperwork list (Off/Optional/Required per item); empty = the company's list. */
+  paperwork: z
+    .array(z.object({ key: z.string().regex(/^[a-z0-9_]{2,40}$/), mode: z.enum(["off", "optional", "required"]) }))
+    .max(20)
+    .optional(),
   /** Text the driver the invite now (when SMS is set up). */
   sendInvite: z.boolean().default(true),
   /**
@@ -110,7 +116,11 @@ export const LoadInputSchema = LoadFields.extend({
 export type LoadInput = z.infer<typeof LoadInputSchema>;
 
 /** How a load is tracked is fixed at creation; a vehicle-mode load can switch vehicles. */
-export const LoadPatchSchema = LoadFields.extend({ vehicleId: z.string().uuid() })
+export const LoadPatchSchema = LoadFields.extend({
+  vehicleId: z.string().uuid(),
+  /** Before pickup, a load can move between the driver's phone and a truck's tracker (Assign from the map). */
+  trackingMode: z.enum(["phone", "vehicle"])
+})
   .partial()
   .refine((v) => Object.keys(v).length > 0, "Nothing to update");
 
@@ -145,6 +155,8 @@ export interface LoadSummaryDto {
   stale: boolean;
   eta: { target: "pickup" | "delivery"; at: string; distanceM: number; lateByMinutes: number | null; late: boolean } | null;
   hasShipperLink: boolean;
+  /** Paperwork done/required and what's missing (lists and cards; filled by withPaperwork). */
+  paperwork?: { requiredDone: number; requiredCount: number; missing: number; docs: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -229,7 +241,16 @@ export async function listLoads(organizationId: string, opts: { filter?: (typeof
     )
     .orderBy(desc(l.createdAt))
     .limit(300);
-  return rows.map((r) => toLoadSummary(r.l, now, r.vehicleName));
+  return withPaperwork(organizationId, rows.map((r) => ({ row: r.l, dto: toLoadSummary(r.l, now, r.vehicleName) })));
+}
+
+/** Adds paperwork counts to load summaries (one query for all of them). Never fails the list. */
+export async function withPaperwork(organizationId: string, items: { row: LoadRow; dto: LoadSummaryDto }[]): Promise<LoadSummaryDto[]> {
+  const counts = await paperworkCounts(
+    organizationId,
+    items.map((x) => ({ id: x.row.id, status: x.row.status, paperwork: x.row.paperwork }))
+  ).catch(() => new Map<string, NonNullable<LoadSummaryDto["paperwork"]>>());
+  return items.map((x) => (counts.has(x.row.id) ? { ...x.dto, paperwork: counts.get(x.row.id) } : x.dto));
 }
 
 async function loadRow(organizationId: string, id: string): Promise<LoadRow> {
@@ -395,6 +416,7 @@ export async function createLoad(ctx: TenantContext, input: LoadInput, meta: Met
         ...(byVehicle ? { status: "tracking" as const, acceptedAt: now } : {}),
         ...(vehicle?.loc ? { lastLat: vehicle.loc.latitude, lastLon: vehicle.loc.longitude, lastSpeedKph: vehicle.loc.speedKph, lastPositionAt: vehicle.loc.recordedAt } : {}),
         notes: input.notes,
+        paperwork: input.paperwork?.length ? input.paperwork : null,
         ...(stopColumns("pickup", input.pickup) as object),
         ...(stopColumns("delivery", input.delivery) as object),
         driverTokenHash: hashLoadToken(token),
@@ -441,14 +463,29 @@ export async function updateLoad(ctx: TenantContext, id: string, patch: z.infer<
   if (isLoadEnded(row.status)) throw new ValidationError("This load has ended and can no longer be changed");
   // After pickup the trip is under way: the pickup stays as it happened (a new shipment is a new load).
   if (patch.pickup && (row.status === "in_transit" || row.status === "at_delivery")) throw new ValidationError("The pickup can't be changed after the load was picked up. Create a new load for a new shipment.");
-  if (row.trackingMode === "phone" && patch.driverPhone === null) throw new ValidationError("A load tracked by phone needs the driver's mobile number");
+  const mode = patch.trackingMode ?? row.trackingMode;
+  const switching = mode !== row.trackingMode;
+  if (switching) {
+    if (!["invited", "tracking"].includes(row.status)) throw new ValidationError("How a load is tracked can only change before pickup");
+    if (mode === "vehicle" && !contextHasModule(ctx, "gps")) throw new ValidationError("Tracking a load with your own vehicle needs a GPS plan. Use the driver's phone instead.");
+    if (mode === "vehicle" && !patch.vehicleId) throw new ValidationError("Choose the vehicle that hauls this load");
+    if (mode === "phone" && !(patch.driverPhone ?? row.driverPhone)) throw new ValidationError("A load tracked by phone needs the driver's mobile number");
+  }
+  if (mode === "phone" && patch.driverPhone === null) throw new ValidationError("A load tracked by phone needs the driver's mobile number");
+  let truck: Awaited<ReturnType<typeof vehicleForLoad>> | null = null;
   if (patch.vehicleId !== undefined) {
-    if (row.trackingMode !== "vehicle") throw new ValidationError("This load is tracked by the driver's phone");
-    await vehicleForLoad(ctx.organizationId, patch.vehicleId);
+    if (mode !== "vehicle") throw new ValidationError("This load is tracked by the driver's phone");
+    truck = await vehicleForLoad(ctx.organizationId, patch.vehicleId);
   }
   const set: Record<string, unknown> = { updatedAt: now };
+  if (switching && mode === "vehicle") {
+    // A truck's tracker needs no consent: tracking starts now, from the truck's latest fix.
+    Object.assign(set, { trackingMode: "vehicle", status: "tracking", acceptedAt: row.acceptedAt ?? now, sharingStoppedAt: null });
+    if (truck?.loc) Object.assign(set, { lastLat: truck.loc.latitude, lastLon: truck.loc.longitude, lastSpeedKph: truck.loc.speedKph, lastPositionAt: truck.loc.recordedAt });
+  }
+  if (switching && mode === "phone") Object.assign(set, { trackingMode: "phone", vehicleId: null, status: "invited", acceptedAt: null, sharingStoppedAt: null });
   // A different driver on a phone load has to get it (and, from outside their company, accept it).
-  const newDriver = row.trackingMode === "phone" && patch.driverPhone !== undefined && patch.driverPhone !== null && patch.driverPhone !== row.driverPhone;
+  const newDriver = mode === "phone" && ((switching && Boolean(patch.driverPhone ?? row.driverPhone)) || (patch.driverPhone !== undefined && patch.driverPhone !== null && patch.driverPhone !== row.driverPhone));
   if (newDriver) Object.assign(set, { acceptedAt: null, sharingStoppedAt: null, ...(row.status === "tracking" ? { status: "invited" } : {}) });
   if (patch.vehicleId !== undefined) set.vehicleId = patch.vehicleId;
   for (const k of ["reference", "carrierName", "driverName", "driverPhone", "notes"] as const) if (patch[k] !== undefined) set[k] = patch[k];
@@ -463,9 +500,10 @@ export async function updateLoad(ctx: TenantContext, id: string, patch: z.infer<
     if (isUniqueViolation(err)) throw new ConflictError(`Load ${patch.reference} already exists`);
     throw err;
   }
+  if (switching && mode === "vehicle" && !row.acceptedAt) await recordBillableLoad(getDb(), { organizationId: ctx.organizationId, id, reference: patch.reference ?? row.reference }, now);
   await addEvent(ctx.organizationId, id, "updated", ctx.userId, now, { fields: Object.keys(patch) });
   await writeAudit({ action: "load.updated", actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, metadata: { fields: Object.keys(patch) }, ...meta });
-  if (newDriver) await sendToDriverApp(ctx, { id, reference: patch.reference ?? row.reference, driverPhone: patch.driverPhone!, driverName: patch.driverName ?? row.driverName }, false);
+  if (newDriver) await sendToDriverApp(ctx, { id, reference: patch.reference ?? row.reference, driverPhone: (patch.driverPhone ?? row.driverPhone)!, driverName: patch.driverName ?? row.driverName }, false);
 }
 
 /**
@@ -494,6 +532,7 @@ export async function setLoadOutcome(ctx: TenantContext, id: string, action: z.i
     .returning({ id: schema.loads.id });
   if (!updated) throw new ValidationError("This load has already ended");
   await addEvent(ctx.organizationId, id, action === "delivered" ? "delivered" : "cancelled", ctx.userId, now, { manual: true });
+  if (status === "delivered") void import("./paperwork").then((m) => m.maybeSendPacket(ctx.organizationId, id, "delivered"));
   await writeAudit({ action: `load.${status}`, actorUserId: ctx.userId, organizationId: ctx.organizationId, targetType: "load", targetId: id, ...meta });
 }
 
@@ -591,5 +630,31 @@ export async function loadsDrivenLast24h(organizationId: string, loads: Pick<Loa
     );
     for (const r of rows) out[r.k] = { distanceM: Math.round(Number(r.m)), drivingS: Math.round(Number(r.s)) };
   }
+  return out;
+}
+
+/**
+ * The open load of each driver (by their phone, or their truck for a tracker load), newest first:
+ * for the live map's driver cards. Keyed by driver id.
+ */
+export async function openLoadsForDrivers(organizationId: string, drivers: { id: string; phone: string | null; vehicleId: string | null }[], now = new Date()): Promise<Map<string, LoadSummaryDto>> {
+  const out = new Map<string, LoadSummaryDto>();
+  const phones = drivers.map((d) => d.phone).filter((x): x is string => Boolean(x));
+  const vehicles = drivers.map((d) => d.vehicleId).filter((x): x is string => Boolean(x));
+  if (!phones.length && !vehicles.length) return out;
+  const l = schema.loads;
+  const rows = await getDb()
+    .select({ l, vehicleName: schema.vehicles.name })
+    .from(l)
+    .leftJoin(schema.vehicles, and(eq(schema.vehicles.id, l.vehicleId), eq(schema.vehicles.organizationId, l.organizationId)))
+    .where(and(eq(l.organizationId, organizationId), notInArray(l.status, ENDED), or(phones.length ? inArray(l.driverPhone, phones) : undefined, vehicles.length ? inArray(l.vehicleId, vehicles) : undefined)))
+    .orderBy(desc(l.createdAt));
+  const hits: { driverId: string; row: LoadRow; vehicleName: string | null }[] = [];
+  for (const d of drivers) {
+    const hit = rows.find((r) => (d.phone && r.l.driverPhone === d.phone) || (d.vehicleId && r.l.trackingMode === "vehicle" && r.l.vehicleId === d.vehicleId));
+    if (hit) hits.push({ driverId: d.id, row: hit.l, vehicleName: hit.vehicleName });
+  }
+  const dtos = await withPaperwork(organizationId, hits.map((h) => ({ row: h.row, dto: toLoadSummary(h.row, now, h.vehicleName) })));
+  hits.forEach((h, i) => out.set(h.driverId, dtos[i]!));
   return out;
 }

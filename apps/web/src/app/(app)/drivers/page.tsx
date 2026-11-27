@@ -7,7 +7,9 @@ import { parseListQuery } from "@/lib/fleet-list";
 import { requireTenantPage } from "@/lib/request-context";
 import { companyJoinCode } from "@/lib/signup";
 import { smsConfigured } from "@/lib/sms";
+import { DriversTabs } from "./drivers-tabs";
 import { DriversView } from "./drivers-view";
+import { driversTabStats, loadsTabStats } from "./tabs-data";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Drivers · RIO GPS" };
@@ -17,8 +19,9 @@ export default async function DriversPage({ searchParams }: { searchParams: Prom
   if (!contextHasPermission(ctx, "vehicles.read")) redirect("/dashboard");
   const sp = await searchParams;
   const q = parseListQuery(DriverListQuery, sp);
-  const [data, vehicles] = await Promise.all([
+  const [data, loadsTab, vehicles] = await Promise.all([
     listDriversPage(ctx.organizationId, q),
+    loadsTabStats(ctx),
     // The vehicle picker: every active vehicle, with who drives it now.
     getDb().execute<{ id: string; name: string; type: string; license_plate: string | null; driver: string | null }>(sql`
       select v.id, v.name, v.type, v.license_plate,
@@ -36,6 +39,7 @@ export default async function DriversPage({ searchParams }: { searchParams: Prom
   const joinCode = can.create ? await companyJoinCode(ctx.organizationId).catch(() => null) : null;
   return (
     <DriversView
+      tabs={<DriversTabs active="drivers" drivers={driversTabStats(data.counts)} loads={loadsTab} />}
       joinCode={joinCode}
       companyName={orgName}
       smsReady={smsConfigured()}

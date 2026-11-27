@@ -31,6 +31,7 @@
     "./app-version": "./src/app-version.ts",
     "./freshness": "./src/freshness.ts",
     "./trips": "./src/trips.ts",
-    "./plan-features": "./src/plan-features.ts"
+    "./plan-features": "./src/plan-features.ts",
+    "./phone": "./src/phone.ts"
   }
 }

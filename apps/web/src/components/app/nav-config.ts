@@ -74,7 +74,8 @@ export const PLATFORM_NAV: NavSection[] = [
     title: "Customers",
     items: [
       { href: "/admin/customers", label: "Customers", icon: "users" },
-      { href: "/admin/leads", label: "Leads", icon: "target" }
+      { href: "/admin/leads", label: "Leads", icon: "target" },
+      { href: "/admin/drivers", label: "All drivers", icon: "driver" }
     ]
   },
   {
@@ -109,7 +110,7 @@ export const PLATFORM_NAV: NavSection[] = [
  * lock (it opens the lock page) or left out, as the platform chose for that feature; the role
  * still has to allow it either way.
  */
-export function buildNav(ctx: TenantContext, rules: Readonly<Record<Feature, FeatureRule>> = DEFAULT_FEATURE_RULES): NavSection[] {
+export function buildNav(ctx: TenantContext, rules: Readonly<Record<Feature, FeatureRule>> = DEFAULT_FEATURE_RULES, opts: { loadsInMenu?: boolean } = {}): NavSection[] {
   const sections = ctx.isSuperAdmin ? [...SECTIONS, { title: "Platform", items: [PLATFORM_LINK] }] : SECTIONS;
   const unlocked: TenantContext = { ...ctx, lockedFeatures: [] };
   return sections
@@ -117,6 +118,8 @@ export function buildNav(ctx: TenantContext, rules: Readonly<Record<Feature, Fea
       title: s.title,
       items: s.items.flatMap(({ href, label, icon, match, exact, permission, superAdminOnly, feature }) => {
         if (superAdminOnly && !ctx.isSuperAdmin) return [];
+        // Plans like RIO Fleet keep loads under Drivers (Drivers | Loads) instead of the menu.
+        if (href === "/loads" && opts.loadsInMenu === false) return [];
         const isLocked = !!feature && !!ctx.lockedFeatures?.includes(feature);
         if (isLocked && rules[feature!] === "hide") return [];
         if (permission && !contextHasPermission(isLocked ? unlocked : ctx, permission)) return [];

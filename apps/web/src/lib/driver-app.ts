@@ -605,6 +605,8 @@ export interface MapDriverDto {
   deviceId: string | null;
   source: "tracker" | "phone" | null;
   app: DriverAppStatusDto;
+  /** The driver's open load, when the caller added it (the map route does). */
+  load?: import("./loads").LoadSummaryDto | null;
 }
 
 /** Every active driver for the live map's Drivers view (A03): where each one is and their app. */
