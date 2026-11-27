@@ -1,12 +1,12 @@
 "use client";
 import type { ColumnDef } from "@tanstack/react-table";
-import { BadgeAlert, Car, ChevronDown, Download, History, IdCard, Layers, LocateFixed, Map as MapIcon, MapPinOff, Navigation, Package, Pencil, Phone, Plus, RefreshCw, Send, Smartphone, SmartphoneNfc, Trash2, UserCheck, UserMinus, UserPlus, UserX, Users, X } from "lucide-react";
+import { BadgeAlert, Car, ChevronDown, Download, History, IdCard, Layers, LocateFixed, Map as MapIcon, MapPin, MapPinOff, Satellite, Navigation, Package, Pencil, Phone, Plus, RefreshCw, Send, Smartphone, SmartphoneNfc, Trash2, UserCheck, UserMinus, UserPlus, UserX, Users, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AssignLoadDialog } from "./assign-load-dialog";
 import { AppStateChip, Battery } from "./driver-app-bits";
 import { InviteDriversDialog } from "./invite-drivers-dialog";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { DataTable, type ColumnMeta } from "@/components/app/data-table";
 import { FilterTiles } from "@/components/app/list-kit";
@@ -31,6 +31,29 @@ import { DensityToggle, PlateTag, useDensity } from "@/components/app/vehicle-ta
 import { useTime } from "@/components/app/time-context";
 import { cn } from "@/lib/cn";
 import { Input, Select } from "@/components/ui/input";
+import { placeText, useAddressState } from "@/lib/use-address";
+import { RouteCell } from "../loads/loads-view";
+
+/** Where the driver is: full address, and whether it comes from the truck's tracker or the phone. */
+function DriverWhere({ d }: { d: DriverRow }) {
+  const w = d.where;
+  const a = useAddressState(w ? w.latitude : null, w ? w.longitude : null, false);
+  if (!w) return null;
+  const text = placeText(a, w.latitude, w.longitude);
+  const truck = d.vehicle?.name ?? "Truck";
+  return (
+    <span className="grid min-w-0 gap-0.5">
+      <span className="flex min-w-0 items-start gap-1 text-xs leading-4 text-foreground" title={a.address?.label ?? text}>
+        <MapPin className="mt-0.5 size-3 shrink-0 text-primary" aria-hidden="true" />
+        <span className="line-clamp-2 [overflow-wrap:anywhere]">{text}</span>
+      </span>
+      <span className={cn("flex items-center gap-1 text-[11px]", w.source === "tracker" && w.phoneOff ? "font-semibold text-danger" : "text-muted-foreground")}>
+        {w.source === "tracker" ? <Satellite className="size-3" aria-hidden="true" /> : <Smartphone className="size-3" aria-hidden="true" />}
+        {w.source === "tracker" ? (w.phoneOff ? `From ${truck} · phone off` : truck) : "Phone"} · <RelativeTime iso={w.at} />
+      </span>
+    </span>
+  );
+}
 
 type Data = { items: DriverRow[]; total: number; page: number; pageSize: number; counts: Record<DriverListQuery["state"], number> };
 type Can = { create: boolean; update: boolean; remove: boolean; map: boolean; loads: boolean };
@@ -75,7 +98,7 @@ export function DriverAvatar({ name, className = "size-9 text-sm" }: { name: str
 }
 
 /** Drivers and the vehicle each one drives now, with quick assign / reassign. */
-export function DriversView({ data, query, can, vehicles, joinCode = null, openInvite = false, companyName, smsReady }: { data: Data; query: DriverListQuery; can: Can; vehicles: VehicleOption[]; joinCode?: string | null; openInvite?: boolean; companyName: string; smsReady: boolean }) {
+export function DriversView({ data, query, can, vehicles, joinCode = null, openInvite = false, companyName, smsReady, tabs }: { data: Data; query: DriverListQuery; can: Can; vehicles: VehicleOption[]; joinCode?: string | null; openInvite?: boolean; companyName: string; smsReady: boolean; tabs?: ReactNode }) {
   const [invite, setInvite] = useState<null | { prefill?: { id: string; name: string; phone: string | null }[] }>(openInvite ? {} : null);
   const u = useUnits();
   const { set, refresh, pending } = useListParams();
@@ -168,7 +191,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {
         id: "name",
         header: "Driver",
-        meta: { sortKey: "name", width: "24%" } satisfies ColumnMeta,
+        meta: { sortKey: "name", width: "18%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => (
           <div className={cn("flex min-w-0 items-center gap-3", d.status === "inactive" && "opacity-60")}>
             <span className="relative shrink-0">
@@ -202,7 +225,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {
         id: "vehicle",
         header: "Vehicle now",
-        meta: { sortKey: "vehicle", width: "20%" } satisfies ColumnMeta,
+        meta: { sortKey: "vehicle", width: "15%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) =>
           d.vehicle ? (
             <Link href={`/vehicles/${d.vehicle.id}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-2.5 text-foreground no-underline hover:underline" title={VEHICLE_TYPE_LABEL[asVehicleType(d.vehicle.type)]}>
@@ -232,23 +255,27 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       },
       {
         id: "now",
-        header: "Now",
-        meta: { width: "17%" } satisfies ColumnMeta,
+        header: "Now · where",
+        meta: { width: "22%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => {
           if (d.status === "inactive") return <span className="text-xs text-muted-foreground">Off</span>;
           if (d.link.state !== "active") return <span className="text-xs text-muted-foreground">{d.link.state === "pending" ? "Not sharing until they accept" : "Not sharing with you"}</span>;
+          const where = <DriverWhere d={d} />;
           const app = (
             <span className="flex items-center gap-1.5">
               <AppStateChip state={d.app.state} className="h-5 px-1.5 text-[11px]" />
               {(d.app.state === "sharing" || d.app.state === "stale") && <Battery pct={d.app.batteryPct} charging={d.app.charging} />}
             </span>
           );
-          if (d.vehicle?.moving) return <span className="grid gap-1"><StatusChip status="moving" label={`Driving · ${u.fmtSpeed(d.vehicle.speedKph ?? 0)}`} />{app}</span>;
-          if (!d.vehicle?.deviceId && d.app.state === "sharing" && (d.app.speedKph ?? 0) >= 5) return <span className="grid gap-1"><StatusChip status="moving" label={`Driving · ${u.fmtSpeed(d.app.speedKph ?? 0)}`} />{app}</span>;
+          if (d.vehicle?.moving) return <span className="grid min-w-0 gap-1"><span className="flex flex-wrap items-center gap-1.5"><StatusChip status="moving" label={`Driving · ${u.fmtSpeed(d.vehicle.speedKph ?? 0)}`} />{app}</span>{where}</span>;
+          if (!d.vehicle?.deviceId && d.app.state === "sharing" && (d.app.speedKph ?? 0) >= 5) return <span className="grid min-w-0 gap-1"><span className="flex flex-wrap items-center gap-1.5"><StatusChip status="moving" label={`Driving · ${u.fmtSpeed(d.app.speedKph ?? 0)}`} />{app}</span>{where}</span>;
           return (
-            <span className="grid gap-1">
-              {d.vehicle?.deviceId ? <StatusChip status="stopped" label="Not driving" /> : null}
-              {app}
+            <span className="grid min-w-0 gap-1">
+              <span className="flex flex-wrap items-center gap-1.5">
+                {d.vehicle?.deviceId ? <StatusChip status="stopped" label="Not driving" /> : null}
+                {app}
+              </span>
+              {where}
             </span>
           );
         }
@@ -256,16 +283,17 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {
         id: "load",
         header: "Load",
-        meta: { width: "14%" } satisfies ColumnMeta,
+        meta: { width: "24%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) =>
           d.load ? (
-            <Link href={`/loads/${d.load.id}`} onClick={(e) => e.stopPropagation()} className="grid min-w-0 text-foreground no-underline hover:underline">
-              <span className="flex items-center gap-1.5 truncate font-semibold">
+            <div className="grid min-w-0 gap-1">
+              <Link href={`/loads/${d.load.id}`} onClick={(e) => e.stopPropagation()} className="flex min-w-0 items-center gap-1.5 text-foreground no-underline hover:underline">
                 <Package className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                {d.load.reference}
-              </span>
-              <span className="truncate text-xs text-muted-foreground">{LOAD_STATUS[d.load.status] ?? d.load.status}</span>
-            </Link>
+                <b className="truncate text-primary">{d.load.reference}</b>
+                <span className="shrink-0 rounded-full bg-primary-soft px-1.5 text-[10.5px] font-bold text-primary">{LOAD_STATUS[d.load.status] ?? d.load.status}</span>
+              </Link>
+              <RouteCell load={d.load} />
+            </div>
           ) : d.status === "active" && can.loads ? (
             <Button
               size="sm"
@@ -284,7 +312,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
       {
         id: "license",
         header: "Licence",
-        meta: { sortKey: "license", hideable: true, label: "Licence", width: "11%" } satisfies ColumnMeta,
+        meta: { sortKey: "license", hideable: true, label: "Licence", width: "10%" } satisfies ColumnMeta,
         cell: ({ row: { original: d } }) => {
           const days = licenseDays(d.licenseExpiresOn);
           if (days == null) return <span className="text-xs text-muted-foreground">{d.licenseNumber ?? "—"}</span>;
@@ -406,6 +434,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
           )
         }
       />
+      {tabs}
       {invite && <InviteDriversDialog companyName={companyName} code={joinCode} vehicles={vehicles} smsReady={smsReady} prefill={invite.prefill} onClose={() => setInvite(null)} onDone={refresh} />}
       <FilterTiles
         label="Filter drivers"
@@ -513,7 +542,7 @@ export function DriversView({ data, query, can, vehicles, joinCode = null, openI
           <DriverRecordPanel driver={selected} canUpdate={can.update} onEdit={() => setForm({ driver: selected })} onInvite={can.create ? () => setInvite({ prefill: [{ id: selected.id, name: selected.name, phone: selected.phone }] }) : undefined} onClose={() => setSelectedId(null)} onChanged={refresh} />
         </div>
       )}
-      {assigning && <AssignLoadDialog driver={assigning} onClose={() => setAssigning(null)} onDone={refresh} />}
+      {assigning && <AssignLoadDialog driver={{ name: assigning.name, phone: assigning.phone, vehicle: assigning.vehicle, hasTracker: Boolean(assigning.vehicle?.deviceId) }} onClose={() => setAssigning(null)} onDone={refresh} />}
       <ConfirmDialog
         open={bulkRemove}
         onOpenChange={setBulkRemove}

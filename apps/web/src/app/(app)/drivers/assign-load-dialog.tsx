@@ -8,16 +8,25 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
-import type { DriverRow } from "@/lib/drivers";
 import type { LoadSummaryDto } from "@/lib/loads";
 
 const STATUS: Record<string, string> = { invited: "Waiting for driver", tracking: "Tracking", at_pickup: "At pickup", in_transit: "In transit", at_delivery: "At delivery" };
 
+/** What the dialog needs to know about the driver. */
+export interface AssignTarget {
+  name: string;
+  phone: string | null;
+  vehicle: { id: string; name: string } | null;
+  /** The driver's truck has a RIO tracker that reports. */
+  hasTracker: boolean;
+}
+
 /**
- * One Assign dialog (A37): pick an open load for this driver. Your own driver needs no Accept; the
- * load shows in their app right away. A vehicle-tracked load moves to the driver's truck.
+ * One Assign dialog (A37, A38): pick an open load for this driver. Your own driver needs no Accept;
+ * the load shows in their app right away. Before pickup, the load follows the driver's truck
+ * tracker when they have one, otherwise their phone.
  */
-export function AssignLoadDialog({ driver, onClose, onDone }: { driver: DriverRow; onClose: () => void; onDone: () => void }) {
+export function AssignLoadDialog({ driver, onClose, onDone }: { driver: AssignTarget; onClose: () => void; onDone: () => void }) {
   const [loads, setLoads] = useState<LoadSummaryDto[] | null>(null);
   const [q, setQ] = useState("");
   const [pick, setPick] = useState<string | null>(null);
@@ -37,7 +46,10 @@ export function AssignLoadDialog({ driver, onClose, onDone }: { driver: DriverRo
     return (loads ?? []).filter((l) => !s || [l.reference, l.pickup.name, l.pickup.address, l.delivery.name, l.delivery.address, l.driverName].some((v) => v?.toLowerCase().includes(s)));
   }, [loads, q]);
   const chosen = loads?.find((l) => l.id === pick) ?? null;
-  const vehicleBlocked = chosen?.trackingMode === "vehicle" && !driver.vehicle;
+  // Before pickup the load can switch to what this driver has: the truck's tracker, else the phone.
+  const canSwitch = chosen ? ["invited", "tracking"].includes(chosen.status) : false;
+  const follow: "vehicle" | "phone" | null = !chosen ? null : canSwitch ? (driver.vehicle && driver.hasTracker ? "vehicle" : driver.phone ? "phone" : chosen.trackingMode) : chosen.trackingMode;
+  const vehicleBlocked = follow === "vehicle" && !driver.vehicle;
 
   async function assign() {
     if (!chosen) return;
@@ -45,7 +57,8 @@ export function AssignLoadDialog({ driver, onClose, onDone }: { driver: DriverRo
     try {
       const json: Record<string, unknown> = { driverName: driver.name };
       if (driver.phone) json.driverPhone = driver.phone;
-      if (chosen.trackingMode === "vehicle" && driver.vehicle) json.vehicleId = driver.vehicle.id;
+      if (follow && follow !== chosen.trackingMode) json.trackingMode = follow;
+      if (follow === "vehicle" && driver.vehicle) json.vehicleId = driver.vehicle.id;
       await api(`/api/loads/${chosen.id}`, { method: "PATCH", json });
       toast.success(`${chosen.reference} assigned to ${driver.name}`);
       onDone();
@@ -102,13 +115,23 @@ export function AssignLoadDialog({ driver, onClose, onDone }: { driver: DriverRo
             );
           })}
         </div>
-        {vehicleBlocked && <p className="m-0 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">This load follows a truck&apos;s tracker. Give {driver.name} a truck first, or pick a load tracked by phone.</p>}
-        {chosen?.trackingMode === "phone" && !driver.phone && <p className="m-0 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">Add {driver.name}&apos;s mobile number first: this load is tracked by phone.</p>}
+        {chosen && follow && !vehicleBlocked && !(follow === "phone" && !driver.phone) && (
+          <p className="m-0 flex items-start gap-2 rounded-lg bg-primary-soft px-3 py-2 text-xs text-primary">
+            {follow === "vehicle" ? <Truck className="mt-px size-3.5 shrink-0" aria-hidden="true" /> : <Smartphone className="mt-px size-3.5 shrink-0" aria-hidden="true" />}
+            <span>
+              {follow === "vehicle"
+                ? `${driver.name} drives ${driver.vehicle?.name ?? "a truck"}, so this load follows the truck's tracker. The phone is the backup.`
+                : `${driver.name} has no truck tracker, so this load follows ${driver.name.split(" ")[0]}'s phone.`}
+            </span>
+          </p>
+        )}
+        {vehicleBlocked && <p className="m-0 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">This load follows a truck&apos;s tracker and is already under way. Give {driver.name} a truck first, or pick another load.</p>}
+        {follow === "phone" && !driver.phone && <p className="m-0 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">Add {driver.name}&apos;s mobile number first: this load is tracked by phone.</p>}
         <DialogFooter>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={assign} loading={busy} disabled={!chosen || vehicleBlocked || (chosen.trackingMode === "phone" && !driver.phone)}>
+          <Button onClick={assign} loading={busy} disabled={!chosen || vehicleBlocked || (follow === "phone" && !driver.phone)}>
             Assign load
           </Button>
         </DialogFooter>

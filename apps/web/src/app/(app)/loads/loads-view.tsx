@@ -90,7 +90,7 @@ function CurrentPlace({ load }: { load: LoadSummaryDto }) {
 }
 
 /** Pickup → delivery with how far is left and the ETA. */
-function RouteCell({ load }: { load: LoadSummaryDto }) {
+export function RouteCell({ load }: { load: LoadSummaryDto }) {
   const u = useUnits();
   const t = useTime();
   const total = haversineMeters([load.pickup.longitude, load.pickup.latitude], [load.delivery.longitude, load.delivery.latitude]);
@@ -125,7 +125,7 @@ function hm(seconds: number) {
   return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
 }
 
-export function LoadsView({ loads, driven = {}, counts, filter, q, canWrite, notice, fleet = true }: { loads: LoadSummaryDto[]; driven?: Record<string, { distanceM: number; drivingS: number }>; counts: { active: number; ended: number }; filter: "active" | "ended" | "all"; q: string; canWrite: boolean; notice?: ReactNode; fleet?: boolean }) {
+export function LoadsView({ loads, driven = {}, counts, filter, q, canWrite, notice, fleet = true, title = "Loads", description, tabs }: { loads: LoadSummaryDto[]; driven?: Record<string, { distanceM: number; drivingS: number }>; counts: { active: number; ended: number }; filter: "active" | "ended" | "all"; q: string; canWrite: boolean; notice?: ReactNode; fleet?: boolean; title?: string; description?: string; tabs?: ReactNode }) {
   const router = useRouter();
   const u = useUnits();
   const pathname = usePathname();
@@ -166,7 +166,8 @@ export function LoadsView({ loads, driven = {}, counts, filter, q, canWrite, not
 
   return (
     <>
-      <PageHeader title="Loads" description={fleet ? "Track each shipment from pickup to delivery, by the driver's phone or your own trackers." : "Track each shipment from pickup to delivery with the driver's phone."} actions={headerActions} />
+      <PageHeader title={title} description={description ?? (fleet ? "Track each shipment from pickup to delivery, by the driver's phone or your own trackers." : "Track each shipment from pickup to delivery with the driver's phone.")} actions={headerActions} />
+      {tabs}
       {notice && <div className="mb-4">{notice}</div>}
       <Card>
         <FilterBar>
