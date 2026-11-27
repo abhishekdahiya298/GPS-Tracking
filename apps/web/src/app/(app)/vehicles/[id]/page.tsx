@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { listEvents } from "@/lib/alerts";
 import { assignmentHistory } from "@/lib/drivers";
-import { getServerEnv } from "@/lib/env";
+import { offlineThresholdSeconds } from "@/lib/env";
 import { getVehicleDetail, vehicleWeek } from "@/lib/fleet-list";
 import { listItems } from "@/lib/maintenance";
 import { getOrgSettings } from "@/lib/organization";
@@ -22,7 +22,7 @@ export default async function VehiclePage({ params }: { params: Promise<{ id: st
   const { ctx } = await requireTenantPage(`/vehicles/${id}`);
   if (!contextHasPermission(ctx, "vehicles.read")) redirect("/dashboard");
   if (!z.string().uuid().safeParse(id).success) notFound();
-  const detail = await getVehicleDetail(ctx.organizationId, id, new Date(), getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS, { includeImeiLast4: contextHasPermission(ctx, "devices.manage") });
+  const detail = await getVehicleDetail(ctx.organizationId, id, new Date(), offlineThresholdSeconds(), { includeImeiLast4: contextHasPermission(ctx, "devices.manage") });
   if (!detail) notFound();
   const canLocations = contextHasPermission(ctx, "locations.read");
   if (!canLocations) detail.location = null;

@@ -6,7 +6,7 @@ import { DEFAULT_ORG_MAP_PREFS, type OrgMapPrefs } from "@/lib/org-map-prefs";
 import { placeText, useAddressState } from "@/lib/use-address";
 import maplibregl, { type Map as MlMap, type Popup } from "maplibre-gl";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Expand, ExternalLink, Gauge, History, IdCard, KeyRound, Layers, Locate, LocateFixed, MapPin, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Phone, Plus, Radio, Satellite, Share2, Shrink, Truck, Users, Wifi, X } from "lucide-react";
+import { Box, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, Download, Expand, ExternalLink, Gauge, History, IdCard, KeyRound, Layers, Locate, LocateFixed, MapPin, Maximize2, Minus, Navigation2, PanelLeftClose, PanelLeftOpen, Phone, Plus, Radio, Satellite, Share2, Shrink, Truck, Users, Wifi, X, Zap } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,7 +30,7 @@ import { cn } from "@/lib/cn";
 import { MAP_STYLES, type MapStyleId, saveStyle, savedStyle, setBuildings3d, styleUrl } from "@/lib/map-style";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { FleetLayer, STATE_COLORS, type FleetPoint } from "./fleet-layer";
-import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, hasStaleFix, iconName, mapState, MAP_STATES, STATE_ORDER, stateBucket, type MapState } from "./fleet-model";
+import { compass, csvSafe, deviceLabel, FALLBACK_VIEW, hasStaleFix, iconName, isPowerCut, mapState, MAP_STATES, STATE_ORDER, stateBucket, type MapState } from "./fleet-model";
 import { useFleetStream } from "./use-fleet-stream";
 
 // Loaded on first use: most sessions never open history.
@@ -39,13 +39,13 @@ const ShareDialog = dynamic(() => import("../vehicles/share-dialog").then((m) =>
 
 /** One list card: name/tags, driver/speed, address (up to two lines). */
 const ROW_H = 92;
-const STATE_LABEL: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", parked: "Parked (unhooked)", offline: "Offline" };
+const STATE_LABEL: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", parked: "Parked (unhooked)", offline: "No signal" };
 const STATE_HINT: Record<MapState, string> = {
   moving: "Travelling",
   idle: "Engine on, not moving",
   stopped: "Parked, engine off",
   parked: "Unhooked, at last known spot",
-  offline: "Tracker not reporting"
+  offline: "Not reporting right now; stored data uploads when it is back in coverage"
 };
 /** Badge grounds: the status colour's soft tint (text uses the status colour itself). */
 /** Soft status fill that also works in dark mode (mixed with the page background). */
@@ -73,7 +73,7 @@ function Fact({ icon: Icon, label, value, color }: { icon: typeof Truck; label: 
     </div>
   );
 }
-const STATE_BADGE: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", parked: "Unhooked", offline: "Offline" };
+const STATE_BADGE: Record<MapState, string> = { moving: "Moving", idle: "Idling", stopped: "Stopped", parked: "Unhooked", offline: "No signal" };
 /** Floating map controls: white, raised, 40px targets. */
 const MAP_BTN =
   "grid size-10 cursor-pointer place-items-center border-0 bg-background text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-default disabled:opacity-50";
@@ -96,19 +96,20 @@ function ago(iso: string | null, now: number) {
   return `${Math.round(s / 86400)} d ago`;
 }
 
-const SUB: Record<MapState, string> = { moving: "", idle: "Idling", stopped: "Parked", parked: "Unhooked", offline: "Offline" };
+const SUB: Record<MapState, string> = { moving: "", idle: "Idling", stopped: "Parked", parked: "Unhooked", offline: "No signal" };
 
 function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, fmtSpeed?: (kph: number) => string): FleetPoint | null {
   if (!d.location) return null;
   const state = mapState(d, now, offlineSeconds);
   return {
-    sub: hasStaleFix(d, now, offlineSeconds) ? "No GPS" : state === "moving" ? (fmtSpeed && d.location.speedKph !== null ? fmtSpeed(d.location.speedKph) : "") : SUB[state],
+    sub: hasStaleFix(d, now, offlineSeconds) ? "No GPS" : state !== "moving" && isPowerCut(d) ? "Power cut" : state === "moving" ? (fmtSpeed && d.location.speedKph !== null ? fmtSpeed(d.location.speedKph) : "") : SUB[state],
     id: d.deviceId,
     name: deviceLabel(d),
     state,
     type: d.vehicle ? asVehicleType(d.vehicle.type) : "other",
     lngLat: [d.location.longitude, d.location.latitude],
-    heading: d.location.headingDeg
+    heading: d.location.headingDeg,
+    t: Date.parse(d.location.recordedAt)
   };
 }
 
@@ -189,6 +190,11 @@ function ListRow({
             {r.stale ? "No GPS" : STATE_BADGE[r.state]}
             {speed ? ` · ${speed}` : ""}
           </span>
+          {r.state !== "moving" && isPowerCut(d) && (
+            <span className="inline-flex h-[18px] shrink-0 items-center gap-0.5 rounded-full bg-danger px-1.5 text-[10.5px] font-bold text-white" title="The vehicle's power to the tracker is cut. It is running on its own battery.">
+              <Zap className="size-3" aria-hidden="true" /> Power cut
+            </span>
+          )}
           {driver ? (
             <>
               <IdCard className="size-3 shrink-0 text-[#0f766e]" aria-hidden="true" />
@@ -292,6 +298,10 @@ export function LiveMap({
   // Read inside stream callbacks that are created once.
   const followRef = useRef<string | null>(null);
   followRef.current = follow ? selected : null;
+  // The layer tracks the followed vehicle every frame while it glides.
+  useEffect(() => {
+    layer.current?.setFollow(follow ? selected : null);
+  }, [follow, selected]);
 
   const mapRef = useRef<MlMap | null>(null);
 
@@ -307,7 +317,8 @@ export function LiveMap({
       // Follow mode: keep the selected vehicle in view as it moves.
       const f = followRef.current;
       const hit = f ? pts.find((p) => p.id === f) : undefined;
-      if (hit) mapRef.current?.easeTo({ center: hit.lngLat, duration: 900 });
+      // While gliding, the layer keeps the camera on the drawn marker every frame.
+      if (hit && !layer.current?.isGliding(hit.id)) mapRef.current?.easeTo({ center: hit.lngLat, duration: 900 });
     },
     onAlert: (a) => {
       toast.warning(`${a.vehicleName ?? "A vehicle"}: ${a.ruleName}`, {

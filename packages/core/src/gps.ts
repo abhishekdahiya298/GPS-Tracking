@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { externalPowerVolts } from "./freshness.js";
 
 /**
  * Shape of the body Traccar POSTs to `forward.url` when `forward.type=json`
@@ -54,6 +55,8 @@ export interface NormalizedPosition {
   valid: boolean;
   ignition: boolean | null;
   motion: boolean | null;
+  /** Vehicle (external) voltage in volts, when the tracker reports it. */
+  externalPowerV?: number | null;
 }
 
 const IMEI_PATTERN = /^\d{15}$/;
@@ -74,7 +77,8 @@ export function normalizePosition(raw: TraccarForwardPayload): NormalizedPositio
     recordedAt: position.fixTime,
     valid: position.valid ?? true,
     ignition: typeof attributes.ignition === "boolean" ? attributes.ignition : null,
-    motion: typeof attributes.motion === "boolean" ? attributes.motion : null
+    motion: typeof attributes.motion === "boolean" ? attributes.motion : null,
+    externalPowerV: externalPowerVolts(attributes)
   };
 }
 

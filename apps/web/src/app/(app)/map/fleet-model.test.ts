@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bearing, compass, csvSafe, hasStaleFix, iconName, iconNames, indexAtTime, lerpLngLat, mapState, quickRange, shouldAnimate, stateBucket, timeline, trackStats } from "./fleet-model";
+import { bearing, catchUp, compass, csvSafe, GLIDE_MIN_MS, glideMs, hasStaleFix, iconName, iconNames, indexAtTime, isPowerCut, lerpLngLat, lineLngLat, mapState, quickRange, shouldAnimate, stateBucket, timeline, trackStats } from "./fleet-model";
 
 const now = Date.parse("2026-09-25T12:00:00Z");
 const loc = (speedKph: number | null, ignition: boolean | null = null) => ({ latitude: 0, longitude: 0, speedKph, headingDeg: 0, altitudeM: null, ignition, motion: null, recordedAt: "2026-09-25T11:59:00Z", receivedAt: "2026-09-25T11:59:00Z" });
@@ -126,5 +126,46 @@ describe("trip timeline", () => {
   it("calls engine-on time without moving idling, not a trip", () => {
     const track = Array.from({ length: 20 }, (_, i) => at(i, 43, 0, true));
     expect(timeline(track).map((e) => e.kind)).toEqual(["idle"]);
+  });
+});
+
+describe("smooth gliding", () => {
+  it("glides at the recorded pace while driving, short hop otherwise", () => {
+    expect(glideMs(15_000, true)).toBe(15_000);
+    expect(glideMs(200, true)).toBe(GLIDE_MIN_MS);
+    expect(glideMs(10 * 60_000, true)).toBe(60_000);
+    expect(glideMs(15_000, false)).toBe(GLIDE_MIN_MS);
+    expect(glideMs(null, true)).toBe(GLIDE_MIN_MS);
+  });
+  it("compresses a long backlog so the marker catches up", () => {
+    expect(catchUp([15_000, 15_000])).toEqual([15_000, 15_000]);
+    const fast = catchUp(Array(10).fill(15_000));
+    expect(fast.reduce((a, b) => a + b, 0)).toBeCloseTo(20_000);
+  });
+  it("moves at constant speed between two points", () => {
+    expect(lineLngLat([0, 0], [10, 20], 0.5)).toEqual([5, 10]);
+    expect(lineLngLat([0, 0], [10, 20], 2)).toEqual([10, 20]);
+  });
+});
+
+describe("state-aware map status", () => {
+  const now = Date.parse("2026-11-27T12:00:00Z");
+  const base = { vehicle: { type: "truck" } };
+  it("a parked truck stays Stopped for 4 h 30 min, without a No GPS warning", () => {
+    const d = { ...base, lastSeenAt: "2026-11-27T08:30:00Z", location: { latitude: 1, longitude: 1, speedKph: 0, headingDeg: null, altitudeM: null, ignition: false, motion: false, recordedAt: "2026-11-27T08:30:00Z", receivedAt: "2026-11-27T08:30:00Z" } };
+    expect(mapState(d, now, 16_200)).toBe("stopped");
+    expect(hasStaleFix(d, now, 16_200)).toBe(false);
+    expect(mapState({ ...d, lastSeenAt: "2026-11-27T07:00:00Z" }, now, 16_200)).toBe("offline");
+  });
+  it("a driving truck silent 15 min shows No signal", () => {
+    const loc = { latitude: 1, longitude: 1, speedKph: 90, headingDeg: 0, altitudeM: null, ignition: true, motion: true, recordedAt: "2026-11-27T11:40:00Z", receivedAt: "2026-11-27T11:40:00Z" };
+    expect(mapState({ ...base, lastSeenAt: "2026-11-27T11:40:00Z", location: loc }, now, 16_200)).toBe("offline");
+    expect(mapState({ ...base, lastSeenAt: "2026-11-27T11:55:00Z", location: { ...loc, recordedAt: "2026-11-27T11:55:00Z" } }, now, 16_200)).toBe("moving");
+  });
+  it("power cut is shown for trucks, never for trailers", () => {
+    expect(isPowerCut({ powerV: 0.2, vehicle: { type: "truck" } })).toBe(true);
+    expect(isPowerCut({ powerV: 12.6, vehicle: { type: "truck" } })).toBe(false);
+    expect(isPowerCut({ powerV: 0.2, vehicle: { type: "trailer" } })).toBe(false);
+    expect(isPowerCut({ powerV: null, vehicle: { type: "truck" } })).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import { contextHasPermission } from "@rio-gps/core";
 import { NextResponse } from "next/server";
 import { listEvents } from "@/lib/alerts";
-import { getServerEnv } from "@/lib/env";
+import { offlineThresholdSeconds } from "@/lib/env";
 import { getVehicleDetail } from "@/lib/fleet-list";
 import { z } from "zod";
 import { requirePermission, requireTenantContext } from "@/lib/authz";
@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: Params) {
     const ctx = await requireTenantContext(request);
     requirePermission(ctx, "vehicles.read");
     const id = await vehicleId(params);
-    const detail = await getVehicleDetail(ctx.organizationId, id, new Date(), getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS, {
+    const detail = await getVehicleDetail(ctx.organizationId, id, new Date(), offlineThresholdSeconds(), {
       includeImeiLast4: contextHasPermission(ctx, "devices.manage")
     });
     if (!detail) throw new NotFoundError("Vehicle not found");

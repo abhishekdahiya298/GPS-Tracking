@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { healthChecks, hourlyBuckets, overallVerdict, parseReply, toDiagReport, TrackerCommandSchema, type DiagReport } from "./tracker-diagnostics-model";
+import { checkConfig, commandPayload, healthChecks, hourlyBuckets, overallVerdict, parseParams, parseReply, toDiagReport, TrackerCommandSchema, type DiagReport } from "./tracker-diagnostics-model";
 
 const now = Date.parse("2026-11-26T18:50:00Z");
 const raw = (over: Record<string, unknown> = {}, attrs: Record<string, unknown> = {}) => ({
@@ -104,9 +104,44 @@ describe("health checks", () => {
 });
 
 describe("command allowlist", () => {
-  it("accepts only the read-only commands", () => {
+  it("accepts only allowlisted commands, never a setting change", () => {
     expect(TrackerCommandSchema.safeParse({ command: "getgps" }).success).toBe(true);
-    expect(TrackerCommandSchema.safeParse({ command: "cpureset" }).success).toBe(false);
+    expect(TrackerCommandSchema.safeParse({ command: "cpureset" }).success).toBe(true);
     expect(TrackerCommandSchema.safeParse({ command: "setparam 2004:evil.example" }).success).toBe(false);
+    expect(TrackerCommandSchema.safeParse({ command: "deleterecords" }).success).toBe(false);
+    expect(TrackerCommandSchema.safeParse({ command: "getparam 2001" }).success).toBe(false);
+  });
+});
+
+describe("settings check (getparam)", () => {
+  it("reads both Teltonika reply formats", () => {
+    expect(parseParams("Param ID:2001 Value:hologram Param ID:2005 Value:5027")).toEqual({ "2001": "hologram", "2005": "5027" });
+    expect(parseParams("2001:hologram;2004:tracker.riogps.com;2005:5027")).toEqual({ "2001": "hologram", "2004": "tracker.riogps.com", "2005": "5027" });
+  });
+  it("flags a tracker that can't reach RIO (the broken v1.cfg case)", () => {
+    const rows = checkConfig("2001:;2004:;2005:0;2006:0", false)!;
+    expect(rows.filter((r) => r.severity === "critical" && !r.ok).map((r) => r.label)).toEqual(["APN", "Server", "Port"]);
+  });
+  it("passes the v2 truck config and shows words", () => {
+    const rows = checkConfig("2001:hologram;2004:tracker.riogps.com;2005:5027;2006:0;2010:0;107:2;102:3;103:10;110:0;10050:60;10051:400;10052:15;10055:30;10000:14400", false)!;
+    expect(rows.every((r) => r.ok)).toBe(true);
+    expect(rows.find((r) => r.id === "102")!.actual).toBe("Online sleep");
+  });
+  it("uses the trailer standard for trailers", () => {
+    const rows = checkConfig("103:10;10055:30", true)!;
+    expect(rows.find((r) => r.id === "103")!.ok).toBe(false);
+  });
+  it("is null for replies that aren't settings", () => expect(checkConfig("GPS:1 Sat:10", false)).toBeNull());
+  it("maps command ids to what is sent", () => {
+    expect(commandPayload("getgps")).toBe("getgps");
+    expect(commandPayload("checkconfig")).toMatch(/^getparam 2001;2004;2005/);
+    expect(commandPayload("checkconfig").length).toBeLessThanOrEqual(160);
+  });
+});
+
+describe("external power from FT-platform trackers", () => {
+  it("reads io800 (mV) when Traccar has no power attribute", () => {
+    const r = toDiagReport({ fixTime: "2026-11-27T10:00:00Z", serverTime: "2026-11-27T10:00:01Z", valid: true, latitude: 1, longitude: 1, attributes: { io800: 13650 } })!;
+    expect(r.externalV).toBe(13.65);
   });
 });

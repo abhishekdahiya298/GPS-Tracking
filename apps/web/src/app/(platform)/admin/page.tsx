@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/cn";
 import { hideDemoAccounts } from "@/lib/demo-pref";
-import { getServerEnv } from "@/lib/env";
+import { getServerEnv, offlineThresholdSeconds } from "@/lib/env";
 import { HideDemoToggle } from "./_shared/hide-demo-toggle";
 import { ingestSnapshot } from "@/lib/ingest-stats";
 import { getLiveHub } from "@/lib/live-hub";
@@ -38,7 +38,7 @@ export default async function PlatformOverviewPage() {
   const hideDemo = await hideDemoAccounts();
 
   const [o, activity, redisOk, lastPosition, revenue] = await Promise.all([
-    getPlatformOverview(env.GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS, now, hideDemo),
+    getPlatformOverview(offlineThresholdSeconds(env), now, hideDemo),
     listActivity({ page: 1, pageSize: 25, search: "", kind: "all", who: "platform" }),
     timed(async () => (await (await getReadyRedisPublisher()).ping()) === "PONG", 2000),
     timed(async () => {

@@ -1,5 +1,6 @@
 import { isOrganizationActive } from "./organization-status";
 import { effectiveTimePrefs } from "@rio-gps/core/timezones";
+import { fixWasDriving } from "@rio-gps/core/freshness";
 import {
   ALERT_TYPES,
   alertChannel,
@@ -18,7 +19,7 @@ import { z } from "zod";
 import { writeAudit } from "./audit";
 import { alertEmail, isEmailEnabled, sendEmail } from "./email";
 import { pushAlerts } from "./push";
-import { getServerEnv } from "./env";
+import { getServerEnv, offlineThresholdSeconds } from "./env";
 import { NotFoundError, ValidationError } from "./errors";
 import { logger } from "./logger";
 import { getReadyRedisPublisher } from "./redis";
@@ -381,8 +382,9 @@ export async function runOfflineCheck(now = new Date()): Promise<number> {
     const rules = await tx.select().from(schema.alertRules).where(and(eq(schema.alertRules.type, "device_offline"), eq(schema.alertRules.active, true)));
     for (const rule of rules) {
       const devices = await tx
-        .select({ id: schema.gpsDevices.id, lastSeenAt: schema.gpsDevices.lastSeenAt, vehicleId: schema.deviceAssignments.vehicleId, vehicleType: schema.vehicles.type })
+        .select({ id: schema.gpsDevices.id, lastSeenAt: schema.gpsDevices.lastSeenAt, vehicleId: schema.deviceAssignments.vehicleId, vehicleType: schema.vehicles.type, speedKph: schema.currentLocations.speedKph })
         .from(schema.gpsDevices)
+        .leftJoin(schema.currentLocations, eq(schema.currentLocations.deviceId, schema.gpsDevices.id))
         .leftJoin(schema.deviceAssignments, and(eq(schema.deviceAssignments.deviceId, schema.gpsDevices.id), isNull(schema.deviceAssignments.unassignedAt)))
         .leftJoin(schema.vehicles, eq(schema.vehicles.id, schema.deviceAssignments.vehicleId))
         .where(
@@ -396,7 +398,9 @@ export async function runOfflineCheck(now = new Date()): Promise<number> {
         // A trailer's tracker loses power whenever it is unhooked, so silence is normal: no offline alert.
         if (d.vehicleType === "trailer") continue;
         const prev = await lockState(tx, rule.id, d.id);
-        const r = evaluateOffline(prev, d.lastSeenAt, now, rule.offlineMinutes ?? 60);
+        // A parked tracker reports every 4 h while asleep: never call it offline before that is due.
+        const minutes = offlineMinutesFor(rule.offlineMinutes ?? 60, d.speedKph, offlineThresholdSeconds());
+        const r = evaluateOffline(prev, d.lastSeenAt, now, minutes);
         await saveState(tx, rule.id, d.id, r.next);
         if (!r.fire) continue;
         const [row] = await tx
@@ -500,4 +504,12 @@ export function startAlertScheduler(intervalMs = 60_000) {
   g.__rioAlertScheduler = setInterval(tick, intervalMs);
   g.__rioAlertScheduler.unref?.();
   logger.info("alerts.scheduler_started", { intervalSeconds: intervalMs / 1000 });
+}
+
+/**
+ * Minutes of silence before a device_offline alert fires. The rule's own value applies while the
+ * vehicle was driving at its last report; a parked vehicle gets at least the parked allowance.
+ */
+export function offlineMinutesFor(ruleMinutes: number, lastSpeedKph: number | null, parkedSeconds: number): number {
+  return fixWasDriving({ speedKph: lastSpeedKph }) ? ruleMinutes : Math.max(ruleMinutes, Math.ceil(parkedSeconds / 60));
 }

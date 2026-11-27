@@ -2,7 +2,7 @@ import { contextHasPermission } from "@rio-gps/core";
 import { NextResponse } from "next/server";
 import { requirePermission, requireTenantContext } from "@/lib/authz";
 import { errorResponse } from "@/lib/errors";
-import { getServerEnv } from "@/lib/env";
+import { offlineThresholdSeconds } from "@/lib/env";
 import { DeviceListQuery, listDevicesPage, parseListQuery } from "@/lib/fleet-list";
 import { listDevices } from "@/lib/vehicles";
 
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const params = Object.fromEntries(new URL(request.url).searchParams);
     if (Object.keys(params).some((k) => k in DeviceListQuery.shape)) {
       const q = parseListQuery(DeviceListQuery, params);
-      const page = await listDevicesPage(ctx.organizationId, q, new Date(), getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS, {
+      const page = await listDevicesPage(ctx.organizationId, q, new Date(), offlineThresholdSeconds(), {
         includeImeiLast4: contextHasPermission(ctx, "devices.manage")
       });
       return NextResponse.json(page, { headers: { "Cache-Control": "no-store" } });

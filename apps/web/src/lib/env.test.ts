@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ConfigurationError, getServerEnv } from "./env.js";
+import { ConfigurationError, getServerEnv, offlineThresholdSeconds } from "./env.js";
 
 const valid = {
   NODE_ENV: "production",
@@ -34,5 +34,13 @@ describe("getServerEnv", () => {
     expect(getServerEnv({ ...valid, AUTH_ALIAS_URLS: " https://app.riogps.com , https://gps.example.org " } as NodeJS.ProcessEnv).AUTH_ALIAS_URLS).toEqual(["https://app.riogps.com", "https://gps.example.org"]);
     expect(getServerEnv({ ...valid }).AUTH_ALIAS_URLS).toEqual([]);
     expect(() => getServerEnv({ ...valid, AUTH_ALIAS_URLS: "app.riogps.com" } as NodeJS.ProcessEnv)).toThrow();
+  });
+});
+
+describe("offlineThresholdSeconds", () => {
+  it("never flags a parked tracker before its 4 h report is due", () => {
+    expect(offlineThresholdSeconds(getServerEnv({ ...valid }))).toBe(16_200);
+    expect(offlineThresholdSeconds(getServerEnv({ ...valid, GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS: "3900" }))).toBe(16_200);
+    expect(offlineThresholdSeconds(getServerEnv({ ...valid, GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS: "20000" }))).toBe(20_000);
   });
 });

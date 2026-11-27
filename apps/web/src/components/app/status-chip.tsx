@@ -10,7 +10,7 @@ export const STATUS_THEME = {
   idle: { label: "Idling", color: "#c2410c", icon: Timer },
   stopped: { label: "Stopped", color: "#b91c1c", icon: CircleStop },
   parked: { label: "Parked (unhooked)", color: "#6d28d9", icon: CircleParking },
-  offline: { label: "Offline", color: "#64748b", icon: WifiOff },
+  offline: { label: "No signal", color: "#64748b", icon: WifiOff },
   never_seen: { label: "No data yet", color: "#64748b", icon: CircleDashed },
   inactive: { label: "Tracker off", color: "#64748b", icon: PowerOff },
   no_device: { label: "No device", color: "#0369a1", icon: Unplug },

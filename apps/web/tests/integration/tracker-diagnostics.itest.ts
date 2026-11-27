@@ -111,8 +111,8 @@ describe("tracker diagnostics (Platform console)", () => {
     expect(d.replies[0].text).toContain("GPS:0");
   });
 
-  it("sends only allowlisted read-only commands and audits each one", async () => {
-    expect((await commandPOST(post("root", { command: "cpureset" }), p(trackerId))).status).toBe(400);
+  it("sends only allowlisted commands (never a setting change) and audits each one", async () => {
+    expect((await commandPOST(post("root", { command: "deleterecords" }), p(trackerId))).status).toBe(400);
     expect((await commandPOST(post("root", { command: "setparam 2004:evil.example" }), p(trackerId))).status).toBe(400);
     const res = await commandPOST(post("root", { command: "getgps" }), p(trackerId));
     expect(res.status).toBe(200);
@@ -121,6 +121,9 @@ describe("tracker diagnostics (Platform console)", () => {
     const audit = await getDb().select().from(schema.auditLogs).where(eq(schema.auditLogs.action, "device.command_sent"));
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({ targetId: trackerId, metadata: { imei: IMEI, command: "getgps", outcome: "sent" } });
+    // "Check settings" is sent as one getparam for the standard settings.
+    await commandPOST(post("root", { command: "checkconfig" }), p(trackerId));
+    expect(sent[1]!.data).toMatch(/^getparam 2001;2004;2005;2006/);
   });
 
   it("rate limits commands per tracker", async () => {

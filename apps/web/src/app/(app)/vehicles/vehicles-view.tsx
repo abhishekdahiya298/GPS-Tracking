@@ -266,7 +266,7 @@ export function VehiclesView({ data, query, can, groups, openNew = false }: { da
           { value: "moving", label: "Moving", count: c.moving ?? 0, icon: Navigation, color: "#15803d" },
           { value: "idle", label: "Idling", count: c.idle ?? 0, icon: Timer, color: "#c2410c" },
           { value: "stopped", label: "Stopped", count: (c.stopped ?? 0) + (c.parked ?? 0), icon: CircleStop, color: "#b91c1c" },
-          { value: "offline", label: "Offline", count: (c.offline ?? 0) + (c.never_seen ?? 0) + (c.inactive ?? 0), icon: WifiOff, color: "#64748b" },
+          { value: "offline", label: "No signal", count: (c.offline ?? 0) + (c.never_seen ?? 0) + (c.inactive ?? 0), icon: WifiOff, color: "#64748b" },
           { value: "no_device", label: "No device", count: c.no_device ?? 0, icon: Unplug, color: "#0369a1" }
         ]}
       />

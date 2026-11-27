@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireSuperAdmin } from "@/lib/admin-guard";
-import { getServerEnv } from "@/lib/env";
+import { offlineThresholdSeconds } from "@/lib/env";
 import { errorResponse, NotFoundError } from "@/lib/errors";
 import { getCommandReplies, getTrackerDiagnostics } from "@/lib/tracker-diagnostics";
 
@@ -24,7 +24,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (!q.success) return NextResponse.json({ error: "Invalid query" }, { status: 400 });
     const body = q.data.since
       ? { replies: await getCommandReplies(id, new Date(q.data.since)) }
-      : await getTrackerDiagnostics(id, q.data.hours, getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS);
+      : await getTrackerDiagnostics(id, q.data.hours, offlineThresholdSeconds());
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     return errorResponse(err, { route: "admin.trackers.diagnostics" });

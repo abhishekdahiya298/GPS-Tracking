@@ -2,7 +2,7 @@ import { getDb, schema } from "@rio-gps/db";
 import { count, gt, max, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "@/lib/authz";
-import { getServerEnv } from "@/lib/env";
+import { getServerEnv, offlineThresholdSeconds } from "@/lib/env";
 import { errorResponse, ForbiddenError } from "@/lib/errors";
 import { ingestSnapshot } from "@/lib/ingest-stats";
 import { getLiveHub } from "@/lib/live-hub";
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     const now = Date.now();
 
     const dbCheck = await timed(async () => {
-      const onlineSince = new Date(now - env.GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS * 1000);
+      const onlineSince = new Date(now - offlineThresholdSeconds(env) * 1000);
       const [dev] = await db
         .select({ total: count(), online: sql<number>`count(*) filter (where ${schema.gpsDevices.lastSeenAt} > ${onlineSince.toISOString()}::timestamptz)::int` })
         .from(schema.gpsDevices);
