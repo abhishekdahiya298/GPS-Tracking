@@ -640,16 +640,20 @@ function Commands({ data }: { data: TrackerDiagnostics }) {
 
 /** Settings read from the tracker, ✓/✗ against RIO's standard config. */
 function ConfigTable({ rows, isTrailer, raw }: { rows: NonNullable<ReturnType<typeof checkConfig>>; isTrailer: boolean; raw: string }) {
-  const bad = rows.filter((r) => !r.ok);
+  // Only a value the tracker returned can be wrong; a missing one is "not returned", not an error.
+  const bad = rows.filter((r) => !r.ok && r.actual !== null);
+  const missing = rows.filter((r) => r.actual === null);
   const critical = bad.filter((r) => r.severity === "critical");
   return (
     <div>
-      <p className={cn("m-0 mb-2 rounded-md p-2 text-[13px] font-medium", critical.length ? "bg-danger-soft text-danger" : bad.length ? "bg-warning-soft" : "bg-success-soft text-success")}>
+      <p className={cn("m-0 mb-2 rounded-md p-2 text-[13px] font-medium", critical.length ? "bg-danger-soft text-danger" : bad.length || missing.length ? "bg-warning-soft" : "bg-success-soft text-success")}>
         {critical.length
           ? `Can’t reach RIO correctly: ${critical.map((r) => r.label).join(", ")} wrong. Fix it before anything else.`
           : bad.length
             ? `Reaches RIO. ${bad.length} setting${bad.length === 1 ? " differs" : "s differ"} from the RIO standard (${isTrailer ? "RIO-GPS-FTM164-trailer-v2" : "RIO-GPS-FTM880-v2"}).`
-            : `Matches the RIO standard (${isTrailer ? "RIO-GPS-FTM164-trailer-v2" : "RIO-GPS-FTM880-v2"}).`}
+            : missing.length
+              ? `What the tracker returned matches the RIO standard; ${missing.length} setting${missing.length === 1 ? " was" : "s were"} not returned.`
+              : `Matches the RIO standard (${isTrailer ? "RIO-GPS-FTM164-trailer-v2" : "RIO-GPS-FTM880-v2"}).`}
       </p>
       <table className="w-full border-collapse text-xs">
         <thead>
@@ -663,8 +667,8 @@ function ConfigTable({ rows, isTrailer, raw }: { rows: NonNullable<ReturnType<ty
           {rows.map((r) => (
             <tr key={r.id} className="border-t border-border">
               <td className="py-1 pr-2">{r.label}</td>
-              <td className={cn("py-1 pr-2 font-medium", r.ok ? "text-success" : r.severity === "critical" ? "text-danger" : "text-warning")}>
-                {r.ok ? "✓ " : "✗ "}
+              <td className={cn("py-1 pr-2 font-medium", r.ok ? "text-success" : r.actual === null ? "text-muted-foreground" : r.severity === "critical" ? "text-danger" : "text-warning")}>
+                {r.ok ? "✓ " : r.actual === null ? "– " : "✗ "}
                 {r.actual ?? "not returned"}
               </td>
               <td className="py-1 text-muted-foreground">{r.expected}</td>
