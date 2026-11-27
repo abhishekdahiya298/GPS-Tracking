@@ -42,7 +42,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <AppShell
       mode={{ kind: "tenant", orgStatus }}
-      nav={buildNav(ctx, rules)}
+      nav={buildNav(ctx, rules, { loadsInMenu: plan?.loadsInMenu ?? true })}
       user={{ name: user.name || user.email, email: user.email, roleLabel: ctx.role ? ROLE_LABEL[ctx.role] ?? ctx.role : "Platform admin", isSuperAdmin: user.isSuperAdmin }}
       orgName={orgName}
       organizations={mine.map((o) => ({ id: o.id, name: o.name, roleLabel: ROLE_LABEL[o.role] ?? o.role, current: o.id === ctx.organizationId }))}

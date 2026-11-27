@@ -181,6 +181,8 @@ export async function setSignupAndUpgrade(actorUserId: string, input: z.infer<ty
 // ---------- for screens ----------
 
 export interface PlanAccessDto {
+  /** false: Loads lives under Drivers (Drivers | Loads), not in the side menu. */
+  loadsInMenu: boolean;
   planName: string;
   trialEndsAt: string | null;
   lockedFeatures: Feature[];
@@ -198,6 +200,7 @@ export async function planAccessFor(organizationId: string): Promise<PlanAccessD
   const [rules, usage, contact] = await Promise.all([getFeatureRules(), organizationUsage(organizationId), getUpgradeContact()]);
   return {
     planName: access.planName,
+    loadsInMenu: access.loadsInMenu,
     trialEndsAt: access.trialEndsAt?.toISOString() ?? null,
     lockedFeatures: access.lockedFeatures,
     lockShown: access.lockedFeatures.filter((f) => rules[f] === "lock"),

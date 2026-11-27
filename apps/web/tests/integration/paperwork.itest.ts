@@ -16,6 +16,8 @@ import { GET as settingsGET, PUT as settingsPUT } from "@/app/api/organization/p
 import { GET as driverPwGET, POST as driverPwPOST } from "@/app/api/driver-app/loads/[id]/paperwork/route";
 import { driverPhone } from "./driver-app-client";
 import { GET as lookupGET } from "@/app/api/drivers/lookup/route";
+import { listPlatformDrivers } from "@/lib/platform-drivers";
+import { listPlans } from "@/lib/plans";
 
 const BASE = "http://localhost:3000";
 const PASSWORD = "correct-horse-battery-staple";
@@ -178,5 +180,20 @@ describe("driver number lookup", () => {
     const none = (await (await lookupGET(req("GET", `/api/drivers/lookup?phone=${encodeURIComponent("(905) 555-0199")}`, "dispatch"))).json()) as { onRio: boolean; name: string | null };
     expect(none).toMatchObject({ onRio: false, name: null });
     expect((await lookupGET(req("GET", "/api/drivers/lookup?phone=123", "dispatch"))).status).toBe(400);
+  });
+});
+
+describe("console: all drivers and plan options", () => {
+  it("lists each person once with their companies and app", async () => {
+    const all = await listPlatformDrivers();
+    const me = all.items.find((d) => d.phone === "+14165550132");
+    expect(me).toBeTruthy();
+    expect(me!.app).toBe("on");
+    expect(all.counts.all).toBeGreaterThan(0);
+    const onApp = await listPlatformDrivers({ filter: "app_on", search: "416" });
+    expect(onApp.items.every((d) => d.app === "on")).toBe(true);
+  });
+  it("plans default to Loads in the menu", async () => {
+    for (const p of await listPlans()) expect(typeof p.loadsInMenu).toBe("boolean");
   });
 });
