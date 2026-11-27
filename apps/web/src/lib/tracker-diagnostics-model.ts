@@ -178,6 +178,12 @@ export const BATTERY_LOW_V = 3.6;
 /** How long without a fix while reporting before GPS counts as failing. */
 export const NO_FIX_ALERT_MS = 30 * 60_000;
 
+/** "just now", "5 min ago", "2 d 3 h ago" (never "just now ago"). */
+export function agoText(ms: number): string {
+  const a = ago(ms);
+  return a === "just now" ? a : `${a} ago`;
+}
+
 export function ago(ms: number): string {
   const m = Math.round(ms / 60_000);
   if (m < 1) return "just now";
@@ -198,8 +204,8 @@ export function healthChecks(input: DiagnoseInput): HealthCheck[] {
     seenMs === null
       ? { id: "connection", label: "Connection", level: "unknown", value: "Never", detail: "This tracker has never reported to RIO." }
       : online
-        ? { id: "connection", label: "Connection", level: "ok", value: `${ago(seenMs)} ago`, detail: "Reporting normally to the server." }
-        : { id: "connection", label: "Connection", level: "bad", value: `${ago(seenMs)} ago`, detail: "Not reporting. It is switched off, without power and battery, or without cell signal." };
+        ? { id: "connection", label: "Connection", level: "ok", value: agoText(seenMs), detail: "Reporting normally to the server." }
+        : { id: "connection", label: "Connection", level: "bad", value: agoText(seenMs), detail: "Not reporting. It is switched off, without power and battery, or without cell signal." };
 
   const fixMs = input.lastFixAt ? now - Date.parse(input.lastFixAt) : null;
   let gps: HealthCheck;
