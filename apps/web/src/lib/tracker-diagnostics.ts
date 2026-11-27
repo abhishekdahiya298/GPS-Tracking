@@ -176,7 +176,8 @@ export async function getTrackerDiagnostics(id: string, hours: number, offlineSe
     traccar: tc,
     verdict: overallVerdict(checks),
     checks,
-    latest: reports[reports.length - 1] ?? null,
+    // Newest real report: a command reply is stored as a position with only the reply text.
+    latest: [...reports].reverse().find((r) => r.result === null) ?? reports[reports.length - 1] ?? null,
     buckets: hourlyBuckets(reports, from, to),
     recent: reports.slice(-60).reverse(),
     replies: reports

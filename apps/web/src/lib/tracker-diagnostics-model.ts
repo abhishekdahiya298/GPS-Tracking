@@ -178,6 +178,12 @@ export const BATTERY_LOW_V = 3.6;
 /** How long without a fix while reporting before GPS counts as failing. */
 export const NO_FIX_ALERT_MS = 30 * 60_000;
 
+/** "just now", "5 min ago", "2 d 3 h ago" (never "just now ago"). */
+export function agoText(ms: number): string {
+  const a = ago(ms);
+  return a === "just now" ? a : `${a} ago`;
+}
+
 export function ago(ms: number): string {
   const m = Math.round(ms / 60_000);
   if (m < 1) return "just now";
@@ -198,8 +204,8 @@ export function healthChecks(input: DiagnoseInput): HealthCheck[] {
     seenMs === null
       ? { id: "connection", label: "Connection", level: "unknown", value: "Never", detail: "This tracker has never reported to RIO." }
       : online
-        ? { id: "connection", label: "Connection", level: "ok", value: `${ago(seenMs)} ago`, detail: "Reporting normally to the server." }
-        : { id: "connection", label: "Connection", level: "bad", value: `${ago(seenMs)} ago`, detail: "Not reporting. It is switched off, without power and battery, or without cell signal." };
+        ? { id: "connection", label: "Connection", level: "ok", value: agoText(seenMs), detail: "Reporting normally to the server." }
+        : { id: "connection", label: "Connection", level: "bad", value: agoText(seenMs), detail: "Not reporting. It is switched off, without power and battery, or without cell signal." };
 
   const fixMs = input.lastFixAt ? now - Date.parse(input.lastFixAt) : null;
   let gps: HealthCheck;
@@ -291,17 +297,16 @@ export function configStandard(isTrailer: boolean): { id: string; label: string;
 }
 
 /**
- * Reads a getparam reply. Teltonika answers either "Param ID:2001 Value:hologram" (one or more)
- * or "2001:hologram;2004:..."; both are accepted.
+ * Reads a getparam reply. FT-platform trackers answer "Param ID:2001 Value:hologram;2004:...;2005:5027"
+ * (label on the first value only); others "Param ID:2001 Value:x Param ID:2005 Value:y" or
+ * "2001:x;2004:y". All are normalised to id:value pairs.
  */
 export function parseParams(text: string): Record<string, string> {
   const out: Record<string, string> = {};
-  const re1 = /Param\s*ID\s*:?\s*(\d+)\s*(?:New\s*)?Val(?:ue)?\s*:\s*(.*?)(?=\s*Param\s*ID|\s*;|$)/gis;
-  for (const m of text.matchAll(re1)) out[m[1]!] = m[2]!.trim();
-  if (Object.keys(out).length) return out;
-  for (const part of text.split(/[;\n]/)) {
-    const m = /^\s*(\d{3,7})\s*[:=]\s*(.*)$/.exec(part);
-    if (m) out[m[1]!] = m[2]!.trim();
+  const flat = text.replace(/Param\s*ID\s*:?\s*(\d+)\s*(?:New\s*)?Val(?:ue)?\s*:\s*/gi, "$1:");
+  for (const part of flat.split(/[;\n]|\s+(?=\d{3,7}:)/)) {
+    const m = /^\s*(\d{3,7})\s*[:=]\s*(.*?)\s*$/.exec(part);
+    if (m) out[m[1]!] = m[2]!;
   }
   return out;
 }

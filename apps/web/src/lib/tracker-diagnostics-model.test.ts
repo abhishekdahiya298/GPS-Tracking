@@ -114,6 +114,15 @@ describe("command allowlist", () => {
 });
 
 describe("settings check (getparam)", () => {
+  it("reads the FTM880 mixed format (label on the first value only)", () => {
+    const real = "Param ID:2001 Value:hologram;2004:tracker.riogps.com;2005:5027;2006:0;2010:0;107:2;102:3;103:10;110:0;10050:60;10051:400;10052:15;10055:30;10000:14400";
+    expect(Object.keys(parseParams(real))).toHaveLength(14);
+    expect(checkConfig(real, false)!.every((r) => r.ok)).toBe(true);
+    const v1 = "Param ID:2001 Value:hologram;2004:tracker.riogps.com;2005:5027;2006:0;2010:0;107:1;102:3;103:20;110:2;10050:10;10051:1000;10052:25;10055:120;10000:3600";
+    const rows = checkConfig(v1, false)!;
+    expect(rows.filter((r) => r.severity === "critical" && !r.ok)).toHaveLength(0);
+    expect(rows.find((r) => r.id === "110")!.actual).toBe("Always");
+  });
   it("reads both Teltonika reply formats", () => {
     expect(parseParams("Param ID:2001 Value:hologram Param ID:2005 Value:5027")).toEqual({ "2001": "hologram", "2005": "5027" });
     expect(parseParams("2001:hologram;2004:tracker.riogps.com;2005:5027")).toEqual({ "2001": "hologram", "2004": "tracker.riogps.com", "2005": "5027" });
