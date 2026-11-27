@@ -15,6 +15,7 @@ import { GET as packetGET, POST as packetPOST } from "@/app/api/loads/[id]/packe
 import { GET as settingsGET, PUT as settingsPUT } from "@/app/api/organization/paperwork/route";
 import { GET as driverPwGET, POST as driverPwPOST } from "@/app/api/driver-app/loads/[id]/paperwork/route";
 import { driverPhone } from "./driver-app-client";
+import { GET as lookupGET } from "@/app/api/drivers/lookup/route";
 
 const BASE = "http://localhost:3000";
 const PASSWORD = "correct-horse-battery-staple";
@@ -162,5 +163,20 @@ describe("load paperwork", () => {
     const sentEvent = async () => (await getDb().select().from(schema.loadEvents).where(eq(schema.loadEvents.loadId, id))).some((e) => e.type === "packet_sent");
     for (let i = 0; i < 60 && !(await sentEvent()); i++) await new Promise((r) => setTimeout(r, 50));
     expect(outbox.map((m) => m.to)).toEqual(["billing@northbound.test"]);
+  });
+});
+
+describe("driver number lookup", () => {
+  it("knows a driver on the app; full name only for drivers this company worked with", async () => {
+    // PW-2's driver signed in to the app above (+14165550132) and hauled for this company.
+    const mine = (await (await lookupGET(req("GET", `/api/drivers/lookup?phone=${encodeURIComponent("(416) 555-0132")}`, "dispatch"))).json()) as { onRio: boolean; known: boolean; name: string | null };
+    expect(mine).toMatchObject({ onRio: true, known: true });
+    const other = (await (await lookupGET(req("GET", `/api/drivers/lookup?phone=${encodeURIComponent("(416) 555-0132")}`, "other"))).json()) as { onRio: boolean; known: boolean; name: string | null };
+    expect(other.onRio).toBe(true);
+    expect(other.known).toBe(false);
+    expect(other.name === null || /^\S+( \S\.)?$/.test(other.name)).toBe(true);
+    const none = (await (await lookupGET(req("GET", `/api/drivers/lookup?phone=${encodeURIComponent("(905) 555-0199")}`, "dispatch"))).json()) as { onRio: boolean; name: string | null };
+    expect(none).toMatchObject({ onRio: false, name: null });
+    expect((await lookupGET(req("GET", "/api/drivers/lookup?phone=123", "dispatch"))).status).toBe(400);
   });
 });
