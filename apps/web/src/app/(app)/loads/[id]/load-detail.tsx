@@ -13,6 +13,7 @@ import { useUnits } from "@/components/app/units-context";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PaperworkPanel } from "./paperwork-panel";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/toaster";
@@ -291,6 +292,8 @@ export function LoadDetail({ initial, canWrite }: { initial: LoadDetailDto; canW
           </Card>
         </div>
       </div>
+
+      <PaperworkPanel loadId={load.id} reference={load.reference} canWrite={canWrite} />
 
       <Card className="mt-4">
         <CardHeader>

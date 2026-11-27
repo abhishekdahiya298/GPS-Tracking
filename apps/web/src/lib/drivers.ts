@@ -10,7 +10,8 @@ import { appState, type DriverAppState } from "./driver-app";
 import { NotFoundError } from "./errors";
 import { getPlatformSettings } from "./platform-settings";
 import { likePattern, PAGE_SIZES } from "./fleet-list";
-import { toLoadSummary, type LoadSummaryDto } from "./loads";
+import { toLoadSummary, withPaperwork, type LoadSummaryDto } from "./loads";
+import { driverDocuments } from "./paperwork";
 
 /**
  * Drivers and the vehicle each one drives now. One driver per vehicle at a time:
@@ -191,7 +192,8 @@ export async function listDriversPage(organizationId: string, q: DriverListQuery
         .leftJoin(schema.vehicles, and(eq(schema.vehicles.id, schema.loads.vehicleId), eq(schema.vehicles.organizationId, schema.loads.organizationId)))
         .where(and(eq(schema.loads.organizationId, organizationId), inArray(schema.loads.id, loadIds)))
     : [];
-  const loadsById = new Map(loadRows.map((x) => [x.l.id, toLoadSummary(x.l, new Date(now), x.vehicleName)]));
+  const loadDtos = await withPaperwork(organizationId, loadRows.map((x) => ({ row: x.l, dto: toLoadSummary(x.l, new Date(now), x.vehicleName) })));
+  const loadsById = new Map(loadDtos.map((x) => [x.id, x]));
   return {
     items: rows.map((r): DriverRow => {
       const seen = r.v_seen ? new Date(r.v_seen as string) : null;
@@ -445,6 +447,10 @@ export interface DriverRecord {
   history: AssignmentRow[];
   /** Last 7 days on the vehicles this driver drove (only the days they were assigned). */
   week: { distanceM: number; drivingS: number; trips: number; speeding: number };
+  /** The driver's latest loads with this company (A42), newest first. */
+  loads: LoadSummaryDto[];
+  /** The newest paperwork the driver sent (A42). */
+  documents: Awaited<ReturnType<typeof driverDocuments>>;
 }
 
 /** A driver's record: vehicle history and the last 7 days, for the side panel on Drivers. */
@@ -467,5 +473,16 @@ export async function driverRecord(organizationId: string, driverId: string, now
       where e.organization_id = ${organizationId} and e.type = 'speeding' and e.occurred_at > ${now.toISOString()}::timestamptz - interval '7 days'`)
   ]);
   const st = stats[0];
-  return { history, week: { distanceM: Number(st?.distance_m ?? 0), drivingS: Number(st?.driving_s ?? 0), trips: Number(st?.trips ?? 0), speeding: Number(speeding[0]?.n ?? 0) } };
+  const [me] = await getDb().select({ phone: schema.drivers.phone }).from(schema.drivers).where(and(eq(schema.drivers.id, driverId), eq(schema.drivers.organizationId, organizationId)));
+  const loadRows = me?.phone
+    ? await getDb()
+        .select({ l: schema.loads, vehicleName: schema.vehicles.name })
+        .from(schema.loads)
+        .leftJoin(schema.vehicles, eq(schema.vehicles.id, schema.loads.vehicleId))
+        .where(and(eq(schema.loads.organizationId, organizationId), eq(schema.loads.driverPhone, me.phone)))
+        .orderBy(sql`${schema.loads.createdAt} desc`)
+        .limit(12)
+    : [];
+  const [loads, documents] = await Promise.all([withPaperwork(organizationId, loadRows.map((x) => ({ row: x.l, dto: toLoadSummary(x.l, now, x.vehicleName) }))), driverDocuments(organizationId, driverId, 12)]);
+  return { history, loads, documents, week: { distanceM: Number(st?.distance_m ?? 0), drivingS: Number(st?.driving_s ?? 0), trips: Number(st?.trips ?? 0), speeding: Number(speeding[0]?.n ?? 0) } };
 }

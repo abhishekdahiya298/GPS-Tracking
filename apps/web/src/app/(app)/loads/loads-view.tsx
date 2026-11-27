@@ -1,5 +1,5 @@
 "use client";
-import { AlertTriangle, ArrowRight, Clock, Map as MapIcon, MapPin, PackagePlus, PauseCircle, Package } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, FileText, Map as MapIcon, MapPin, PackagePlus, PauseCircle, Package } from "lucide-react";
 import { haversineMeters } from "@rio-gps/core/geo";
 import { useUnits } from "@/components/app/units-context";
 import { placeText, useAddressState } from "@/lib/use-address";
@@ -116,7 +116,20 @@ export function RouteCell({ load }: { load: LoadSummaryDto }) {
           {load.eta ? `ETA ${t.time(load.eta.at)}${load.eta.lateByMinutes !== null ? (load.eta.late ? ` · ${fmtMinutes(load.eta.lateByMinutes)} late` : " · on time") : ""}` : "—"}
         </span>
       </span>
+      {load.paperwork && load.paperwork.requiredCount + load.paperwork.docs > 0 && <DocsChip p={load.paperwork} />}
     </div>
+  );
+}
+
+/** Paperwork at a glance: required done / required, red while something required is missing. */
+export function DocsChip({ p }: { p: NonNullable<LoadSummaryDto["paperwork"]> }) {
+  const tone = p.missing ? "bg-danger-soft text-danger" : p.requiredCount && p.requiredDone >= p.requiredCount ? "bg-success-soft text-success" : "bg-muted text-muted-foreground";
+  return (
+    <span title={p.missing ? `${p.missing} required item${p.missing > 1 ? "s" : ""} missing` : "Paperwork"} className={`inline-flex h-5 w-fit items-center gap-1 rounded-full px-1.5 text-[11px] font-bold ${tone}`}>
+      <FileText className="size-3" aria-hidden="true" />
+      {p.requiredCount ? `${p.requiredDone}/${p.requiredCount} docs` : `${p.docs} docs`}
+      {p.missing ? " · missing" : ""}
+    </span>
   );
 }
 

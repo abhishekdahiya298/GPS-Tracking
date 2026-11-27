@@ -21,6 +21,7 @@ import { writeAudit } from "./audit";
 import { getServerEnv } from "./env";
 import { ConflictError, NotFoundError, ValidationError } from "./errors";
 import { recordBillableLoad } from "./plans";
+import { paperworkCounts } from "./paperwork";
 import { assertRateLimit } from "./rate-limit";
 import { appAccessForPhone, notifyDriverPhone } from "./driver-loads";
 import { sendSms, smsConfigured, type SmsResult } from "./sms";
@@ -154,6 +155,8 @@ export interface LoadSummaryDto {
   stale: boolean;
   eta: { target: "pickup" | "delivery"; at: string; distanceM: number; lateByMinutes: number | null; late: boolean } | null;
   hasShipperLink: boolean;
+  /** Paperwork done/required and what's missing (lists and cards; filled by withPaperwork). */
+  paperwork?: { requiredDone: number; requiredCount: number; missing: number; docs: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -238,7 +241,16 @@ export async function listLoads(organizationId: string, opts: { filter?: (typeof
     )
     .orderBy(desc(l.createdAt))
     .limit(300);
-  return rows.map((r) => toLoadSummary(r.l, now, r.vehicleName));
+  return withPaperwork(organizationId, rows.map((r) => ({ row: r.l, dto: toLoadSummary(r.l, now, r.vehicleName) })));
+}
+
+/** Adds paperwork counts to load summaries (one query for all of them). Never fails the list. */
+export async function withPaperwork(organizationId: string, items: { row: LoadRow; dto: LoadSummaryDto }[]): Promise<LoadSummaryDto[]> {
+  const counts = await paperworkCounts(
+    organizationId,
+    items.map((x) => ({ id: x.row.id, status: x.row.status, paperwork: x.row.paperwork }))
+  ).catch(() => new Map<string, NonNullable<LoadSummaryDto["paperwork"]>>());
+  return items.map((x) => (counts.has(x.row.id) ? { ...x.dto, paperwork: counts.get(x.row.id) } : x.dto));
 }
 
 async function loadRow(organizationId: string, id: string): Promise<LoadRow> {
@@ -637,9 +649,12 @@ export async function openLoadsForDrivers(organizationId: string, drivers: { id:
     .leftJoin(schema.vehicles, and(eq(schema.vehicles.id, l.vehicleId), eq(schema.vehicles.organizationId, l.organizationId)))
     .where(and(eq(l.organizationId, organizationId), notInArray(l.status, ENDED), or(phones.length ? inArray(l.driverPhone, phones) : undefined, vehicles.length ? inArray(l.vehicleId, vehicles) : undefined)))
     .orderBy(desc(l.createdAt));
+  const hits: { driverId: string; row: LoadRow; vehicleName: string | null }[] = [];
   for (const d of drivers) {
     const hit = rows.find((r) => (d.phone && r.l.driverPhone === d.phone) || (d.vehicleId && r.l.trackingMode === "vehicle" && r.l.vehicleId === d.vehicleId));
-    if (hit) out.set(d.id, toLoadSummary(hit.l, now, hit.vehicleName));
+    if (hit) hits.push({ driverId: d.id, row: hit.l, vehicleName: hit.vehicleName });
   }
+  const dtos = await withPaperwork(organizationId, hits.map((h) => ({ row: h.row, dto: toLoadSummary(h.row, now, h.vehicleName) })));
+  hits.forEach((h, i) => out.set(h.driverId, dtos[i]!));
   return out;
 }
