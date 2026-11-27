@@ -6,6 +6,7 @@ import { deviceTimeZone, TimeZoneSelect } from "@/components/app/time-zone-selec
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Input, Select } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Field } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { api, ApiError, errorMessage } from "@/lib/client/api";
@@ -235,7 +236,7 @@ export function SignupFlow({ open, phoneCheck, emailCheck, initialRole, initialC
           <Input id="name" name="name" required autoComplete="name" />
         </Field>
         <Field id="phone" label="Mobile phone" required description={phoneCheck ? "We'll text you a code to confirm." : undefined}>
-          <Input id="phone" name="phone" type="tel" required autoComplete="tel" placeholder="(905) 555-0121" />
+          <PhoneInput id="phone" name="phone" required />
         </Field>
         {error && <Alert tone="danger">{error}</Alert>}
         <Button type="submit" loading={busy} className="h-11">
@@ -268,7 +269,7 @@ export function SignupFlow({ open, phoneCheck, emailCheck, initialRole, initialC
           <Input id="name" name="name" required maxLength={80} autoComplete="name" />
         </Field>
         <Field id="phone" label="Mobile phone" required>
-          <Input id="phone" name="phone" type="tel" required autoComplete="tel" placeholder="(905) 555-0121" />
+          <PhoneInput id="phone" name="phone" required />
         </Field>
         <Field id="email" label="Work email" required>
           <Input id="email" name="email" type="email" required autoComplete="email" placeholder="you@company.com" />

@@ -23,7 +23,7 @@ describe("normalizePhone", () => {
     for (const v of ["(416) 555-0123", "416-555-0123", "416.555.0123", "4165550123", "1 416 555 0123", "+1 416 555 0123"]) expect(normalizePhone(v)).toBe("+14165550123");
   });
   it("keeps other countries in E.164 and rejects junk", () => {
-    expect(normalizePhone("+44 20 7946 0958")).toBe("+442079460958");
+    expect(normalizePhone("+44 20 7946 0958")).toBeNull();
     for (const v of ["12345", "555-0123", "+0123456789", "phone", ""]) expect(normalizePhone(v)).toBeNull();
   });
 });

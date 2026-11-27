@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Checkbox, Input, Textarea } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Field } from "@/components/ui/label";
 import { api, ApiError, errorMessage } from "@/lib/client/api";
 import { onPlanRefusal, planDialogMounted, type PlanRefusal } from "@/lib/client/plan-events";
@@ -172,7 +173,7 @@ export function RequestUpgradeDialog({ preset, contact, onClose }: { preset: Nee
                 <Input id="up-trucks" type="number" min={1} inputMode="numeric" value={trucks} onChange={(e) => setTrucks(e.target.value)} placeholder="e.g. 12" />
               </Field>
               <Field id="up-phone" label="Your phone" description="Optional if we have it">
-                <Input id="up-phone" type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                <PhoneInput id="up-phone" value={phone} onChange={setPhone} />
               </Field>
             </div>
             <fieldset className="m-0 grid gap-2 border-0 p-0">

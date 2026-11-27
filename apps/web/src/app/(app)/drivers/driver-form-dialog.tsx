@@ -3,10 +3,11 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { Input, Select, Textarea } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Field } from "@/components/ui/label";
 import { toast } from "@/components/ui/toaster";
 import { api, errorMessage } from "@/lib/client/api";
-import { normalizePhone, PHONE_HINT } from "@/lib/phone";
+import { phoneProblem } from "@/lib/phone";
 import type { DriverRow } from "@/lib/drivers";
 import { asVehicleType, VEHICLE_TYPE_LABEL } from "@/lib/schemas/vehicle";
 
@@ -47,7 +48,8 @@ export function DriverFormDialog({ open, onOpenChange, driver, vehicles, onSaved
     e.preventDefault();
     const found: typeof errors = {};
     if (!v.name.trim()) found.name = "Enter the driver's name";
-    if (v.phone.trim() && !normalizePhone(v.phone)) found.phone = PHONE_HINT;
+    const phoneIssue = v.phone.trim() ? phoneProblem(v.phone) : null;
+    if (phoneIssue) found.phone = phoneIssue;
     if (v.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email.trim())) found.email = "Enter an email like name@company.com.";
     setErrors(found);
     if (Object.keys(found).length) {
@@ -76,8 +78,8 @@ export function DriverFormDialog({ open, onOpenChange, driver, vehicles, onSaved
             <Field id="d-name" label="Full name" required error={errors.name}>
               <Input id="d-name" autoFocus maxLength={120} aria-invalid={Boolean(errors.name)} {...field("name")} />
             </Field>
-            <Field id="d-phone" label="Phone" error={errors.phone}>
-              <Input id="d-phone" type="tel" inputMode="tel" maxLength={40} placeholder="(416) 555-0123" aria-invalid={Boolean(errors.phone)} {...field("phone")} />
+            <Field id="d-phone" label="Mobile">
+              <PhoneInput id="d-phone" value={v.phone} error={errors.phone} onChange={(x) => field("phone").onChange({ target: { value: x } })} />
             </Field>
             <Field id="d-vehicle" label="Vehicle they drive" description={taken ? `${taken.driver} drives it now; saving moves it here.` : undefined}>
               <Select id="d-vehicle" {...field("vehicleId")}>

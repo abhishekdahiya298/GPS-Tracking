@@ -1,13 +1,19 @@
+import { checkPhone } from "@rio-gps/core/phone";
+
 /**
  * Accepts the ways people type phone numbers; returns E.164 or null.
- * Ten digits are taken as North American (+1), the region RIO serves.
+ * RIO GPS works with Canada and the US (+1); the rules live in @rio-gps/core/phone so the
+ * website, the app and the server check numbers the same way.
  */
 export function normalizePhone(raw: string): string | null {
-  const s = raw.trim().replace(/[\s().-]/g, "");
-  if (/^\+[1-9]\d{7,14}$/.test(s)) return s;
-  if (/^\d{10}$/.test(s)) return `+1${s}`;
-  if (/^1\d{10}$/.test(s)) return `+${s}`;
-  return null;
+  const r = checkPhone(raw);
+  return r.ok ? r.e164 : null;
 }
 
-export const PHONE_HINT = "Enter a phone number like (416) 555-0123 or +1 416 555 0123.";
+/** What's wrong with a number, in plain words (null when it's fine). */
+export function phoneProblem(raw: string): string | null {
+  const r = checkPhone(raw);
+  return r.ok ? null : r.error;
+}
+
+export const PHONE_HINT = "Enter a Canada or US mobile number like (416) 555-0123.";
