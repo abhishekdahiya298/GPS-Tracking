@@ -1,6 +1,6 @@
 import { alertChannel, contextHasPermission, deviceSeenChannel, locationChannel } from "@rio-gps/core";
 import { requireAuthenticatedUserFromHeaders, requirePermission, requireTenantContext, resolveTenantContext } from "@/lib/authz";
-import { getServerEnv } from "@/lib/env";
+import { getServerEnv, offlineThresholdSeconds } from "@/lib/env";
 import { AppError, errorResponse, TooManyRequestsError } from "@/lib/errors";
 import { acquireStreamSlot, getLiveHub } from "@/lib/live-hub";
 import { listCurrentLocations } from "@/lib/locations";
@@ -90,7 +90,7 @@ export async function GET(request: Request) {
         }
         send("retry: 5000\n\n");
         const now = new Date();
-        const devices = await listCurrentLocations(organizationId, now, env.GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS);
+        const devices = await listCurrentLocations(organizationId, now, offlineThresholdSeconds(env));
         sendEvent("snapshot", { generatedAt: now.toISOString(), devices });
       } catch (err) {
         logger.error("sse.start_failed", { organizationId }, err);

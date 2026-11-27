@@ -7,18 +7,34 @@
  * sat = satellites in use, hdop/pdop = GPS accuracy, io69 = GNSS state, power = external
  * voltage (V), battery = internal battery (V), rssi = cell signal 0..5, result = command reply.
  */
+import { externalPowerVolts } from "@rio-gps/core/freshness";
 import { z } from "zod";
 
-/** Read-only Teltonika commands the console may send. Nothing that restarts or reconfigures. */
+/**
+ * Teltonika commands the console may send (FTM880/FTM164 SMS/GPRS command list). "read" ones only
+ * ask; "action" ones do something harmless on purpose (fresh position, FOTA check-in, restart) and
+ * the page confirms first. Nothing here changes the tracker's settings.
+ */
+export const CONFIG_PARAMS = ["2001", "2004", "2005", "2006", "2010", "107", "102", "103", "110", "10050", "10051", "10052", "10055", "10000"] as const;
 export const TRACKER_COMMANDS = [
-  { id: "getgps", label: "GPS status", explains: "Satellites, fix, position and GPS time" },
-  { id: "getinfo", label: "Device info", explains: "Start time, uptime, GNSS state, time without GPS" },
-  { id: "getstatus", label: "Network", explains: "Data link, operator, signal, roaming" },
-  { id: "battery", label: "Power and battery", explains: "External voltage and internal battery" },
-  { id: "getver", label: "Firmware", explains: "Firmware, GPS chip and hardware version" },
-  { id: "getio", label: "Inputs and outputs", explains: "Digital and analog inputs, outputs" }
-] as const;
+  { id: "getgps", label: "GPS status", explains: "Satellites, fix, position and GPS time", kind: "read" },
+  { id: "checkconfig", label: "Check settings", explains: "APN, server, intervals and sleep, compared with the RIO standard", kind: "read", data: `getparam ${CONFIG_PARAMS.join(";")}` },
+  { id: "battery", label: "Power and battery", explains: "Vehicle voltage and internal battery", kind: "read" },
+  { id: "getinfo", label: "Device info", explains: "Start time, uptime, GNSS state, time without GPS", kind: "read" },
+  { id: "getstatus", label: "Network", explains: "Data link, operator, signal, roaming", kind: "read" },
+  { id: "getops", label: "Networks nearby", explains: "Mobile networks the tracker can see", kind: "read" },
+  { id: "getver", label: "Firmware", explains: "Firmware, GPS chip and hardware version", kind: "read" },
+  { id: "getio", label: "Inputs and outputs", explains: "Digital and analog inputs, outputs", kind: "read" },
+  { id: "getrecord", label: "Locate now", explains: "Sends a fresh position and uploads anything stored", kind: "action" },
+  { id: "web_connect", label: "Install FOTA task now", explains: "Checks in with FOTA WEB so a pending config or firmware installs", kind: "action", confirm: "The tracker connects to FOTA WEB now and installs any pending task (it may restart). Continue?" },
+  { id: "cpureset", label: "Restart tracker", explains: "Reboots the tracker; it reconnects in about a minute", kind: "action", confirm: "Restart this tracker? It goes offline for about a minute and does not reply." }
+] as const satisfies ReadonlyArray<{ id: string; label: string; explains: string; kind: "read" | "action"; data?: string; confirm?: string }>;
 export type TrackerCommandId = (typeof TRACKER_COMMANDS)[number]["id"];
+/** What is actually sent to the tracker for a command id. */
+export function commandPayload(id: TrackerCommandId): string {
+  const c = TRACKER_COMMANDS.find((x) => x.id === id)!;
+  return "data" in c && c.data ? c.data : c.id;
+}
 export const TrackerCommandSchema = z.object({ command: z.enum(TRACKER_COMMANDS.map((c) => c.id) as [TrackerCommandId, ...TrackerCommandId[]]) });
 
 /** One report as the page shows it. Missing sensor values stay null ("not reported"). */
@@ -86,7 +102,7 @@ export function toDiagReport(raw: unknown): DiagReport | null {
     satellites: num(a.sat),
     hdop: num(a.hdop),
     gnssState: num(a.io69),
-    externalV: num(a.power),
+    externalV: externalPowerVolts(a),
     batteryV: num(a.battery),
     ignition: bool(a.ignition),
     motion: bool(a.motion),
@@ -238,4 +254,66 @@ export function overallVerdict(checks: HealthCheck[]): { level: Level; title: st
   if (warn.length) return { level: "warn", title: `Check: ${warn.map((c) => c.label).join(", ")}`, detail: warn.map((c) => c.detail).join(" ") };
   if (checks.every((c) => c.level === "unknown")) return { level: "unknown", title: "No data yet", detail: "Nothing has been received from this tracker in this time range." };
   return { level: "ok", title: "Healthy", detail: "Reporting, with GPS, power and signal all fine." };
+}
+
+/** One tracker setting checked against RIO's standard config. */
+export interface ConfigCheckRow {
+  id: string;
+  label: string;
+  actual: string | null;
+  expected: string;
+  /** "critical": the tracker can't reach RIO if wrong. "standard": differs from the v2 config. */
+  severity: "critical" | "standard";
+  ok: boolean;
+}
+
+/**
+ * RIO standard settings (RIO-GPS-FTM880-v2.cfg for vehicles, RIO-GPS-FTM164-trailer-v2.cfg for
+ * trailers). Display text maps raw values to words.
+ */
+export function configStandard(isTrailer: boolean): { id: string; label: string; expected: string; severity: "critical" | "standard"; show?: Record<string, string> }[] {
+  return [
+    { id: "2001", label: "APN", expected: "hologram", severity: "critical" },
+    { id: "2004", label: "Server", expected: "tracker.riogps.com", severity: "critical" },
+    { id: "2005", label: "Port", expected: "5027", severity: "critical" },
+    { id: "2006", label: "Protocol", expected: "0", severity: "critical", show: { "0": "TCP", "1": "UDP" } },
+    { id: "2010", label: "Second server", expected: "0", severity: "standard", show: { "0": "Off", "1": "Backup", "2": "Duplicate" } },
+    { id: "107", label: "Save/send records", expected: "2", severity: "standard", show: { "0": "After GPS fix", "1": "Always", "2": "After time sync" } },
+    { id: "102", label: "Sleep mode", expected: "3", severity: "standard", show: { "0": "Off", "3": "Online sleep", "4": "Deep sleep", "5": "Power off sleep" } },
+    { id: "103", label: "Sleep after (min)", expected: isTrailer ? "5" : "10", severity: "standard" },
+    { id: "110", label: "Battery charging", expected: "0", severity: "standard", show: { "0": "On need", "1": "After ignition on", "2": "Always" } },
+    { id: "10050", label: "Driving: every (s)", expected: "60", severity: "standard" },
+    { id: "10051", label: "Driving: every (m)", expected: "400", severity: "standard" },
+    { id: "10052", label: "Driving: on turn (°)", expected: "15", severity: "standard" },
+    { id: "10055", label: "Driving: upload every (s)", expected: isTrailer ? "60" : "30", severity: "standard" },
+    { id: "10000", label: "Parked: every (s)", expected: "14400", severity: "standard" }
+  ];
+}
+
+/**
+ * Reads a getparam reply. Teltonika answers either "Param ID:2001 Value:hologram" (one or more)
+ * or "2001:hologram;2004:..."; both are accepted.
+ */
+export function parseParams(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const re1 = /Param\s*ID\s*:?\s*(\d+)\s*(?:New\s*)?Val(?:ue)?\s*:\s*(.*?)(?=\s*Param\s*ID|\s*;|$)/gis;
+  for (const m of text.matchAll(re1)) out[m[1]!] = m[2]!.trim();
+  if (Object.keys(out).length) return out;
+  for (const part of text.split(/[;\n]/)) {
+    const m = /^\s*(\d{3,7})\s*[:=]\s*(.*)$/.exec(part);
+    if (m) out[m[1]!] = m[2]!.trim();
+  }
+  return out;
+}
+
+/** Compares a getparam reply with RIO's standard; null when the reply has none of the settings. */
+export function checkConfig(text: string, isTrailer: boolean): ConfigCheckRow[] | null {
+  const got = parseParams(text);
+  const rows = configStandard(isTrailer).filter((s) => s.id in got || CONFIG_PARAMS.includes(s.id as (typeof CONFIG_PARAMS)[number]));
+  if (!rows.some((s) => s.id in got)) return null;
+  return rows.map((s) => {
+    const raw = got[s.id] ?? null;
+    const word = (v: string | null) => (v === null ? null : (s.show?.[v] ?? v));
+    return { id: s.id, label: s.label, actual: word(raw), expected: word(s.expected)!, severity: s.severity, ok: raw !== null && raw.toLowerCase() === s.expected.toLowerCase() };
+  });
 }

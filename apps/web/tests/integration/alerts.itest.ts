@@ -183,16 +183,25 @@ describe("evaluation through the real webhook", () => {
 describe("offline scheduler", () => {
   it("fires once per outage, re-arms on the next position, and is single-runner", async () => {
     await rulePOST(req("POST", "/api/alert-rules", "admin", { name: "Offline 60m", type: "device_offline", offlineMinutes: 60 }));
-    await getDb().update(schema.gpsDevices).set({ lastSeenAt: new Date(Date.now() - 3 * 3600_000) }).where(eq(schema.gpsDevices.id, devA));
+    await getDb().update(schema.gpsDevices).set({ lastSeenAt: new Date(Date.now() - 5 * 3600_000) }).where(eq(schema.gpsDevices.id, devA));
     await getDb().update(schema.gpsDevices).set({ lastSeenAt: new Date() }).where(eq(schema.gpsDevices.id, devA2));
     const [a, b] = await Promise.all([runOfflineCheck(), runOfflineCheck()]);
     expect(a + b).toBe(1);
     expect(await runOfflineCheck()).toBe(0);
     await drive(IMEI_A, 43.8, -79.8, 0, null); // back online → re-arms
-    await getDb().update(schema.gpsDevices).set({ lastSeenAt: new Date(Date.now() - 3 * 3600_000) }).where(eq(schema.gpsDevices.id, devA));
+    await getDb().update(schema.gpsDevices).set({ lastSeenAt: new Date(Date.now() - 5 * 3600_000) }).where(eq(schema.gpsDevices.id, devA));
     expect(await runOfflineCheck()).toBe(1);
     const off = (await events(orgA)).filter((e) => e.type === "device_offline");
     expect(off.map((e) => e.deviceId)).toEqual([devA, devA]);
+  });
+
+  it("parked trackers get their 4 h report window; a driving one uses the rule's minutes", async () => {
+    await drive(IMEI_A, 43.8, -79.8, 0, false); // parked, re-arms
+    await getDb().update(schema.gpsDevices).set({ lastSeenAt: new Date(Date.now() - 3 * 3600_000) }).where(eq(schema.gpsDevices.id, devA));
+    expect(await runOfflineCheck()).toBe(0); // parked 3 h: next report not due yet
+    await drive(IMEI_A, 43.81, -79.8, 80, true); // driving, re-arms
+    await getDb().update(schema.gpsDevices).set({ lastSeenAt: new Date(Date.now() - 70 * 60_000) }).where(eq(schema.gpsDevices.id, devA));
+    expect(await runOfflineCheck()).toBe(1); // driving and silent 70 min > 60 min rule
   });
 
   it("never raises offline alerts for trailers (their tracker loses power when unhooked)", async () => {

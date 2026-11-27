@@ -1,6 +1,6 @@
 import { contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
-import { getServerEnv } from "@/lib/env";
+import { offlineThresholdSeconds } from "@/lib/env";
 import { listVehiclesPage, parseListQuery, VehicleListQuery } from "@/lib/fleet-list";
 import { requireTenantPage } from "@/lib/request-context";
 import { listGroups } from "@/lib/vehicle-groups";
@@ -18,7 +18,7 @@ export default async function VehiclesPage({ searchParams }: { searchParams: Pro
   const groups = await listGroups(ctx.organizationId);
   // A group that no longer exists (deleted, or an id from elsewhere) is not a filter.
   if (q.group && !groups.some((g) => g.id === q.group)) q.group = undefined;
-  const data = await listVehiclesPage(ctx.organizationId, q, new Date(), getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS);
+  const data = await listVehiclesPage(ctx.organizationId, q, new Date(), offlineThresholdSeconds());
   // Permissions only shape the UI; every API call re-checks them on the server.
   const can = {
     create: contextHasPermission(ctx, "vehicles.create"),

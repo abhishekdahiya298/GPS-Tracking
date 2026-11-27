@@ -5,14 +5,14 @@ import { writeAudit } from "./audit";
 import { AppError, NotFoundError } from "./errors";
 import { logger } from "./logger";
 import { assertRateLimit } from "./rate-limit";
-import { hourlyBuckets, healthChecks, overallVerdict, toDiagReport, TRACKER_COMMANDS, type DiagReport, type HealthCheck, type HourBucket, type Level, type TrackerCommandId } from "./tracker-diagnostics-model";
+import { hourlyBuckets, healthChecks, overallVerdict, toDiagReport, TRACKER_COMMANDS, commandPayload, type DiagReport, type HealthCheck, type HourBucket, type Level, type TrackerCommandId } from "./tracker-diagnostics-model";
 
 /**
  * Tracker diagnostics for super admins (Platform console → Trackers → a tracker).
  *
  * Read-only and on demand: it reads Traccar's stored reports through Traccar's REST API only
  * when the page asks, for a bounded time range, and never touches the live position path
- * (Traccar webhook → ingest → Redis → maps). Commands are limited to a read-only allowlist,
+ * (Traccar webhook → ingest → Redis → maps). Commands are limited to an allowlist (no setting changes),
  * rate limited per tracker and written to the audit log.
  */
 
@@ -52,7 +52,7 @@ export interface DiagnosticsTracker {
   status: string;
   lastSeenAt: string | null;
   customer: { id: string; name: string } | null;
-  vehicle: { id: string; name: string } | null;
+  vehicle: { id: string; name: string; type: string } | null;
   sim: { iccid: string; msisdn: string | null; status: string; plan: string | null; provider: string | null } | null;
   /** Newest usable position RIO stored (may be older than the time range). */
   lastFix: { at: string; latitude: number; longitude: number } | null;
@@ -97,7 +97,7 @@ async function loadTracker(id: string): Promise<DiagnosticsTracker> {
 
   const [[vehicle], [sim], [fix]] = await Promise.all([
     db
-      .select({ id: schema.vehicles.id, name: schema.vehicles.name })
+      .select({ id: schema.vehicles.id, name: schema.vehicles.name, type: schema.vehicles.type })
       .from(schema.deviceAssignments)
       .innerJoin(schema.vehicles, eq(schema.vehicles.id, schema.deviceAssignments.vehicleId))
       .where(and(eq(schema.deviceAssignments.deviceId, id), isNull(schema.deviceAssignments.unassignedAt)))
@@ -203,7 +203,7 @@ export async function getCommandReplies(id: string, since: Date, now = new Date(
     .map((r) => ({ at: r.receivedAt, text: r.result! }));
 }
 
-/** Sends one read-only command to the tracker. Rate limited per tracker; audited. */
+/** Sends one allowlisted command to the tracker (see TRACKER_COMMANDS). Rate limited per tracker; audited. */
 export async function sendTrackerCommand(
   actorUserId: string,
   id: string,
@@ -219,7 +219,7 @@ export async function sendTrackerCommand(
   const sentAt = new Date();
   let status: "sent" | "queued";
   try {
-    status = await client.sendCommand(device.id, command);
+    status = await client.sendCommand(device.id, commandPayload(command));
   } catch (err) {
     logger.warn("diagnostics.command_failed", { trackerId: id, command }, err);
     throw new AppError("TRACCAR_UNAVAILABLE", 502, "Traccar didn't accept the command. Try again in a moment.");

@@ -14,6 +14,7 @@ import {
   Satellite,
   Send,
   Signal,
+  Zap,
   TriangleAlert,
   Wifi,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { RelativeTime } from "@/components/app/local-time";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -39,6 +41,7 @@ import { api } from "@/lib/client/api";
 import { cn } from "@/lib/cn";
 import type { TrackerDiagnostics } from "@/lib/tracker-diagnostics";
 import {
+  checkConfig,
   parseReply,
   TRACKER_COMMANDS,
   type HealthCheck,
@@ -471,7 +474,7 @@ function Spark({
   );
 }
 
-/** Read-only commands; replies polled for a minute after each send. */
+/** Questions and quick actions; replies polled for a minute after each send. */
 function Commands({ data }: { data: TrackerDiagnostics }) {
   const time = useTime();
   const id = data.tracker.id;
@@ -541,98 +544,139 @@ function Commands({ data }: { data: TrackerDiagnostics }) {
     }
   };
 
+  const isTrailer = data.tracker.vehicle?.type === "trailer";
+  const [confirming, setConfirming] = useState<(typeof TRACKER_COMMANDS)[number] | null>(null);
+  const group = (kind: "read" | "action") => TRACKER_COMMANDS.filter((c) => c.kind === kind);
+  const button = (c: (typeof TRACKER_COMMANDS)[number]) => (
+    <button
+      key={c.id}
+      type="button"
+      disabled={!supported || busy !== null}
+      onClick={() => ("confirm" in c && c.confirm ? setConfirming(c) : void send(c.id))}
+      className="flex items-start gap-2 rounded-lg border border-border bg-background p-2.5 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {busy === c.id ? (
+        <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" aria-hidden="true" />
+      ) : c.kind === "action" ? (
+        <Zap className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+      ) : (
+        <Send className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+      )}
+      <span className="min-w-0">
+        <span className="block text-sm font-medium">
+          {c.label}{" "}
+          <code className="ml-1 text-[11px] font-normal text-muted-foreground">{"data" in c ? "getparam" : c.id}</code>
+        </span>
+        <span className="block text-xs text-muted-foreground">{c.explains}</span>
+      </span>
+    </button>
+  );
+  const label = (id: string | undefined) => TRACKER_COMMANDS.find((c) => c.id === id)?.label;
+
   return (
     <Card className="p-4">
       <h2 className="m-0 flex items-center gap-2 text-base font-semibold">
         <Send className="size-4" aria-hidden="true" /> Ask the tracker
       </h2>
       <p className="m-0 mt-0.5 text-[13px] text-muted-foreground">
-        Read-only questions sent over its data connection. They can&apos;t
-        change settings or restart it. Each one is recorded in Activity.
+        Sent over its data connection. None of these change its settings. Each one is recorded in Activity.
       </p>
       {!supported && (
         <p className="m-0 mt-2 rounded-md bg-muted p-2 text-[13px]">
-          Commands are available for Teltonika trackers only (this one uses{" "}
-          {data.traccar.protocol}).
+          Commands are available for Teltonika trackers only (this one uses {data.traccar.protocol}).
         </p>
       )}
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-        {TRACKER_COMMANDS.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            disabled={!supported || busy !== null}
-            onClick={() => void send(c.id)}
-            className="flex items-start gap-2 rounded-lg border border-border bg-background p-2.5 text-left transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {busy === c.id ? (
-              <Loader2
-                className="mt-0.5 size-4 shrink-0 animate-spin"
-                aria-hidden="true"
-              />
-            ) : (
-              <Send
-                className="mt-0.5 size-4 shrink-0 text-primary"
-                aria-hidden="true"
-              />
-            )}
-            <span className="min-w-0">
-              <span className="block text-sm font-medium">
-                {c.label}{" "}
-                <code className="ml-1 text-[11px] font-normal text-muted-foreground">
-                  {c.id}
-                </code>
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                {c.explains}
-              </span>
-            </span>
-          </button>
-        ))}
-      </div>
+      <h3 className="m-0 mt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Questions</h3>
+      <div className="mt-1.5 grid gap-2 sm:grid-cols-2">{group("read").map(button)}</div>
+      <h3 className="m-0 mt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Quick actions</h3>
+      <div className="mt-1.5 grid gap-2 sm:grid-cols-3">{group("action").map(button)}</div>
 
       {waiting && (
-        <p
-          className={cn(
-            "m-0 mt-3 flex items-center gap-2 rounded-md p-2 text-[13px]",
-            waiting.status === "queued" ? "bg-warning-soft" : "bg-info-soft",
-          )}
-        >
-          {waiting.status === "sent" ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <TriangleAlert className="size-4" aria-hidden="true" />
-          )}
+        <p className={cn("m-0 mt-3 flex items-center gap-2 rounded-md p-2 text-[13px]", waiting.status === "queued" ? "bg-warning-soft" : "bg-info-soft")}>
+          {waiting.status === "sent" ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="size-4" aria-hidden="true" />}
           {waiting.status === "sent"
-            ? `Sent ${waiting.command}. Waiting for the tracker's reply…`
-            : `No reply yet to ${waiting.command}. The tracker is offline or busy; Traccar delivers the command when it next connects. Refresh later.`}
+            ? waiting.command === "cpureset"
+              ? "Restart sent. The tracker reconnects in about a minute (no reply is expected)."
+              : `Sent “${label(waiting.command)}”. Waiting for the tracker’s reply…`
+            : `No reply yet to “${label(waiting.command)}”. The tracker is asleep or out of coverage. It gets the command the next time it connects: within a minute when driving, up to 4 hours when parked. This page shows the reply when it arrives.`}
         </p>
       )}
 
       <h3 className="m-0 mt-4 text-sm font-semibold">Replies</h3>
       {replies.length === 0 ? (
-        <p className="m-0 mt-1 text-[13px] text-muted-foreground">
-          No replies in this time range yet.
-        </p>
+        <p className="m-0 mt-1 text-[13px] text-muted-foreground">No replies in this time range yet.</p>
       ) : (
         <ul className="m-0 mt-2 grid list-none gap-2 p-0">
-          {replies.slice(0, 12).map((r) => (
-            <li
-              key={`${r.at}-${r.text}`}
-              className="rounded-lg border border-border p-2.5"
-            >
-              <div className="mb-1.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>{r.command ? <code>{r.command}</code> : "Reply"}</span>
-                <time dateTime={r.at} title={time.full(r.at)}>
-                  {time.dateTimeSec(r.at)}
-                </time>
-              </div>
-              <ReplyChips text={r.text} />
-            </li>
-          ))}
+          {replies.slice(0, 12).map((r) => {
+            const cfg = checkConfig(r.text, isTrailer);
+            return (
+              <li key={`${r.at}-${r.text}`} className="rounded-lg border border-border p-2.5">
+                <div className="mb-1.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>{cfg ? "Settings check" : r.command ? <code>{r.command}</code> : "Reply"}</span>
+                  <time dateTime={r.at} title={time.full(r.at)}>
+                    {time.dateTimeSec(r.at)}
+                  </time>
+                </div>
+                {cfg ? <ConfigTable rows={cfg} isTrailer={isTrailer} raw={r.text} /> : <ReplyChips text={r.text} />}
+              </li>
+            );
+          })}
         </ul>
       )}
+      <ConfirmDialog
+        open={confirming !== null}
+        onOpenChange={(o) => !o && setConfirming(null)}
+        title={confirming?.label ?? ""}
+        description={confirming && "confirm" in confirming ? confirming.confirm : undefined}
+        confirmLabel={confirming?.label ?? "Send"}
+        destructive={confirming?.id === "cpureset"}
+        onConfirm={async () => {
+          if (confirming) await send(confirming.id);
+        }}
+      />
     </Card>
+  );
+}
+
+/** Settings read from the tracker, ✓/✗ against RIO's standard config. */
+function ConfigTable({ rows, isTrailer, raw }: { rows: NonNullable<ReturnType<typeof checkConfig>>; isTrailer: boolean; raw: string }) {
+  const bad = rows.filter((r) => !r.ok);
+  const critical = bad.filter((r) => r.severity === "critical");
+  return (
+    <div>
+      <p className={cn("m-0 mb-2 rounded-md p-2 text-[13px] font-medium", critical.length ? "bg-danger-soft text-danger" : bad.length ? "bg-warning-soft" : "bg-success-soft text-success")}>
+        {critical.length
+          ? `Can’t reach RIO correctly: ${critical.map((r) => r.label).join(", ")} wrong. Fix it before anything else.`
+          : bad.length
+            ? `Reaches RIO. ${bad.length} setting${bad.length === 1 ? " differs" : "s differ"} from the RIO standard (${isTrailer ? "RIO-GPS-FTM164-trailer-v2" : "RIO-GPS-FTM880-v2"}).`
+            : `Matches the RIO standard (${isTrailer ? "RIO-GPS-FTM164-trailer-v2" : "RIO-GPS-FTM880-v2"}).`}
+      </p>
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="text-left text-muted-foreground">
+            <th className="py-1 pr-2 font-medium">Setting</th>
+            <th className="py-1 pr-2 font-medium">On the tracker</th>
+            <th className="py-1 font-medium">RIO standard</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className="border-t border-border">
+              <td className="py-1 pr-2">{r.label}</td>
+              <td className={cn("py-1 pr-2 font-medium", r.ok ? "text-success" : r.severity === "critical" ? "text-danger" : "text-warning")}>
+                {r.ok ? "✓ " : "✗ "}
+                {r.actual ?? "not returned"}
+              </td>
+              <td className="py-1 text-muted-foreground">{r.expected}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <details className="mt-1.5 text-xs text-muted-foreground">
+        <summary className="cursor-pointer">Raw reply</summary>
+        <p className="m-0 mt-1 break-words font-mono">{raw}</p>
+      </details>
+    </div>
   );
 }
 

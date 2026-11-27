@@ -24,7 +24,7 @@ describe("design system", () => {
 
   it("status is conveyed by text, not colour alone", () => {
     expect(html(<StatusBadge tone="success" label="Online" />)).toContain("Online");
-    expect(html(<ConnectivityBadge status="offline" />)).toContain("Offline");
+    expect(html(<ConnectivityBadge status="offline" />)).toContain("No signal");
     expect(html(<ConnectivityBadge status="never_seen" />)).toContain("No data yet");
   });
 

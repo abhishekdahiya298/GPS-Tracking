@@ -28,6 +28,12 @@ const ServerEnvSchema = z.object({
     .pipe(z.array(z.string().url("AUTH_ALIAS_URLS must be comma-separated https:// URLs"))),
   /** A device is "online" if RIO received data from it within this many seconds. */
   GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3_900),
+  /**
+   * Silence allowed for a parked tracker. RIO's standard configs report every 4 h while parked,
+   * so the effective threshold is the larger of this and GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS
+   * (see offlineThresholdSeconds). A driving tracker is flagged sooner ("No signal", 15 min).
+   */
+  GPS_PARKED_OFFLINE_SECONDS: z.coerce.number().int().min(60).max(172_800).default(16_200),
   /** Upper bound on a single location-history query window. */
   MAX_HISTORY_RANGE_DAYS: z.coerce.number().int().min(1).max(366).default(31),
   /** Interval between SSE keep-alive comments. */
@@ -99,4 +105,13 @@ export function getServerEnv(source: NodeJS.ProcessEnv = process.env): ServerEnv
     cached = result.data;
   }
   return result.data;
+}
+
+/**
+ * Seconds of silence before a tracker counts as not reporting: the larger of the two env values,
+ * so an older server .env that still sets GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS=3900 cannot flag
+ * parked trucks (which report every 4 h) as offline.
+ */
+export function offlineThresholdSeconds(env: ServerEnv = getServerEnv()): number {
+  return Math.max(env.GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS, env.GPS_PARKED_OFFLINE_SECONDS);
 }

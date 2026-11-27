@@ -21,7 +21,7 @@ export const CONNECTIVITY: Record<string, { tone: StatusTone; label: string }> =
   moving: { tone: "success", label: "Moving" },
   idle: { tone: "warning", label: "Idling" },
   stopped: { tone: "info", label: "Stopped" },
-  offline: { tone: "neutral", label: "Offline" },
+  offline: { tone: "neutral", label: "No signal" },
   never_seen: { tone: "neutral", label: "No data yet" },
   inactive: { tone: "neutral", label: "Deactivated" }
 };

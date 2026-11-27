@@ -1,7 +1,7 @@
 import { lockedPageFor } from "@/lib/plan-gate";
 import { contextHasPermission } from "@rio-gps/core";
 import { redirect } from "next/navigation";
-import { getServerEnv } from "@/lib/env";
+import { offlineThresholdSeconds } from "@/lib/env";
 import { DeviceListQuery, listDevicesPage, parseListQuery } from "@/lib/fleet-list";
 import { requireTenantPage } from "@/lib/request-context";
 import { getPlatformSettings } from "@/lib/platform-settings";
@@ -18,7 +18,7 @@ export default async function DevicesPage({ searchParams }: { searchParams: Prom
   if (!contextHasPermission(ctx, "devices.read")) redirect("/dashboard");
   const q = parseListQuery(DeviceListQuery, await searchParams);
   const manage = contextHasPermission(ctx, "devices.manage");
-  const data = await listDevicesPage(ctx.organizationId, q, new Date(), getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS, { includeImeiLast4: manage });
+  const data = await listDevicesPage(ctx.organizationId, q, new Date(), offlineThresholdSeconds(), { includeImeiLast4: manage });
   const can = { manage, assign: contextHasPermission(ctx, "devices.assign"), unassign: contextHasPermission(ctx, "devices.unassign"), superAdmin: ctx.isSuperAdmin };
   return <DevicesView data={data} query={q} can={can} supportEmail={(await getPlatformSettings()).supportEmail} />;
 }

@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { requireAuthenticatedUserFromHeaders, resolveTenantContext } from "@/lib/authz";
 import { driversByVehicle } from "@/lib/drivers";
 import { getOrgSettings } from "@/lib/organization";
-import { getServerEnv } from "@/lib/env";
+import { offlineThresholdSeconds } from "@/lib/env";
 import { AppError } from "@/lib/errors";
 import { getMapsSettings } from "@/lib/maps-settings";
 import { listGroups } from "@/lib/vehicle-groups";
@@ -36,5 +36,5 @@ export default async function MapPage() {
   const vehicleInfo = canVehicles
     ? Object.fromEntries((await listVehicles(ctx.organizationId)).map((v) => [v.id, { vin: v.vin, modelYear: v.modelYear, make: v.make, model: v.model, sortOrder: v.sortOrder, plateRegion: v.plateRegion }]))
     : {};
-  return <LiveMap offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} groups={groups} canShare={canShare} defaultStyle={maps.mapStyle} addresses={maps.addressProvider !== "off"} platformAdmin={ctx.isSuperAdmin} drivers={drivers} vehicleInfo={vehicleInfo} mapPrefs={org.mapPrefs} canDrivers={canVehicles} />;
+  return <LiveMap offlineSeconds={offlineThresholdSeconds()} groups={groups} canShare={canShare} defaultStyle={maps.mapStyle} addresses={maps.addressProvider !== "off"} platformAdmin={ctx.isSuperAdmin} drivers={drivers} vehicleInfo={vehicleInfo} mapPrefs={org.mapPrefs} canDrivers={canVehicles} />;
 }

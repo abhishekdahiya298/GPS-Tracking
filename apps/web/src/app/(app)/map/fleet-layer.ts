@@ -6,7 +6,7 @@
 import type { GeoJSONSource, Map as MlMap, MapLayerMouseEvent } from "maplibre-gl";
 import { VEHICLE_TYPES, type VehicleType } from "@/lib/schemas/vehicle";
 import { VEHICLE_GLYPHS, WHEEL_Y } from "@/lib/vehicle-glyphs";
-import { DEFAULT_ICON_PREFS, bearing, iconName, iconNames, lerpLngLat, shouldAnimate, type IconPrefs, type MapState } from "./fleet-model";
+import { DEFAULT_ICON_PREFS, bearing, catchUp, glideMs, iconName, iconNames, lerpLngLat, lineLngLat, shouldAnimate, type IconPrefs, type MapState } from "./fleet-model";
 
 export interface FleetPoint {
   id: string;
@@ -16,6 +16,8 @@ export interface FleetPoint {
   type: VehicleType;
   lngLat: [number, number];
   heading: number | null;
+  /** When the tracker recorded this position (ms), used to glide at the recorded pace. */
+  t?: number | null;
   /** Second line of the name chip, e.g. "62 mph" or "Parked". */
   sub?: string;
 }
@@ -57,6 +59,12 @@ interface Anim {
   from: [number, number];
   to: [number, number];
   start: number;
+  /** Segment duration; long glides are linear (constant speed), short hops eased. */
+  dur: number;
+}
+interface Leg {
+  to: [number, number];
+  dur: number;
 }
 
 const pixelRatio = () => Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
@@ -271,8 +279,14 @@ export class FleetLayer {
   private trailsDirty = false;
   private display = new Map<string, [number, number]>();
   private anims = new Map<string, Anim>();
+  /** Points still to drive through, in order (smooth gliding). */
+  private legs = new Map<string, Leg[]>();
+  /** Last position queued for each vehicle and when it was recorded. */
+  private target = new Map<string, { lngLat: [number, number]; t: number | null }>();
   private raf = 0;
   private lastFrame = 0;
+  /** Vehicle the camera follows; tracked every frame so it stays centred while gliding. */
+  private followId: string | null = null;
   private dirty = false;
   /** Full rebuild needed (snapshot, add/remove); otherwise only `changed` ids are sent. */
   private structural = true;
@@ -572,17 +586,24 @@ export class FleetLayer {
     this.points.clear();
     this.display.clear();
     this.anims.clear();
+    this.legs.clear();
+    this.target.clear();
     this.trails.clear();
     this.trailsDirty = true;
     for (const p of points) {
       this.points.set(p.id, p);
       this.display.set(p.id, p.lngLat);
+      this.target.set(p.id, { lngLat: p.lngLat, t: p.t ?? null });
     }
     this.structural = true;
     this.schedule();
   }
 
-  /** Apply changed points (live updates, state changes). Moves glide from the displayed position. */
+  /**
+   * Apply changed points (live updates, state changes). A driving vehicle glides through each new
+   * point at the pace it was recorded, so it keeps moving smoothly between uploads; other moves are
+   * a short hop, and long jumps (or reduced motion) teleport.
+   */
   upsert(points: FleetPoint[]) {
     const now = performance.now();
     const animate = !this.reduceMotion && this.map.getZoom() >= 9;
@@ -590,25 +611,57 @@ export class FleetLayer {
       const shown = this.display.get(p.id);
       if (!this.points.has(p.id)) this.structural = true;
       this.changed.add(p.id);
+      const prevTarget = this.target.get(p.id);
+      const samePlace = prevTarget && prevTarget.lngLat[0] === p.lngLat[0] && prevTarget.lngLat[1] === p.lngLat[1];
+      const gliding = this.anims.has(p.id) || (this.legs.get(p.id)?.length ?? 0) > 0;
       const heading = p.heading ?? (shown ? bearing(shown, p.lngLat) : null);
-      if (p.state === "moving") {
-        const prev = this.points.get(p.id);
-        const tail = this.trails.get(p.id) ?? (prev ? [prev.lngLat] : []);
-        // A "seen" ping (reported, no new fix) repeats the same position: no trail point for it.
-        const last = tail[tail.length - 1];
-        if (!last || last[0] !== p.lngLat[0] || last[1] !== p.lngLat[1]) tail.push(p.lngLat);
-        this.trails.set(p.id, tail.slice(-TRAIL_POINTS));
-      } else this.trails.delete(p.id);
+      this.points.set(p.id, { ...p, heading: gliding ? (this.points.get(p.id)?.heading ?? heading) : heading });
+      if (p.state !== "moving") this.trails.delete(p.id);
       this.trailsDirty = true;
-      this.points.set(p.id, { ...p, heading });
-      if (shown && animate && this.anims.size < MAX_ANIMATING && shouldAnimate(shown, p.lngLat)) {
-        this.anims.set(p.id, { from: shown, to: p.lngLat, start: now });
+      // A "seen" ping (reported, no new fix) or a status change repeats the same position.
+      if (samePlace) continue;
+      const from = prevTarget?.lngLat ?? shown;
+      if (from && shown && animate && this.anims.size < MAX_ANIMATING && shouldAnimate(from, p.lngLat)) {
+        const gap = p.t != null && prevTarget?.t != null ? p.t - prevTarget.t : null;
+        const legs = this.legs.get(p.id) ?? [];
+        legs.push({ to: p.lngLat, dur: glideMs(gap, p.state === "moving") });
+        const durs = catchUp(legs.map((l) => l.dur));
+        legs.forEach((l, i) => (l.dur = durs[i]!));
+        this.legs.set(p.id, legs);
+        if (!this.anims.has(p.id)) this.nextLeg(p.id, shown, now);
       } else {
         this.anims.delete(p.id);
+        this.legs.delete(p.id);
         this.display.set(p.id, p.lngLat);
+        this.pushTrail(p.id, p.lngLat);
       }
+      this.target.set(p.id, { lngLat: p.lngLat, t: p.t ?? null });
     }
     this.schedule();
+  }
+
+  /** Start gliding to the next queued point (if any) from where the vehicle is drawn. */
+  private nextLeg(id: string, from: [number, number], now: number) {
+    const leg = this.legs.get(id)?.shift();
+    if (!leg) {
+      this.anims.delete(id);
+      return;
+    }
+    this.anims.set(id, { from, to: leg.to, start: now, dur: leg.dur });
+    // Face the direction of travel for this stretch.
+    const p = this.points.get(id);
+    if (p && p.state === "moving") this.points.set(id, { ...p, heading: bearing(from, leg.to) });
+  }
+
+  /** Trail of real positions the vehicle has already passed (only while moving). */
+  private pushTrail(id: string, lngLat: [number, number]) {
+    const p = this.points.get(id);
+    if (!p || p.state !== "moving") return;
+    const tail = this.trails.get(id) ?? [];
+    const last = tail[tail.length - 1];
+    if (!last || last[0] !== lngLat[0] || last[1] !== lngLat[1]) tail.push(lngLat);
+    this.trails.set(id, tail.slice(-TRAIL_POINTS));
+    this.trailsDirty = true;
   }
 
   remove(ids: string[]) {
@@ -616,11 +669,23 @@ export class FleetLayer {
       this.points.delete(id);
       this.display.delete(id);
       this.anims.delete(id);
+      this.legs.delete(id);
+      this.target.delete(id);
       this.trails.delete(id);
     }
     this.trailsDirty = true;
     this.structural = true;
     this.schedule();
+  }
+
+  /** Keep the camera on this vehicle as it glides (null = stop following). */
+  setFollow(id: string | null) {
+    this.followId = id;
+  }
+
+  /** True while a vehicle is gliding through queued points. */
+  isGliding(id: string): boolean {
+    return this.anims.has(id) || (this.legs.get(id)?.length ?? 0) > 0;
   }
 
   select(id: string | null) {
@@ -718,13 +783,20 @@ export class FleetLayer {
       this.raf = requestAnimationFrame(this.frame);
       return;
     }
-    for (const [id, a] of this.anims) {
-      const k = (t - a.start) / ANIM_MS;
+    for (const [id, a] of [...this.anims]) {
+      const k = (t - a.start) / a.dur;
       if (k >= 1) {
         this.display.set(id, a.to);
+        this.pushTrail(id, a.to);
         this.anims.delete(id);
-      } else this.display.set(id, lerpLngLat(a.from, a.to, k));
+        // Carry on to the next queued point without a pause.
+        this.nextLeg(id, a.to, a.start + a.dur > t - 250 ? a.start + a.dur : t);
+      } else this.display.set(id, a.dur > ANIM_MS ? lineLngLat(a.from, a.to, k) : lerpLngLat(a.from, a.to, k));
       this.changed.add(id);
+    }
+    if (this.followId && this.anims.has(this.followId)) {
+      const c = this.display.get(this.followId);
+      if (c && !this.map.isMoving()) this.map.jumpTo({ center: c });
     }
     // A vehicle entering or leaving the active filter changes what is on the map: rebuild.
     if (!this.structural) {
@@ -773,7 +845,7 @@ export class FleetLayer {
           const p = this.points.get(id);
           if (!p || p.state !== "moving" || !this.passes(p)) continue;
           // The tail ends where the vehicle is drawn right now, so it never detaches while gliding.
-          const pts = this.anims.has(id) ? [...tail.slice(0, -1), this.display.get(id)!] : tail;
+          const pts = this.anims.has(id) ? [...tail, this.display.get(id)!] : tail;
           if (pts.length >= 2) lines.push({ type: "Feature", properties: { id }, geometry: { type: "LineString", coordinates: pts } });
         }
         trailSrc.setData({ type: "FeatureCollection", features: lines });

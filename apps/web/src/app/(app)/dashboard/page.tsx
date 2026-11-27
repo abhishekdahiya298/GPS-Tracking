@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { alertMeta } from "@/lib/alert-meta";
 import { listEvents } from "@/lib/alerts";
 import { cn } from "@/lib/cn";
-import { getServerEnv } from "@/lib/env";
+import { offlineThresholdSeconds } from "@/lib/env";
 import { FLEET_STATE_META, fleetState, type FleetState } from "@/lib/fleet-status";
 import { durationMin, relativeTime } from "@/lib/format";
 import { listCurrentLocations, type CurrentDeviceLocation } from "@/lib/locations";
@@ -47,7 +47,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const hasLoads = can("loads.read");
 
   const [devices, unack, maint, renewals, recentAlerts, loadsDash, usage] = await Promise.all([
-    can("locations.read") ? listCurrentLocations(ctx.organizationId, now, getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS) : Promise.resolve([] as CurrentDeviceLocation[]),
+    can("locations.read") ? listCurrentLocations(ctx.organizationId, now, offlineThresholdSeconds()) : Promise.resolve([] as CurrentDeviceLocation[]),
     can("alerts.read") ? getUnacknowledgedAlertCount(ctx.organizationId) : Promise.resolve(0),
     can("maintenance.read") ? dueCounts(ctx.organizationId, now) : Promise.resolve(null),
     can("maintenance.read") ? renewalCounts(ctx.organizationId, now) : Promise.resolve(null),
@@ -115,7 +115,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     </section>
   ) : null;
 
-  const fixOpts = { nowMs: now.getTime(), maxFixAgeSeconds: getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS };
+  const fixOpts = { nowMs: now.getTime(), offlineSeconds: offlineThresholdSeconds() };
   const states = devices.map((d) => ({ d, s: fleetState(d, fixOpts) }));
   const count = (s: FleetState) => states.filter((x) => x.s === s).length;
   const firstName = (user.name || "").split(" ")[0];
@@ -124,7 +124,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   if (devices.length === 0 || ctx.lockedFeatures?.includes("gps_trackers")) {
     return (
       <>
-        <StarterDashboard ctx={ctx} hello={hello} orgName={rc.orgName} dateLabel={dateLabel} vehiclesOnMap={devices.filter((d) => d.location).length} movingNow={count("moving")} offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS} loads={loadsDash} />
+        <StarterDashboard ctx={ctx} hello={hello} orgName={rc.orgName} dateLabel={dateLabel} vehiclesOnMap={devices.filter((d) => d.location).length} movingNow={count("moving")} offlineSeconds={offlineThresholdSeconds()} loads={loadsDash} />
         {loadsDash && loadsDash.active > 0 ? loadsSection : null}
       </>
     );
@@ -146,7 +146,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <Tile label="Moving" value={count("moving")} total={devices.length} icon={Navigation} look="moving" href="/vehicles?state=moving" />
         <Tile label="Idling" value={count("idle")} total={devices.length} icon={STATUS_THEME.idle.icon} look="idle" hint="engine on" href="/vehicles?state=idle" />
         <Tile label="Stopped" value={count("stopped") + count("parked")} total={devices.length} icon={STATUS_THEME.stopped.icon} look="stopped" href="/vehicles?state=stopped" />
-        <Tile label="Offline" value={count("offline") + count("never_seen")} total={devices.length} icon={STATUS_THEME.offline.icon} look="offline" href="/vehicles?state=offline" />
+        <Tile label="No signal" value={count("offline") + count("never_seen")} total={devices.length} icon={STATUS_THEME.offline.icon} look="offline" href="/vehicles?state=offline" />
       </section>
 
       {/* Things that need attention sit side by side on wide screens instead of stacking. */}
@@ -190,7 +190,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {can("locations.read") && (
           <FleetGlance
-            offlineSeconds={getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS}
+            offlineSeconds={offlineThresholdSeconds()}
             className="flex min-w-0 flex-col overflow-hidden md:col-span-2 xl:row-span-2"
             mapClassName="h-[320px] xl:h-auto xl:min-h-[460px] xl:flex-1"
           />

@@ -18,29 +18,30 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CurrentDeviceLocation } from "@/lib/locations";
 import { asVehicleType } from "@/lib/schemas/vehicle";
 import { FleetLayer, STATE_COLORS, type FleetPoint } from "../map/fleet-layer";
-import { deviceLabel, FALLBACK_VIEW, hasStaleFix, mapState, type MapState } from "../map/fleet-model";
+import { deviceLabel, FALLBACK_VIEW, hasStaleFix, isPowerCut, mapState, type MapState } from "../map/fleet-model";
 import { useFleetStream } from "../map/use-fleet-stream";
 
 const LEGEND: [MapState, string][] = [
   ["moving", "Moving"],
   ["idle", "Idling"],
   ["stopped", "Stopped"],
-  ["offline", "Offline"]
+  ["offline", "No signal"]
 ];
 
-const SUB: Record<MapState, string> = { moving: "", idle: "Idling", stopped: "Parked", parked: "Unhooked", offline: "Offline" };
+const SUB: Record<MapState, string> = { moving: "", idle: "Idling", stopped: "Parked", parked: "Unhooked", offline: "No signal" };
 
 function toPoint(d: CurrentDeviceLocation, now: number, offlineSeconds: number, fmtSpeed?: (kph: number) => string): FleetPoint | null {
   if (!d.location) return null;
   const state = mapState(d, now, offlineSeconds);
   return {
-    sub: hasStaleFix(d, now, offlineSeconds) ? "No GPS" : state === "moving" ? (fmtSpeed && d.location.speedKph !== null ? fmtSpeed(d.location.speedKph) : "") : SUB[state],
+    sub: hasStaleFix(d, now, offlineSeconds) ? "No GPS" : state !== "moving" && isPowerCut(d) ? "Power cut" : state === "moving" ? (fmtSpeed && d.location.speedKph !== null ? fmtSpeed(d.location.speedKph) : "") : SUB[state],
     id: d.deviceId,
     name: deviceLabel(d),
     state,
     type: d.vehicle ? asVehicleType(d.vehicle.type) : "other",
     lngLat: [d.location.longitude, d.location.latitude],
-    heading: d.location.headingDeg
+    heading: d.location.headingDeg,
+    t: Date.parse(d.location.recordedAt)
   };
 }
 

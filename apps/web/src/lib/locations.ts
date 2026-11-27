@@ -40,6 +40,12 @@ export function toLiveEvent(deviceId: string, p: NormalizedPosition, receivedAt 
   };
 }
 
+/** External voltage stored with the latest record (NormalizedPosition.externalPowerV). */
+function powerFromRaw(raw: unknown): number | null {
+  const v = raw && typeof raw === "object" ? (raw as { externalPowerV?: unknown }).externalPowerV : null;
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
 export type ConnectivityStatus = "online" | "offline" | "never_seen";
 
 export function connectivityStatus(lastSeenAt: Date | null, now: Date, thresholdSeconds: number): ConnectivityStatus {
@@ -56,6 +62,8 @@ export interface CurrentDeviceLocation {
   connectivity: ConnectivityStatus;
   lastSeenAt: string | null;
   location: (LocationPoint & { receivedAt: string }) | null;
+  /** Vehicle (external) voltage from the latest record, when the tracker reports it. */
+  powerV?: number | null;
 }
 
 export async function listCurrentLocations(
@@ -108,6 +116,7 @@ export async function listCurrentLocations(
     vehicle: r.vehicleId ? { id: r.vehicleId, name: r.vehicleName!, licensePlate: r.licensePlate, type: r.vehicleType ?? "truck" } : null,
     connectivity: connectivityStatus(r.lastSeenAt, now, offlineThresholdSeconds),
     lastSeenAt: r.lastSeenAt?.toISOString() ?? null,
+    powerV: powerFromRaw(r.loc?.rawPayload),
     location: r.loc
       ? {
           latitude: r.loc.latitude,

@@ -2,7 +2,7 @@
  * Pure, framework-free helpers for the live map (unit-tested). Nothing here
  * changes GPS data: interpolation only produces display coordinates.
  */
-import { isFixStale } from "@rio-gps/core/freshness";
+import { POWER_CUT_VOLTS, isFixStale, isSilent, maxFixAgeFor } from "@rio-gps/core/freshness";
 import { addDays, dateFormatter, startOfLocalDay } from "@rio-gps/core/timezones";
 import { splitTrips, type TrackPoint } from "@rio-gps/core/trips";
 import type { CurrentDeviceLocation, LocationPoint } from "@/lib/locations";
@@ -11,7 +11,8 @@ import { deviceDisplayName } from "@/lib/device-name";
 /**
  * moving: travelling. idle: engine on but standing still (burning fuel).
  * stopped: standing still with the engine off, or the tracker has no ignition wire.
- * offline: the tracker has not reported for longer than the offline threshold.
+ * offline (shown as "No signal"): silent longer than its state allows: 4 h 30 min when parked
+ * (trackers report every 4 h asleep), 15 min when it was driving (dead zone; data syncs later).
  */
 export type MapState = "moving" | "idle" | "stopped" | "parked" | "offline";
 /** The four filter chips; "parked" trailers are shown under Stopped. */
@@ -30,7 +31,7 @@ export function deviceLabel(d: Pick<CurrentDeviceLocation, "vehicle" | "name" | 
 
 /** Presentation state. Offline is decided from last_seen so it stays right between snapshots. */
 export function mapState(d: Pick<CurrentDeviceLocation, "lastSeenAt" | "location"> & { vehicle?: { type: string } | null }, nowMs: number, offlineSeconds: number): MapState {
-  if (!d.lastSeenAt || nowMs - Date.parse(d.lastSeenAt) > offlineSeconds * 1000) {
+  if (!d.lastSeenAt || isSilent(d.lastSeenAt, d.location, nowMs, offlineSeconds)) {
     // A trailer's tracker is powered by the tractor: silence after reporting means unhooked.
     return d.lastSeenAt && d.vehicle?.type === "trailer" ? "parked" : "offline";
   }
@@ -42,12 +43,18 @@ export function mapState(d: Pick<CurrentDeviceLocation, "lastSeenAt" | "location
 }
 
 /**
- * True when the tracker is reporting (online) but its newest GPS position is older than the
- * offline threshold: the map shows "No current GPS" with the fix's age instead of a status.
+ * True when the tracker is reporting but its newest GPS position no longer describes the vehicle:
+ * a driving fix older than about an hour, or a parked fix older than the parked allowance. The map
+ * then shows "No GPS" with the fix's age instead of a status.
  */
 export function hasStaleFix(d: Pick<CurrentDeviceLocation, "lastSeenAt" | "location">, nowMs: number, offlineSeconds: number): boolean {
-  if (!d.location || !d.lastSeenAt || nowMs - Date.parse(d.lastSeenAt) > offlineSeconds * 1000) return false;
-  return isFixStale(d.location.recordedAt, nowMs, offlineSeconds);
+  if (!d.location || !d.lastSeenAt || isSilent(d.lastSeenAt, d.location, nowMs, offlineSeconds)) return false;
+  return isFixStale(d.location.recordedAt, nowMs, maxFixAgeFor(d.location, offlineSeconds));
+}
+
+/** True when the vehicle's own power is cut (not for trailers, whose power comes from the tractor). */
+export function isPowerCut(d: Pick<CurrentDeviceLocation, "powerV"> & { vehicle?: { type: string } | null }): boolean {
+  return d.vehicle?.type !== "trailer" && typeof d.powerV === "number" && d.powerV < POWER_CUT_VOLTS;
 }
 
 const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] as const;
@@ -282,4 +289,37 @@ export function timeline(track: LocationPoint[]): TimelineEvent[] {
 /** Our own vehicle pictures: loaded by the fleet layer, never stubbed out as a missing map image. */
 export function isFleetIcon(id: string): boolean {
   return /^(photo|top|pin|circle|square)-/.test(id);
+}
+
+/**
+ * Smooth gliding. A driving tracker records a point every ~15 s (400 m / 60 s / 15°) and uploads
+ * them in batches every 30 s, so points arrive in bursts. Instead of jumping to the newest point,
+ * the marker drives through each point at the pace it was recorded (linear, constant speed), so it
+ * keeps moving between uploads, about one upload behind real time.
+ */
+export const GLIDE_MIN_MS = 900;
+/** One segment never takes longer than this (a long gap between points is not replayed slowly). */
+export const GLIDE_MAX_MS = 60_000;
+/** When the queued replay is longer than this, it is compressed to GLIDE_CATCHUP_MS to catch up. */
+export const GLIDE_MAX_LAG_MS = 90_000;
+export const GLIDE_CATCHUP_MS = 20_000;
+
+/** Duration to glide to a point recorded `gapMs` after the previous one. */
+export function glideMs(gapMs: number | null | undefined, driving: boolean): number {
+  if (!driving || gapMs === null || gapMs === undefined || !Number.isFinite(gapMs) || gapMs <= 0) return GLIDE_MIN_MS;
+  return Math.max(GLIDE_MIN_MS, Math.min(GLIDE_MAX_MS, gapMs));
+}
+
+/** Shrinks queued segment durations when the backlog is too long (e.g. after a tab was hidden). */
+export function catchUp(durations: number[]): number[] {
+  const total = durations.reduce((a, b) => a + b, 0);
+  if (total <= GLIDE_MAX_LAG_MS) return durations;
+  const k = GLIDE_CATCHUP_MS / total;
+  return durations.map((d) => Math.max(120, d * k));
+}
+
+/** Linear position between two points (constant speed while gliding). */
+export function lineLngLat(from: [number, number], to: [number, number], t: number): [number, number] {
+  const k = Math.max(0, Math.min(1, t));
+  return [from[0] + (to[0] - from[0]) * k, from[1] + (to[1] - from[1]) * k];
 }

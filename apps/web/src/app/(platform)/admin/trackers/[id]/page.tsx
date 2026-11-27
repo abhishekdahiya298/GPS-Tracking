@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
-import { getServerEnv } from "@/lib/env";
+import { offlineThresholdSeconds } from "@/lib/env";
 import { NotFoundError } from "@/lib/errors";
 import { getRequestContext } from "@/lib/request-context";
 import { getTrackerDiagnostics } from "@/lib/tracker-diagnostics";
@@ -17,7 +17,7 @@ export default async function TrackerDiagnosticsPage({ params }: { params: Promi
   if (!rc.user.isSuperAdmin) redirect("/dashboard");
   if (!z.string().uuid().safeParse(id).success) notFound();
   try {
-    const data = await getTrackerDiagnostics(id, 24, getServerEnv().GPS_DEVICE_OFFLINE_THRESHOLD_SECONDS);
+    const data = await getTrackerDiagnostics(id, 24, offlineThresholdSeconds());
     return <DiagnosticsView initial={data} />;
   } catch (err) {
     if (err instanceof NotFoundError) notFound();

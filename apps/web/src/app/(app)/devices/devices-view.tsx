@@ -33,7 +33,7 @@ type Can = { manage: boolean; assign: boolean; unassign: boolean; superAdmin: bo
 
 const STATE: Record<DeviceState, { label: string; tone: StatusTone }> = {
   online: { label: "Online", tone: "success" },
-  offline: { label: "Offline", tone: "neutral" },
+  offline: { label: "No signal", tone: "neutral" },
   never_seen: { label: "No data yet", tone: "neutral" },
   inactive: { label: "Deactivated", tone: "warning" },
   retired: { label: "Retired", tone: "neutral" }
@@ -159,7 +159,7 @@ export function DevicesView({ data, query, can, supportEmail = "support@riogps.c
         options={[
           { value: "all", label: "All devices", count: c.all ?? 0, icon: Layers, color: "#133a8f" },
           { value: "online", label: "Online", count: c.online ?? 0, icon: Radio, color: "#15803d" },
-          { value: "offline", label: "Offline", count: c.offline ?? 0, icon: WifiOff, color: "#64748b" },
+          { value: "offline", label: "No signal", count: c.offline ?? 0, icon: WifiOff, color: "#64748b" },
           { value: "unassigned", label: "Not on a vehicle", count: c.unassigned ?? 0, icon: Unplug, color: "#b45309" },
           { value: "inactive", label: "Deactivated", count: (c.inactive ?? 0) + (c.retired ?? 0), icon: CircleOff, color: "#c2410c" }
         ]}
