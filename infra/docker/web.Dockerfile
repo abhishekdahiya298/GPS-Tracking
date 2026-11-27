@@ -25,6 +25,8 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 # Runs as the image's unprivileged `node` user (uid 1000), not root.
 COPY --from=build --chown=node:node /repo /repo
+# Load paperwork files (a named volume is mounted here; it takes this owner on first use).
+RUN mkdir -p /data/documents && chown node:node /data/documents
 USER node
 WORKDIR /repo/apps/web
 EXPOSE 3000

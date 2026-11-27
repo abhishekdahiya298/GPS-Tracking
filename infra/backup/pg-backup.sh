@@ -46,6 +46,23 @@ for db in rio traccar; do
   log "backup.dump_ok" ",\"database\":\"${db}\",\"bytes\":${size},\"file\":\"${out}\""
 done
 
+# Load paperwork files (scans, photos, PDFs) from the web container's documents volume.
+WEB_CONTAINER="${WEB_CONTAINER:-rio-gps-web-1}"
+if docker inspect "${WEB_CONTAINER}" > /dev/null 2>&1; then
+  out="${dest}/documents.tar.gz"
+  docker exec "${WEB_CONTAINER}" tar -czf - -C /data/documents . > "${out}"
+  if [ -f "${PASSPHRASE_FILE}" ]; then
+    gpg --batch --yes --quiet --pinentry-mode loopback --passphrase-file "${PASSPHRASE_FILE}" \
+      --symmetric --cipher-algo AES256 -o "${out}.gpg" "${out}"
+    rm -f "${out}"
+    out="${out}.gpg"
+  fi
+  sha256sum "${out}" > "${out}.sha256"
+  log "backup.documents_ok" ",\"bytes\":$(stat -c %s "${out}"),\"file\":\"${out}\""
+else
+  log "backup.documents_skipped" ",\"reason\":\"${WEB_CONTAINER} not running\""
+fi
+
 if [ -f "${OFFSITE_ENV}" ]; then
   # shellcheck disable=SC1090
   set -a; . "${OFFSITE_ENV}"; set +a
