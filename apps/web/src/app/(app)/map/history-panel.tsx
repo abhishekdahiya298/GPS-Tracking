@@ -2,8 +2,10 @@
 /**
  * Trip history and replay for one vehicle: the last 24 hours by default, summary tiles,
  * one-shot replay of the whole window on a coloured timeline (driving / idling / stopped),
- * and a list of every trip and stop. Server limits are kept: points are fetched in pages of
- * 5,000 up to MAX_HISTORY_POINTS; nothing is invented or altered.
+ * and a list of every trip and stop. Points are fetched in pages of 5,000. A window with more
+ * than MAX_HISTORY_POINTS comes back as an overview track from the server (real points only,
+ * keeping every ignition/motion change and reporting gap), with distance and top speed worked
+ * out from all points, so a week or a month always shows from start to end.
  */
 import type { GeoJSONSource, Map as MlMap } from "maplibre-gl";
 import maplibregl from "maplibre-gl";
@@ -107,6 +109,12 @@ export function HistoryPanel({
   const [speed, setSpeed] = useState<(typeof SPEEDS)[number]>(60);
   const times = useMemo(() => track.map((p) => Date.parse(p.recordedAt)), [track]);
   const stats = useMemo(() => trackStats(track), [track]);
+  const [overview, setOverview] = useState<{ totalPoints: number; distanceKm: number; maxSpeedKph: number } | null>(null);
+  // On an overview track, distance and top speed come from every point (server); the replay
+  // counter is scaled to match so "x of y" ends exactly at the total.
+  const km = overview ? overview.distanceKm : stats.km;
+  const maxKph = overview ? Math.max(overview.maxSpeedKph, stats.maxKph) : stats.maxKph;
+  const kmScale = overview && stats.km > 0 ? overview.distanceKm / stats.km : 1;
   const events = useMemo(() => timeline(track), [track]);
   const totals = useMemo(() => {
     const sum = (k: TimelineEvent["kind"]) => events.filter((e) => e.kind === k).reduce((a, e) => a + (e.endMs - e.startMs), 0);
@@ -180,13 +188,14 @@ export function HistoryPanel({
     setBusy(true);
     setError(null);
     setPlaying(false);
+    setOverview(null);
     try {
       const fromUtc = wallTimeToUtc(from, tz);
       const toUtc = to ? wallTimeToUtc(to, tz) : new Date();
       const pts: LocationPoint[] = [];
       let next: string | null = null;
       do {
-        const qs = new URLSearchParams({ deviceId, from: fromUtc.toISOString(), limit: "5000" });
+        const qs = new URLSearchParams({ deviceId, from: fromUtc.toISOString(), limit: "5000", detail: "auto" });
         if (to) qs.set("to", toUtc.toISOString());
         if (next) qs.set("cursor", next);
         const r = await fetch(`/api/locations/history?${qs}`, { cache: "no-store" });
@@ -198,6 +207,7 @@ export function HistoryPanel({
         if (!r.ok) throw new Error(body?.error?.message ?? `Request failed (${r.status})`);
         pts.push(...body.points);
         next = body.nextCursor;
+        if (body.overview) setOverview(body.overview);
         setLimitedFrom(body.limitedFrom ?? null);
       } while (next && pts.length < MAX_HISTORY_POINTS);
       setTrack(pts);
@@ -420,6 +430,15 @@ export function HistoryPanel({
         </div>
       )}
 
+      {overview && (
+        <div role="status" className="flex items-start gap-2 rounded-xl border border-primary/25 bg-primary-soft px-3 py-2 text-xs">
+          <Route className="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
+          <span className="flex-1">
+            <b>Long range: simplified line.</b> Showing {track.length.toLocaleString("en-US")} of {overview.totalPoints.toLocaleString("en-US")} GPS points. Trips, stops, distance and top speed still use every point. Pick one day to see every point.
+          </span>
+        </div>
+      )}
+
       {error && <Alert tone="warning">{error}</Alert>}
 
       {busy && !track.length ? (
@@ -433,12 +452,12 @@ export function HistoryPanel({
             <div className="grid grid-cols-3 gap-1.5">
               {(
                 [
-                  ["Distance", u.fmtDist(stats.km, 0), Route, "#1d4ed8"],
+                  ["Distance", u.fmtDist(km, 0), Route, "#1d4ed8"],
                   ["Driving", hm(totals.driving), Clock, "#16a34a"],
                   ["Idling", hm(totals.idle), Timer, "#ea580c"],
                   ["Stopped", hm(totals.stopped), CircleStop, "#dc2626"],
                   ["Trips", String(totals.trips), History, "#6d28d9"],
-                  ["Top speed", u.fmtSpeed(stats.maxKph), Gauge, "#b91c1c"]
+                  ["Top speed", u.fmtSpeed(maxKph), Gauge, "#b91c1c"]
                 ] as const
               ).map(([l, v, Icon, c]) => (
                 <div key={l} className="flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1.5" style={{ background: `linear-gradient(120deg, var(--color-background) 40%, color-mix(in srgb, ${c} 13%, var(--color-background)))`, boxShadow: `inset 0 0 0 1px color-mix(in srgb, ${c} 24%, transparent)` }}>
@@ -504,7 +523,7 @@ export function HistoryPanel({
               </div>
               <div className="col-span-2 mt-1 flex items-center gap-2">
                 <span className="text-[11px] text-muted-foreground">
-                  {u.fmtDist(stats.cumKm[cursor] ?? 0, 0)} of {u.fmtDist(stats.km, 0)}
+                  {u.fmtDist((stats.cumKm[cursor] ?? 0) * kmScale, 0)} of {u.fmtDist(km, 0)}
                 </span>
                 <div role="radiogroup" aria-label="Replay speed" className="ml-auto flex gap-0.5 rounded-md bg-muted p-0.5">
                   {SPEEDS.map((s) => (
@@ -548,7 +567,7 @@ export function HistoryPanel({
               </ol>
               <p className="m-0 mt-1 text-[11px] text-muted-foreground">
                 {track.length.toLocaleString("en-US")} GPS points
-                {track.length >= MAX_HISTORY_POINTS ? " · limit reached, choose a shorter range to see everything" : ""}
+                {overview ? ` shown of ${overview.totalPoints.toLocaleString("en-US")}` : track.length >= MAX_HISTORY_POINTS ? " · pick a shorter range to see everything" : ""}
               </p>
             </section>
           </>

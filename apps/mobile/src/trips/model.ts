@@ -34,6 +34,8 @@ export interface HistoryPoint {
   recordedAt: string;
 }
 export interface HistoryPage {
+  /** Present when the server sent a reduced track for a long window (real points; totals from all points). */
+  overview?: { totalPoints: number; distanceKm: number; maxSpeedKph: number };
   points: HistoryPoint[];
   nextCursor: string | null;
 }
